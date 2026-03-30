@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"os"
+	"strings"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/heygen-com/heygen-cli/internal/output"
@@ -23,9 +24,26 @@ func main() {
 			formatter.Error(cliErr)
 			os.Exit(cliErr.ExitCode)
 		}
-		// Wrap unexpected errors so they also get JSON envelope treatment.
-		wrapped := clierrors.New(err.Error())
+		// Cobra returns plain errors for unknown commands and arg validation.
+		// Detect these and wrap as usage errors (exit 2).
+		wrapped := classifyError(err)
 		formatter.Error(wrapped)
 		os.Exit(wrapped.ExitCode)
 	}
+}
+
+// classifyError wraps non-CLIError errors with the appropriate exit code.
+// Cobra usage errors (unknown command, wrong arg count) get exit 2;
+// everything else gets exit 1.
+func classifyError(err error) *clierrors.CLIError {
+	msg := err.Error()
+	if strings.HasPrefix(msg, "unknown command") ||
+		strings.HasPrefix(msg, "unknown flag") ||
+		strings.HasPrefix(msg, "unknown shorthand flag") ||
+		strings.Contains(msg, "accepts ") ||
+		strings.HasPrefix(msg, "required flag") ||
+		strings.HasPrefix(msg, "invalid argument") {
+		return clierrors.NewUsage(msg)
+	}
+	return clierrors.New(msg)
 }

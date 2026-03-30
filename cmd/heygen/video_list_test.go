@@ -140,6 +140,56 @@ func TestVideoList_Flags(t *testing.T) {
 	}
 }
 
+func TestVideoList_LimitOutOfRange(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	tests := []struct {
+		name  string
+		limit string
+	}{
+		{"too high", "999"},
+		{"zero", "0"},
+		{"negative", "-5"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := runCommand(t, srv.URL, "test-key", "video", "list", "--limit", tt.limit)
+
+			if res.ExitCode != clierrors.ExitUsage {
+				t.Errorf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
+			}
+
+			var envelope map[string]map[string]any
+			if err := json.Unmarshal([]byte(res.Stderr), &envelope); err != nil {
+				t.Fatalf("stderr is not valid JSON: %v\nstderr: %s", err, res.Stderr)
+			}
+			if envelope["error"]["code"] != "usage_error" {
+				t.Errorf("error.code = %v, want %q", envelope["error"]["code"], "usage_error")
+			}
+		})
+	}
+}
+
+func TestVideoList_UnknownFlag(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "list", "--bogus")
+
+	if res.ExitCode != clierrors.ExitUsage {
+		t.Errorf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
+	}
+
+	var envelope map[string]map[string]any
+	if err := json.Unmarshal([]byte(res.Stderr), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\nstderr: %s", err, res.Stderr)
+	}
+	if envelope["error"]["code"] != "usage_error" {
+		t.Errorf("error.code = %v, want %q", envelope["error"]["code"], "usage_error")
+	}
+}
+
 func TestVideoList_ServerError(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/videos": {
@@ -158,5 +208,24 @@ func TestVideoList_ServerError(t *testing.T) {
 	var envelope map[string]map[string]any
 	if err := json.Unmarshal([]byte(res.Stderr), &envelope); err != nil {
 		t.Fatalf("stderr is not valid JSON: %v\nstderr: %s", err, res.Stderr)
+	}
+}
+
+func TestUnknownCommand(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "nonexistent", "subcommand")
+
+	if res.ExitCode != clierrors.ExitUsage {
+		t.Errorf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
+	}
+
+	var envelope map[string]map[string]any
+	if err := json.Unmarshal([]byte(res.Stderr), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\nstderr: %s", err, res.Stderr)
+	}
+	if envelope["error"]["code"] != "usage_error" {
+		t.Errorf("error.code = %v, want %q", envelope["error"]["code"], "usage_error")
 	}
 }

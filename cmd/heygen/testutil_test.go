@@ -37,7 +37,7 @@ func setupTestServer(t *testing.T, handlers map[string]testHandler) *httptest.Se
 		if !ok {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"error":{"code":"not_found","message":"no handler registered"}}`))
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"no handler registered"}}`))
 			return
 		}
 		if h.ValidateRequest != nil {
@@ -47,7 +47,7 @@ func setupTestServer(t *testing.T, handlers map[string]testHandler) *httptest.Se
 			w.Header().Set(k, v)
 		}
 		w.WriteHeader(h.StatusCode)
-		w.Write([]byte(h.Body))
+		_, _ = w.Write([]byte(h.Body))
 	}))
 }
 
@@ -76,12 +76,14 @@ func runCommand(t *testing.T, serverURL, apiKey string, args ...string) cmdResul
 	var exitCode int
 	if err != nil {
 		// Render through formatter — same path as main()
+		// Mirror the classification logic from main() so tests
+		// see the same exit codes production emits.
 		var cliErr *clierrors.CLIError
 		if errors.As(err, &cliErr) {
 			formatter.Error(cliErr)
 			exitCode = cliErr.ExitCode
 		} else {
-			wrapped := clierrors.New(err.Error())
+			wrapped := classifyError(err)
 			formatter.Error(wrapped)
 			exitCode = wrapped.ExitCode
 		}
