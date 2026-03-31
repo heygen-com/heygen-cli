@@ -1,0 +1,101 @@
+groups:
+  "Video Translate": translate
+  "Video Agent": video-agent
+
+skip:
+  - "* /v1/*"
+  - "* /v2/*"
+
+positional:
+  "POST /v3/video-agents":
+    - field: prompt
+      target: body
+  "POST /v3/voices/speech":
+    - field: text
+      target: body
+  "POST /v3/assets":
+    - field: file
+      target: file
+
+examples:
+  "GET /v3/videos":
+    - "heygen video list --limit 10"
+    - "heygen video list --folder-id abc123"
+  "POST /v3/videos":
+    - "heygen video create --avatar-id josh_lite --script 'Hello world' --voice-id en_male"
+  "GET /v3/videos/{video_id}":
+    - "heygen video get <video-id>"
+  "DELETE /v3/videos/{video_id}":
+    - "heygen video delete <video-id>"
+  "GET /v3/avatars":
+    - "heygen avatar list --limit 10"
+  "GET /v3/avatars/{group_id}":
+    - "heygen avatar get <group-id>"
+  "POST /v3/avatars":
+    - "heygen avatar create"
+  "POST /v3/avatars/{group_id}/consent":
+    - "heygen avatar consent <group-id>"
+  "GET /v3/avatars/looks":
+    - "heygen avatar look-list --limit 10"
+  "GET /v3/avatars/looks/{look_id}":
+    - "heygen avatar look-get <look-id>"
+  "GET /v3/voices":
+    - "heygen voice list --type public"
+  "POST /v3/voices/speech":
+    - "heygen voice speech 'Hello world' --voice-id en_male"
+  "POST /v3/video-agents":
+    - "heygen video-agent create 'Make a product demo' --style-id modern"
+  "GET /v3/video-agents/styles":
+    - "heygen video-agent style-list"
+  "POST /v3/video-agents/sessions":
+    - "heygen video-agent session-create --prompt 'Interview video'"
+  "GET /v3/video-agents/sessions/{session_id}":
+    - "heygen video-agent session-get <session-id>"
+  "POST /v3/video-agents/sessions/{session_id}/messages":
+    - "heygen video-agent session-message <session-id> --message 'Add intro'"
+  "GET /v3/video-agents/sessions/{session_id}/resources":
+    - "heygen video-agent session-resources <session-id>"
+  "POST /v3/video-agents/sessions/{session_id}/stop":
+    - "heygen video-agent session-stop <session-id>"
+  "GET /v3/video-translations":
+    - "heygen translate list --limit 10"
+  "GET /v3/video-translations/{video_translation_id}":
+    - "heygen translate get <video-translation-id>"
+  "POST /v3/video-translations":
+    - "cat request.json | heygen translate create --json-body -"
+  "PATCH /v3/video-translations/{video_translation_id}":
+    - "heygen translate update <video-translation-id> --title 'New title'"
+  "DELETE /v3/video-translations/{video_translation_id}":
+    - "heygen translate delete <video-translation-id>"
+  "GET /v3/video-translations/{video_translation_id}/caption":
+    - "heygen translate caption <video-translation-id> --format srt"
+  "GET /v3/video-translations/languages":
+    - "heygen translate languages"
+  "POST /v3/video-translations/proofreads":
+    - "cat request.json | heygen translate proofread-create --json-body -"
+  "GET /v3/video-translations/proofreads/{proofread_id}":
+    - "heygen translate proofread-get <proofread-id>"
+  "POST /v3/video-translations/proofreads/{proofread_id}/generate":
+    - "heygen translate proofread-generate <proofread-id>"
+  "GET /v3/video-translations/proofreads/{proofread_id}/srt":
+    - "heygen translate proofread-srt-get <proofread-id>"
+  "PUT /v3/video-translations/proofreads/{proofread_id}/srt":
+    - "cat srt.json | heygen translate proofread-srt-upload <proofread-id> --json-body -"
+  "GET /v3/webhooks/endpoints":
+    - "heygen webhook list"
+  "POST /v3/webhooks/endpoints":
+    - "heygen webhook create --url https://example.com/hook"
+  "PATCH /v3/webhooks/endpoints/{endpoint_id}":
+    - "heygen webhook update <endpoint-id> --url https://new.example.com/hook"
+  "DELETE /v3/webhooks/endpoints/{endpoint_id}":
+    - "heygen webhook delete <endpoint-id>"
+  "POST /v3/webhooks/endpoints/{endpoint_id}/rotate-secret":
+    - "heygen webhook rotate-secret <endpoint-id>"
+  "GET /v3/webhooks/event-types":
+    - "heygen webhook event-types"
+  "GET /v3/webhooks/events":
+    - "heygen webhook events --event-type avatar_video.success"
+  "POST /v3/assets":
+    - "heygen asset upload ./video.mp4"
+  "GET /v3/user/me":
+    - "heygen user me"
