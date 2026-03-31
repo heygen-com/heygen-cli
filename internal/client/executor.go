@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/heygen-com/heygen-cli/internal/command"
@@ -20,10 +23,6 @@ import (
 // and behavioral flags (pagination, polling). The Invocation provides
 // the concrete path params, query params, body, and file path.
 func (c *Client) Execute(spec *command.Spec, inv *command.Invocation) (json.RawMessage, error) {
-	if spec.BodyEncoding == "multipart" {
-		return nil, clierrors.NewUsage("multipart upload is not yet implemented")
-	}
-
 	if spec.Method == "" {
 		return nil, clierrors.New("Spec.Method must be set")
 	}
@@ -34,19 +33,27 @@ func (c *Client) Execute(spec *command.Spec, inv *command.Invocation) (json.RawM
 		return nil, clierrors.New(fmt.Sprintf("failed to build request URL: %v", err))
 	}
 
-	// Build body — only if Invocation has body content
-	var body io.Reader
-	if inv.Body != nil {
-		data, marshalErr := json.Marshal(inv.Body)
-		if marshalErr != nil {
-			return nil, clierrors.New(fmt.Sprintf("failed to marshal request body: %v", marshalErr))
+	// Build request based on body encoding
+	var req *http.Request
+	switch spec.BodyEncoding {
+	case "multipart":
+		req, err = buildMultipartRequest(spec.Method, reqURL, inv.FilePath)
+		if err != nil {
+			return nil, err
 		}
-		body = bytes.NewReader(data)
-	}
-
-	req, err := http.NewRequest(spec.Method, reqURL, body)
-	if err != nil {
-		return nil, clierrors.New(fmt.Sprintf("failed to create request: %v", err))
+	default:
+		var body io.Reader
+		if inv.Body != nil {
+			data, marshalErr := json.Marshal(inv.Body)
+			if marshalErr != nil {
+				return nil, clierrors.New(fmt.Sprintf("failed to marshal request body: %v", marshalErr))
+			}
+			body = bytes.NewReader(data)
+		}
+		req, err = http.NewRequest(spec.Method, reqURL, body)
+		if err != nil {
+			return nil, clierrors.New(fmt.Sprintf("failed to create request: %v", err))
+		}
 	}
 
 	resp, err := c.Do(req)
@@ -94,6 +101,44 @@ func buildURL(base, endpoint string, pathParams map[string]string, queryParams u
 	}
 
 	return u.String(), nil
+}
+
+// buildMultipartRequest creates an HTTP request with a multipart/form-data body
+// containing the file at the given path. The file is sent under the field name "file".
+func buildMultipartRequest(method, reqURL, filePath string) (*http.Request, error) {
+	if filePath == "" {
+		return nil, clierrors.New("file path is required for multipart upload")
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, clierrors.New(fmt.Sprintf("failed to open file %q: %v", filePath, err))
+	}
+	defer file.Close()
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		return nil, clierrors.New(fmt.Sprintf("failed to create form file: %v", err))
+	}
+
+	if _, err := io.Copy(part, file); err != nil {
+		return nil, clierrors.New(fmt.Sprintf("failed to write file to form: %v", err))
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, clierrors.New(fmt.Sprintf("failed to close multipart writer: %v", err))
+	}
+
+	req, err := http.NewRequest(method, reqURL, &buf)
+	if err != nil {
+		return nil, clierrors.New(fmt.Sprintf("failed to create request: %v", err))
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	return req, nil
 }
 
 // parseErrorResponse parses an API error response into a CLIError.
