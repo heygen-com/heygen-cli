@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/getkin/kin-openapi/openapi3"
 )
 
 func main() {
@@ -32,17 +34,17 @@ func main() {
 		overrides = &Overrides{}
 	}
 
-	// Step 2: Parse the OpenAPI spec
-	endpoints, err := Parse(*specPath)
+	// Step 2: Load the OpenAPI spec
+	doc, err := openapi3.NewLoader().LoadFromFile(*specPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error parsing spec: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error loading spec: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Step 3: Group endpoints into commands
-	groups := GroupEndpoints(endpoints, overrides)
+	// Step 3: Group endpoints into commands (filtering, classification, naming all happen here)
+	groups := GroupEndpoints(doc, overrides)
 
-	// Step 4: Validate that all non-skipped endpoints have examples
+	// Step 4: Validate that all commands have examples
 	if err := validateExamples(groups, overrides); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
