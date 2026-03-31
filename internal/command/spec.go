@@ -10,6 +10,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Groups maps group name → list of command specs in that group.
+// This is the output of the codegen grouper and the input to the
+// renderer and the runtime command builder.
+//
+//	groups["video"] = []*Spec{videoList, videoGet, videoCreate, videoDelete}
+type Groups map[string][]*Spec
+
+// SortedNames returns group names in alphabetical order for deterministic output.
+func (g Groups) SortedNames() []string {
+	names := make([]string, 0, len(g))
+	for name := range g {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}
+
 // Spec is the generated, immutable definition of a CLI command.
 // Codegen produces these from the OpenAPI spec. The builder converts
 // them into Cobra commands; the executor reads the HTTP identity and
@@ -46,36 +63,25 @@ type Spec struct {
 	Columns     []Column    // TUI table column definitions (future)
 }
 
-// ArgSpec defines a positional argument and where its value is routed.
+// ArgSpec defines a positional argument derived from a URL path parameter.
+// Every positional arg maps to a path template variable for URL substitution.
 //
-// Unlike FlagSpec (which always maps to --name value), positional args
-// have no flag prefix — their meaning comes from position. Target determines
-// the destination:
+// Example: heygen video get <video-id> → PathParams["video_id"] = "abc123"
 //
-//   - "path":  URL template substitution.  heygen video get <video-id>   → PathParams["video_id"] = "abc123"
-//   - "body":  JSON body field.            heygen voice speech <text>    → Body["text"] = "Hello"
-//   - "file":  Multipart file upload path. heygen asset upload <file>    → FilePath = "./video.mp4"
+// Body fields and file paths are always flags (--flag), never positional.
+// This is an agent-first design — named flags are self-documenting.
 type ArgSpec struct {
-	Name   string // display name, kebab-case ("video-id")
-	Target string // "path", "body", or "file"
-	Param  string // target key: path template var ("video_id") or body field name ("prompt")
-	Help   string
+	Name  string // display name, kebab-case ("video-id")
+	Param string // path template variable ("video_id")
+	Help  string
 }
 
 // FlagSpec defines a named CLI flag (--name value). Source determines
-// whether the resolved value becomes a query parameter or a JSON body field.
+// where the resolved value is routed:
 //
-// FlagSpec differs from ArgSpec in that flags are named and optional by default,
-// while positional args are unnamed and required. Flags map to query params or
-// body fields; args map to path params, body fields, or file paths.
-//
-// Example:
-//
-//	FlagSpec{Name: "limit", Type: "int", Source: "query", JSONName: "limit"}
-//	→ user passes --limit 10 → inv.QueryParams["limit"] = "10"
-//
-//	FlagSpec{Name: "title", Type: "string", Source: "body", JSONName: "title"}
-//	→ user passes --title "Hello" → inv.Body["title"] = "Hello"
+//   - "query": → inv.QueryParams     (e.g., --limit 10)
+//   - "body":  → inv.Body            (e.g., --title "Hello")
+//   - "file":  → inv.FilePath        (e.g., --file ./video.mp4, for multipart upload)
 type FlagSpec struct {
 	Name     string   // kebab-case ("folder-id")
 	Type     string   // "string", "int", "bool", "float64", "string-slice"
@@ -85,7 +91,7 @@ type FlagSpec struct {
 	Enum     []string // from OpenAPI enum (empty = any value)
 	Min      *int     // from OpenAPI minimum (nil if not defined)
 	Max      *int     // from OpenAPI maximum (nil if not defined)
-	Source   string   // "query" or "body"
+	Source   string   // "query", "body", or "file"
 	JSONName string   // original API parameter/field name ("folder_id")
 }
 
@@ -138,22 +144,12 @@ func (s *Spec) BuildInvocation(cmd *cobra.Command, args []string, data map[strin
 		inv.Body = data
 	}
 
-	// Step 2: Positional args — routed by ArgSpec.Target
+	// Step 2: Positional args → path params
 	for i, arg := range s.Args {
 		if i >= len(args) {
 			break
 		}
-		switch arg.Target {
-		case "path":
-			inv.PathParams[arg.Param] = args[i]
-		case "body":
-			if inv.Body == nil {
-				inv.Body = make(map[string]any)
-			}
-			inv.Body[arg.Param] = args[i]
-		case "file":
-			inv.FilePath = args[i]
-		}
+		inv.PathParams[arg.Param] = args[i]
 	}
 
 	// Step 3: Flags — only if explicitly set by the user
@@ -174,6 +170,9 @@ func (s *Spec) BuildInvocation(cmd *cobra.Command, args []string, data map[strin
 				inv.Body = make(map[string]any)
 			}
 			inv.Body[flag.JSONName] = getFlagValue(cmd, flag)
+		case "file":
+			v, _ := cmd.Flags().GetString(flag.Name)
+			inv.FilePath = v
 		}
 	}
 

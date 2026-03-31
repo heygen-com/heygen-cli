@@ -1,0 +1,2 @@
+"GET /v3/user/me":
+  - "heygen user me get"

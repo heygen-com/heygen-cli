@@ -1,0 +1,14 @@
+"GET /v3/webhooks/endpoints":
+  - "heygen webhook endpoints list"
+"POST /v3/webhooks/endpoints":
+  - "heygen webhook endpoints create --url https://example.com/hook"
+"PATCH /v3/webhooks/endpoints/{endpoint_id}":
+  - "heygen webhook endpoints update <endpoint-id> --url https://new.example.com/hook"
+"DELETE /v3/webhooks/endpoints/{endpoint_id}":
+  - "heygen webhook endpoints delete <endpoint-id>"
+"POST /v3/webhooks/endpoints/{endpoint_id}/rotate-secret":
+  - "heygen webhook endpoints rotate-secret <endpoint-id>"
+"GET /v3/webhooks/event-types":
+  - "heygen webhook event-types list"
+"GET /v3/webhooks/events":
+  - "heygen webhook events list --event-type avatar_video.success"
