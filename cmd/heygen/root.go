@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/heygen-com/heygen-cli/internal/auth"
 	"github.com/heygen-com/heygen-cli/internal/client"
+	"github.com/heygen-com/heygen-cli/internal/command"
 	"github.com/heygen-com/heygen-cli/internal/config"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/heygen-com/heygen-cli/internal/output"
@@ -55,6 +56,53 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 
 	// Register subcommands
 	root.AddCommand(newVideoCmd(ctx))
+
+	return root
+}
+
+// newRootCmdWithSpecs creates a root command that registers generated commands
+// from Specs instead of hand-written command constructors. Used by tests to
+// verify the generic builder produces correct behavior.
+func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[string][]*command.Spec) *cobra.Command {
+	ctx := &cmdContext{formatter: formatter}
+
+	root := &cobra.Command{
+		Use:           "heygen",
+		Short:         "HeyGen CLI — manage videos, avatars, and more",
+		Version:       version,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			provider := &config.EnvProvider{}
+			ctx.configProvider = provider
+
+			resolver := &auth.EnvCredentialResolver{}
+			apiKey, err := resolver.Resolve()
+			if err != nil {
+				return err
+			}
+
+			ctx.client = client.New(apiKey,
+				client.WithBaseURL(provider.BaseURL()),
+				client.WithUserAgent("heygen-cli/"+version),
+			)
+
+			return nil
+		},
+	}
+
+	root.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		return clierrors.NewUsage(err.Error())
+	})
+
+	// Register spec-based commands grouped by name
+	for groupName, specs := range groups {
+		groupCmd := &cobra.Command{Use: groupName, Short: "Manage " + groupName}
+		for _, spec := range specs {
+			groupCmd.AddCommand(buildGenCommand(spec, ctx))
+		}
+		root.AddCommand(groupCmd)
+	}
 
 	return root
 }
