@@ -38,11 +38,10 @@ func (c *Client) Execute(spec RequestSpec) (json.RawMessage, error) {
 	}
 
 	// Create request
-	method := spec.Method
-	if method == "" {
-		method = "GET"
+	if spec.Method == "" {
+		return nil, clierrors.New("RequestSpec.Method must be set")
 	}
-	req, err := http.NewRequest(method, reqURL, body)
+	req, err := http.NewRequest(spec.Method, reqURL, body)
 	if err != nil {
 		return nil, clierrors.New(fmt.Sprintf("failed to create request: %v", err))
 	}
