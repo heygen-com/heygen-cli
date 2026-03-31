@@ -48,12 +48,12 @@ docs: update CLAUDE.md
 
 ## PR Titles
 
-Same format as commit messages — the PR title becomes the squash commit on main.
+Same format as commit messages, with the Linear issue ID appended in parentheses. The PR title becomes the squash commit on main. The issue ID in the title triggers Linear's GitHub integration to link the PR to the issue.
 
 ```
-auth: add file-based credential storage
-add --wait polling with status tracking
-ci: add cross-platform test matrix
+auth: add file-based credential storage (PRINFRA-123)
+add --wait polling with status tracking (PRINFRA-125)
+ci: add cross-platform test matrix (PRINFRA-143)
 ```
 
 ## PR Descriptions
