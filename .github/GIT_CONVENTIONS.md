@@ -6,7 +6,7 @@ Format: `MM-DD-description_with_underscores`
 
 ```
 03-30-add_video_create
-04-02-fix_auth_keyring_fallback
+04-02-fix_auth_file_fallback
 ```
 
 Use Graphite (`gt create`) for stacked branches.
@@ -19,7 +19,7 @@ Use a scope when the change is clearly within one package. Omit the scope for cr
 
 ```bash
 # Single package
-auth: add keyring credential storage
+auth: add file-based credential storage
 client: add retry with exponential backoff
 output: add TUI table formatter
 
@@ -51,7 +51,7 @@ docs: update CLAUDE.md
 Same format as commit messages — the PR title becomes the squash commit on main.
 
 ```
-auth: add keyring credential storage
+auth: add file-based credential storage
 add --wait polling with status tracking
 ci: add cross-platform test matrix
 ```
