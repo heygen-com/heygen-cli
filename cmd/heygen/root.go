@@ -31,7 +31,7 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 			provider := &config.EnvProvider{}
 			ctx.configProvider = provider
 
-			// 2. Resolve credentials (env var today; keyring/file later)
+			// 2. Resolve credentials (env var today; file-based storage later)
 			resolver := &auth.EnvCredentialResolver{}
 			apiKey, err := resolver.Resolve()
 			if err != nil {
