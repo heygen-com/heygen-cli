@@ -1,11 +1,10 @@
 package main
 
 import (
-	"fmt"
+	"net/url"
 	"strconv"
 
-	"github.com/heygen-com/heygen-cli/internal/client"
-	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
+	"github.com/heygen-com/heygen-cli/internal/command"
 	"github.com/spf13/cobra"
 )
 
@@ -19,32 +18,29 @@ func newVideoListCmd(ctx *cmdContext) *cobra.Command {
 		Short: "List videos",
 		Long:  "List videos in your HeyGen account with optional filtering.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Validate --limit if explicitly provided
-			if cmd.Flags().Changed("limit") {
-				if limit < 1 || limit > 100 {
-					return clierrors.NewUsage(fmt.Sprintf("--limit must be between 1 and 100, got %d", limit))
-				}
-			}
-
-			spec := client.RequestSpec{
+			spec := &command.Spec{
 				Endpoint:   "/v3/videos",
 				Method:     "GET",
-				Paginated:  true,
-				DataField:  "data",
 				TokenField: "next_token",
+				DataField:  "data",
+			}
+
+			inv := &command.Invocation{
+				PathParams:  make(map[string]string),
+				QueryParams: make(url.Values),
 			}
 
 			if cmd.Flags().Changed("limit") {
-				spec.QueryParams = append(spec.QueryParams, client.QueryParam{Key: "limit", Value: strconv.Itoa(limit)})
+				inv.QueryParams.Set("limit", strconv.Itoa(limit))
 			}
 			if token != "" {
-				spec.QueryParams = append(spec.QueryParams, client.QueryParam{Key: "token", Value: token})
+				inv.QueryParams.Set("token", token)
 			}
 			if folderID != "" {
-				spec.QueryParams = append(spec.QueryParams, client.QueryParam{Key: "folder_id", Value: folderID})
+				inv.QueryParams.Set("folder_id", folderID)
 			}
 
-			result, err := ctx.client.Execute(spec)
+			result, err := ctx.client.Execute(spec, inv)
 			if err != nil {
 				return err
 			}

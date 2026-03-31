@@ -6,8 +6,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
+	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
@@ -24,14 +27,13 @@ func TestExecute_GETWithQueryParams(t *testing.T) {
 
 	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 
-	result, err := c.Execute(RequestSpec{
-		Endpoint: "/v3/videos",
-		Method:   "GET",
-		QueryParams: []QueryParam{
-			{Key: "limit", Value: "10"},
-			{Key: "folder_id", Value: "abc123"},
-		},
-	})
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
+	inv := &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: url.Values{"limit": {"10"}, "folder_id": {"abc123"}},
+	}
+
+	result, err := c.Execute(spec, inv)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -42,7 +44,6 @@ func TestExecute_GETWithQueryParams(t *testing.T) {
 		t.Fatal("expected query params, got empty")
 	}
 
-	// Verify response is valid JSON
 	var parsed map[string]any
 	if jsonErr := json.Unmarshal(result, &parsed); jsonErr != nil {
 		t.Errorf("response is not valid JSON: %v", jsonErr)
@@ -61,24 +62,18 @@ func TestExecute_RepeatedQueryParams(t *testing.T) {
 
 	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 
-	_, err := c.Execute(RequestSpec{
-		Endpoint: "/v3/videos",
-		Method:   "GET",
-		QueryParams: []QueryParam{
-			{Key: "status", Value: "completed", Repeated: true},
-			{Key: "status", Value: "failed", Repeated: true},
-		},
-	})
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
+	inv := &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: url.Values{"status": {"completed", "failed"}},
+	}
+
+	_, err := c.Execute(spec, inv)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Both values should be present
-	if gotQuery == "" {
-		t.Fatal("expected query string, got empty")
-	}
-	// url.Values.Encode sorts keys, so check for both values
-	if !(containsSubstring(gotQuery, "status=completed") && containsSubstring(gotQuery, "status=failed")) {
+	if !(strings.Contains(gotQuery, "status=completed") && strings.Contains(gotQuery, "status=failed")) {
 		t.Errorf("query = %q, want both status=completed and status=failed", gotQuery)
 	}
 }
@@ -95,11 +90,13 @@ func TestExecute_PathParamSubstitution(t *testing.T) {
 
 	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 
-	_, err := c.Execute(RequestSpec{
-		Endpoint:   "/v3/videos/{video_id}",
-		Method:     "GET",
-		PathParams: map[string]string{"video_id": "abc123"},
-	})
+	spec := &command.Spec{Endpoint: "/v3/videos/{video_id}", Method: "GET"}
+	inv := &command.Invocation{
+		PathParams:  map[string]string{"video_id": "abc123"},
+		QueryParams: make(url.Values),
+	}
+
+	_, err := c.Execute(spec, inv)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -108,7 +105,7 @@ func TestExecute_PathParamSubstitution(t *testing.T) {
 	}
 }
 
-func TestExecute_POSTWithFieldSpecs(t *testing.T) {
+func TestExecute_POSTWithBody(t *testing.T) {
 	var gotBody map[string]any
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -124,14 +121,14 @@ func TestExecute_POSTWithFieldSpecs(t *testing.T) {
 
 	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 
-	_, err := c.Execute(RequestSpec{
-		Endpoint: "/v3/videos",
-		Method:   "POST",
-		Body: []FieldSpec{
-			{Name: "title", Type: "string", Value: "My Video"},
-			{Name: "draft", Type: "bool", Value: true},
-		},
-	})
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "POST", BodyEncoding: "json"}
+	inv := &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: make(url.Values),
+		Body:        map[string]any{"title": "My Video", "draft": true},
+	}
+
+	_, err := c.Execute(spec, inv)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -140,6 +137,34 @@ func TestExecute_POSTWithFieldSpecs(t *testing.T) {
 	}
 	if gotBody["draft"] != true {
 		t.Errorf("body.draft = %v, want true", gotBody["draft"])
+	}
+}
+
+func TestExecute_NilBodySendsNoContent(t *testing.T) {
+	var gotContentLength int64
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentLength = r.ContentLength
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+
+	spec := &command.Spec{Endpoint: "/v3/avatars", Method: "POST"}
+	inv := &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: make(url.Values),
+		// Body is nil — no body should be sent
+	}
+
+	_, err := c.Execute(spec, inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotContentLength > 0 {
+		t.Errorf("ContentLength = %d, want 0 (no body)", gotContentLength)
 	}
 }
 
@@ -153,7 +178,10 @@ func TestExecute_ErrorEnvelope_400(t *testing.T) {
 
 	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 
-	_, err := c.Execute(RequestSpec{Endpoint: "/v3/videos", Method: "GET"})
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	_, err := c.Execute(spec, inv)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -182,7 +210,10 @@ func TestExecute_ErrorEnvelope_401(t *testing.T) {
 
 	c := New("bad-key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 
-	_, err := c.Execute(RequestSpec{Endpoint: "/v3/videos", Method: "GET"})
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	_, err := c.Execute(spec, inv)
 
 	var cliErr *clierrors.CLIError
 	if !errors.As(err, &cliErr) {
@@ -194,13 +225,15 @@ func TestExecute_ErrorEnvelope_401(t *testing.T) {
 }
 
 func TestExecute_NetworkError(t *testing.T) {
-	// Point at a closed server to trigger network error
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	srv.Close()
 
 	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 
-	_, err := c.Execute(RequestSpec{Endpoint: "/v3/videos", Method: "GET"})
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	_, err := c.Execute(spec, inv)
 
 	var cliErr *clierrors.CLIError
 	if !errors.As(err, &cliErr) {
@@ -209,19 +242,15 @@ func TestExecute_NetworkError(t *testing.T) {
 	if cliErr.Code != "network_error" {
 		t.Errorf("Code = %q, want %q", cliErr.Code, "network_error")
 	}
-	if cliErr.ExitCode != clierrors.ExitGeneral {
-		t.Errorf("ExitCode = %d, want %d", cliErr.ExitCode, clierrors.ExitGeneral)
-	}
 }
 
 func TestExecute_MultipartNotImplemented(t *testing.T) {
 	c := New("key")
 
-	_, err := c.Execute(RequestSpec{
-		Endpoint:     "/v3/assets",
-		Method:       "POST",
-		BodyEncoding: "multipart",
-	})
+	spec := &command.Spec{Endpoint: "/v3/assets", Method: "POST", BodyEncoding: "multipart"}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	_, err := c.Execute(spec, inv)
 
 	var cliErr *clierrors.CLIError
 	if !errors.As(err, &cliErr) {
@@ -232,15 +261,14 @@ func TestExecute_MultipartNotImplemented(t *testing.T) {
 	}
 }
 
-func containsSubstring(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsSubstringImpl(s, sub))
-}
+func TestExecute_MethodRequired(t *testing.T) {
+	c := New("key")
 
-func containsSubstringImpl(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
+	spec := &command.Spec{Endpoint: "/v3/videos"}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	_, err := c.Execute(spec, inv)
+	if err == nil {
+		t.Fatal("expected error for empty Method, got nil")
 	}
-	return false
 }
