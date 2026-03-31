@@ -1,0 +1,223 @@
+openapi: "3.0.0"
+info:
+  title: Test API
+  version: "3.0"
+paths:
+  /v3/widgets:
+    get:
+      tags: [Widgets]
+      summary: List widgets
+      description: Returns a paginated list of widgets.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of items to return
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: token
+          in: query
+          description: Pagination token
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      widgets:
+                        type: array
+                        items:
+                          type: object
+                      token:
+                        type: string
+    post:
+      tags: [Widgets]
+      summary: Create a widget
+      description: Creates a new widget.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Widget name
+                color:
+                  type: string
+                  description: Widget color
+                  enum: [red, green, blue]
+                size:
+                  type: integer
+                  description: Widget size
+                  minimum: 1
+                  maximum: 100
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  description: Tags for the widget
+                metadata:
+                  type: object
+                  description: Arbitrary metadata
+      responses:
+        "201":
+          description: Created
+
+  /v3/widgets/{widget_id}:
+    get:
+      tags: [Widgets]
+      summary: Get a widget
+      description: Returns a single widget by ID.
+      parameters:
+        - name: widget_id
+          in: path
+          required: true
+          description: The widget ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    delete:
+      tags: [Widgets]
+      summary: Delete a widget
+      description: Deletes a widget by ID.
+      parameters:
+        - name: widget_id
+          in: path
+          required: true
+          description: The widget ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /v3/widgets/{widget_id}/activate:
+    post:
+      tags: [Widgets]
+      summary: Activate a widget
+      description: Activates a widget.
+      parameters:
+        - name: widget_id
+          in: path
+          required: true
+          description: The widget ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /v3/uploads:
+    post:
+      tags: [Uploads]
+      summary: Upload a file
+      description: Uploads a file.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file to upload
+      responses:
+        "201":
+          description: Created
+
+  /v1/legacy:
+    get:
+      tags: [Legacy]
+      summary: Legacy endpoint
+      description: Should be filtered out (v1).
+      responses:
+        "200":
+          description: OK
+
+  /v3/hidden:
+    get:
+      tags: [Hidden]
+      summary: Hidden endpoint
+      description: Should be filtered out (x-cli-visible false).
+      x-cli-visible: false
+      responses:
+        "200":
+          description: OK
+
+  /v3/gadgets:
+    get:
+      tags: [Gadgets]
+      summary: List gadgets
+      description: Returns gadgets.
+      parameters:
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            anyOf:
+              - type: string
+              - type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+  /v3/gadgets/{gadget_id}:
+    get:
+      tags: [Gadgets]
+      summary: Get a gadget
+      parameters:
+        - name: gadget_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /v3/things:
+    post:
+      tags: [Things]
+      summary: Create a thing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  description: Whether the thing is enabled
+                  default: true
+                ratio:
+                  type: number
+                  description: The ratio
+      responses:
+        "201":
+          description: Created
