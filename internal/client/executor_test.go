@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -244,20 +245,108 @@ func TestExecute_NetworkError(t *testing.T) {
 	}
 }
 
-func TestExecute_MultipartNotImplemented(t *testing.T) {
+func TestExecute_MultipartUpload(t *testing.T) {
+	var gotContentType string
+	var gotFileContent string
+	var gotFileName string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			t.Errorf("failed to get form file: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		gotFileName = header.Filename
+		data, _ := io.ReadAll(file)
+		gotFileContent = string(data)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{"asset_id":"asset_123"}}`))
+	}))
+	defer srv.Close()
+
+	// Create a temp file to upload
+	tmpFile, err := os.CreateTemp("", "test-upload-*.txt")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	_, _ = tmpFile.WriteString("test file content")
+	tmpFile.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+
+	spec := &command.Spec{Endpoint: "/v3/assets", Method: "POST", BodyEncoding: "multipart"}
+	inv := &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: make(url.Values),
+		FilePath:    tmpFile.Name(),
+	}
+
+	result, err := c.Execute(spec, inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify multipart content type
+	if !strings.Contains(gotContentType, "multipart/form-data") {
+		t.Errorf("Content-Type = %q, want multipart/form-data", gotContentType)
+	}
+
+	// Verify file was received
+	if gotFileContent != "test file content" {
+		t.Errorf("file content = %q, want %q", gotFileContent, "test file content")
+	}
+
+	// Verify filename is the base name
+	if !strings.HasPrefix(gotFileName, "test-upload-") {
+		t.Errorf("filename = %q, expected to start with test-upload-", gotFileName)
+	}
+
+	// Verify response
+	var parsed map[string]any
+	if jsonErr := json.Unmarshal(result, &parsed); jsonErr != nil {
+		t.Errorf("response is not valid JSON: %v", jsonErr)
+	}
+}
+
+func TestExecute_MultipartMissingFilePath(t *testing.T) {
 	c := New("key")
 
 	spec := &command.Spec{Endpoint: "/v3/assets", Method: "POST", BodyEncoding: "multipart"}
 	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
 
 	_, err := c.Execute(spec, inv)
+	if err == nil {
+		t.Fatal("expected error for missing file path, got nil")
+	}
 
 	var cliErr *clierrors.CLIError
 	if !errors.As(err, &cliErr) {
 		t.Fatalf("expected *CLIError, got %T: %v", err, err)
 	}
-	if cliErr.ExitCode != clierrors.ExitUsage {
-		t.Errorf("ExitCode = %d, want %d", cliErr.ExitCode, clierrors.ExitUsage)
+}
+
+func TestExecute_MultipartNonExistentFile(t *testing.T) {
+	c := New("key")
+
+	spec := &command.Spec{Endpoint: "/v3/assets", Method: "POST", BodyEncoding: "multipart"}
+	inv := &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: make(url.Values),
+		FilePath:    "/tmp/nonexistent-file-abc123.txt",
+	}
+
+	_, err := c.Execute(spec, inv)
+	if err == nil {
+		t.Fatal("expected error for non-existent file, got nil")
+	}
+
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected *CLIError, got %T: %v", err, err)
 	}
 }
 
