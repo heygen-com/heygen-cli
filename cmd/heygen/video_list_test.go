@@ -124,8 +124,8 @@ func TestVideoList_Flags(t *testing.T) {
 				if got := q.Get("folder_id"); got != "folder_abc" {
 					t.Errorf("folder_id = %q, want %q", got, "folder_abc")
 				}
-				if got := q.Get("token"); got != "cursor_xyz" {
-					t.Errorf("token = %q, want %q", got, "cursor_xyz")
+				if got := q.Get("title"); got != "demo" {
+					t.Errorf("title = %q, want %q", got, "demo")
 				}
 			},
 		},
@@ -133,7 +133,7 @@ func TestVideoList_Flags(t *testing.T) {
 	defer srv.Close()
 
 	res := runCommand(t, srv.URL, "test-key",
-		"video", "list", "--limit", "25", "--folder-id", "folder_abc", "--token", "cursor_xyz")
+		"video", "list", "--limit", "25", "--folder-id", "folder_abc", "--title", "demo")
 
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
@@ -141,15 +141,9 @@ func TestVideoList_Flags(t *testing.T) {
 }
 
 func TestVideoList_LimitOutOfRange(t *testing.T) {
-	// The OpenAPI spec doesn't define min/max for limit, so validation
-	// is server-side. The API returns 400 (exit 1), not a client-side
-	// usage error (exit 2).
-	srv := setupTestServer(t, map[string]testHandler{
-		"GET /v3/videos": {
-			StatusCode: 400,
-			Body:       `{"error":{"code":"invalid_parameter","message":"limit must be between 1 and 100"}}`,
-		},
-	})
+	// The codegen reads min/max from the OpenAPI spec. Client-side
+	// validation catches out-of-range values before the API call.
+	srv := setupTestServer(t, map[string]testHandler{})
 	defer srv.Close()
 
 	tests := []struct {
@@ -164,16 +158,16 @@ func TestVideoList_LimitOutOfRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			res := runCommand(t, srv.URL, "test-key", "video", "list", "--limit", tt.limit)
 
-			if res.ExitCode != clierrors.ExitGeneral {
-				t.Errorf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stderr)
+			if res.ExitCode != clierrors.ExitUsage {
+				t.Errorf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
 			}
 
 			var envelope map[string]map[string]any
 			if err := json.Unmarshal([]byte(res.Stderr), &envelope); err != nil {
 				t.Fatalf("stderr is not valid JSON: %v\nstderr: %s", err, res.Stderr)
 			}
-			if envelope["error"]["code"] != "invalid_parameter" {
-				t.Errorf("error.code = %v, want %q", envelope["error"]["code"], "invalid_parameter")
+			if envelope["error"]["code"] != "usage_error" {
+				t.Errorf("error.code = %v, want %q", envelope["error"]["code"], "usage_error")
 			}
 		})
 	}

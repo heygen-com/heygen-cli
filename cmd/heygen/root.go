@@ -54,8 +54,8 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 		return clierrors.NewUsage(err.Error())
 	})
 
-	// Register subcommands
-	root.AddCommand(newVideoCmd(ctx))
+	// Register generated commands from gen/ package
+	registerGenCommands(root, ctx)
 
 	return root
 }
