@@ -141,7 +141,15 @@ func TestVideoList_Flags(t *testing.T) {
 }
 
 func TestVideoList_LimitOutOfRange(t *testing.T) {
-	srv := setupTestServer(t, map[string]testHandler{})
+	// The OpenAPI spec doesn't define min/max for limit, so validation
+	// is server-side. The API returns 400 (exit 1), not a client-side
+	// usage error (exit 2).
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos": {
+			StatusCode: 400,
+			Body:       `{"error":{"code":"invalid_parameter","message":"limit must be between 1 and 100"}}`,
+		},
+	})
 	defer srv.Close()
 
 	tests := []struct {
@@ -156,16 +164,16 @@ func TestVideoList_LimitOutOfRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			res := runCommand(t, srv.URL, "test-key", "video", "list", "--limit", tt.limit)
 
-			if res.ExitCode != clierrors.ExitUsage {
-				t.Errorf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
+			if res.ExitCode != clierrors.ExitGeneral {
+				t.Errorf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stderr)
 			}
 
 			var envelope map[string]map[string]any
 			if err := json.Unmarshal([]byte(res.Stderr), &envelope); err != nil {
 				t.Fatalf("stderr is not valid JSON: %v\nstderr: %s", err, res.Stderr)
 			}
-			if envelope["error"]["code"] != "usage_error" {
-				t.Errorf("error.code = %v, want %q", envelope["error"]["code"], "usage_error")
+			if envelope["error"]["code"] != "invalid_parameter" {
+				t.Errorf("error.code = %v, want %q", envelope["error"]["code"], "invalid_parameter")
 			}
 		})
 	}
