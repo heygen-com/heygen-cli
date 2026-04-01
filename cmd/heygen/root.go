@@ -31,6 +31,7 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 	})
 
 	root.AddCommand(newAuthCmd(ctx))
+	root.AddCommand(newConfigCmd(ctx))
 	registerGroups(root, ctx, gen.Groups)
 
 	return root
@@ -58,6 +59,7 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 	})
 
 	root.AddCommand(newAuthCmd(ctx))
+	root.AddCommand(newConfigCmd(ctx))
 	registerGroups(root, ctx, groups)
 
 	return root
