@@ -4,9 +4,9 @@ package gen
 
 import "github.com/heygen-com/heygen-cli/internal/command"
 
-{{- range .Commands}}
+{{- range .Specs}}
 
-var {{.VarName}} = &command.Spec{
+var {{pascalCase .Group}}{{pascalCase .Name}} = &command.Spec{
 	Group:       {{quote .Group}},
 	Name:        {{quote .Name}},
 	Summary:     {{quote .Summary}},
@@ -20,21 +20,21 @@ var {{.VarName}} = &command.Spec{
 {{- if .DataField}}
 	DataField:   {{quote .DataField}},
 {{- end}}
-{{- if hasExamples .}}
+{{- if .Examples}}
 	Examples: []string{
 {{- range .Examples}}
 		{{quote .}},
 {{- end}}
 	},
 {{- end}}
-{{- if hasArgs .}}
+{{- if .Args}}
 	Args: []command.ArgSpec{
 {{- range .Args}}
-		{Name: {{quote .Name}}, Target: {{quote .Target}}, Param: {{quote .Param}}, Help: {{quote .Help}}},
+		{Name: {{quote .Name}}, Param: {{quote .Param}}, Help: {{quote .Help}}},
 {{- end}}
 	},
 {{- end}}
-{{- if hasFlags .}}
+{{- if .Flags}}
 	Flags: []command.FlagSpec{
 {{- range .Flags}}
 		{
@@ -54,4 +54,3 @@ var {{.VarName}} = &command.Spec{
 {{- end}}
 }
 {{- end}}
-

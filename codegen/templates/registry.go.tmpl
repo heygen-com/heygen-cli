@@ -9,10 +9,10 @@ func intPtr(v int) *int { return &v }
 // Groups maps group name → slice of command specs.
 // Used by the command builder to register generated commands.
 var Groups = map[string][]*command.Spec{
-{{- range .}}
-	{{quote .Name}}: {
-	{{- range .Commands}}
-		{{.VarName}},
+{{- range .GroupNames}}
+	{{quote .}}: {
+	{{- range index $.Groups .}}
+		{{pascalCase .Group}}{{pascalCase .Name}},
 	{{- end}}
 	},
 {{- end}}

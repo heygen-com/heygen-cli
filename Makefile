@@ -20,5 +20,5 @@ clean:
 
 generate:
 	@find gen/ -name '*.go' -delete 2>/dev/null || true
-	go run ./codegen/ -spec $(SPEC) -out gen/ -overrides codegen/overrides.yaml
+	go run ./codegen/ -spec $(SPEC) -out gen/ -examples codegen/examples/
 	gofmt -w gen/
