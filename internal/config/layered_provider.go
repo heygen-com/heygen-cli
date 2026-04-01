@@ -21,19 +21,37 @@ func defaultFor(key string) string {
 	}
 }
 
+func (p *LayeredProvider) envSource(key string) (Source, bool) {
+	if _, ok := p.Env.GetEnv(key); !ok {
+		return Source{}, false
+	}
+
+	switch key {
+	case KeyAnalytics:
+		return Source{Value: "false", Origin: "env"}, true
+	case KeyAutoUpdate:
+		return Source{Value: "false", Origin: "env"}, true
+	case KeyAPIBase:
+		return Source{Value: p.Env.BaseURL(), Origin: "env"}, true
+	case KeyOutput:
+		return Source{Value: p.Env.Output(), Origin: "env"}, true
+	default:
+		return Source{}, false
+	}
+}
+
+func (p *LayeredProvider) resolvedValue(key, fallback string) string {
+	source, err := p.Resolve(key)
+	if err != nil {
+		return fallback
+	}
+	return source.Value
+}
+
 // Resolve returns the effective value and its origin.
 func (p *LayeredProvider) Resolve(key string) (Source, error) {
-	if _, ok := p.Env.GetEnv(key); ok {
-		switch key {
-		case KeyAnalytics:
-			return Source{Value: "false", Origin: "env"}, nil
-		case KeyAutoUpdate:
-			return Source{Value: "false", Origin: "env"}, nil
-		case KeyAPIBase:
-			return Source{Value: p.Env.BaseURL(), Origin: "env"}, nil
-		case KeyOutput:
-			return Source{Value: p.Env.Output(), Origin: "env"}, nil
-		}
+	if source, ok := p.envSource(key); ok {
+		return source, nil
 	}
 
 	val, ok, err := p.File.Get(key)
@@ -48,40 +66,28 @@ func (p *LayeredProvider) Resolve(key string) (Source, error) {
 }
 
 func (p *LayeredProvider) BaseURL() string {
-	source, err := p.Resolve(KeyAPIBase)
-	if err != nil {
-		return DefaultBaseURL
-	}
-	return source.Value
+	return p.resolvedValue(KeyAPIBase, DefaultBaseURL)
 }
 
 func (p *LayeredProvider) Output() string {
-	source, err := p.Resolve(KeyOutput)
-	if err != nil {
-		return DefaultOutput
-	}
-	return source.Value
+	return p.resolvedValue(KeyOutput, DefaultOutput)
 }
 
 func (p *LayeredProvider) Analytics() *bool {
-	if _, ok := p.Env.GetEnv(KeyAnalytics); ok {
-		v := false
-		return &v
-	}
-
-	val, ok, err := p.File.Get(KeyAnalytics)
-	if err != nil || !ok {
+	source, err := p.Resolve(KeyAnalytics)
+	if err != nil || source.Origin == "default" {
 		return nil
 	}
 
-	v := val == "true"
+	v := source.Value == "true"
 	return &v
 }
 
 func (p *LayeredProvider) AutoUpdate() bool {
-	source, err := p.Resolve(KeyAutoUpdate)
-	if err != nil {
-		return true
-	}
-	return source.Value == "true"
+	return p.resolvedValue(KeyAutoUpdate, "true") == "true"
+}
+
+// Set persists a configuration value via the file provider.
+func (p *LayeredProvider) Set(key, value string) error {
+	return p.File.Set(key, value)
 }

@@ -23,6 +23,11 @@ type ProviderWithSource interface {
 	Resolve(key string) (Source, error)
 }
 
+// WritableProvider persists configuration values.
+type WritableProvider interface {
+	Set(key, value string) error
+}
+
 const (
 	KeyOutput     = "output"
 	KeyAnalytics  = "analytics"

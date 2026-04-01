@@ -12,6 +12,13 @@ const (
 	DefaultOutput  = "json"
 )
 
+var envVarByKey = map[string]string{
+	KeyAPIBase:    envBaseURL,
+	KeyOutput:     envOutput,
+	KeyAnalytics:  envNoAnalytics,
+	KeyAutoUpdate: envNoAutoUpdate,
+}
+
 // EnvProvider implements Provider by reading from environment variables.
 // Falls back to built-in defaults when a variable is not set.
 type EnvProvider struct{}
@@ -49,20 +56,11 @@ func (p *EnvProvider) AutoUpdate() bool {
 
 // GetEnv reports whether the env var for a config key is explicitly set.
 func (p *EnvProvider) GetEnv(key string) (string, bool) {
-	switch key {
-	case KeyAPIBase:
-		val := os.Getenv(envBaseURL)
-		return val, val != ""
-	case KeyOutput:
-		val := os.Getenv(envOutput)
-		return val, val != ""
-	case KeyAnalytics:
-		val := os.Getenv(envNoAnalytics)
-		return val, val != ""
-	case KeyAutoUpdate:
-		val := os.Getenv(envNoAutoUpdate)
-		return val, val != ""
-	default:
+	envVar, ok := envVarByKey[key]
+	if !ok {
 		return "", false
 	}
+
+	val := os.Getenv(envVar)
+	return val, val != ""
 }

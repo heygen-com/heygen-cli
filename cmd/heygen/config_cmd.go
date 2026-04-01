@@ -37,6 +37,14 @@ func configProviderWithSource(ctx *cmdContext) (config.ProviderWithSource, error
 	return provider, nil
 }
 
+func writableConfigProvider(ctx *cmdContext) (config.WritableProvider, error) {
+	provider, ok := ctx.configProvider.(config.WritableProvider)
+	if !ok {
+		return nil, clierrors.New("config provider does not support writes")
+	}
+	return provider, nil
+}
+
 func validateConfigKey(key string) error {
 	if !slices.Contains(config.ValidKeys, key) {
 		return clierrors.NewUsage(fmt.Sprintf("invalid config key %q", key))
@@ -87,11 +95,11 @@ func newConfigSetCmd(ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
-			provider, ok := ctx.configProvider.(*config.LayeredProvider)
-			if !ok {
-				return clierrors.New("config provider does not support writes")
+			provider, err := writableConfigProvider(ctx)
+			if err != nil {
+				return err
 			}
-			if err := provider.File.Set(key, value); err != nil {
+			if err := provider.Set(key, value); err != nil {
 				return clierrors.New(err.Error())
 			}
 
