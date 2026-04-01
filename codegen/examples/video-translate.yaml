@@ -1,0 +1,24 @@
+"GET /v3/video-translations":
+  - "heygen video-translate list --limit 10"
+"GET /v3/video-translations/{video_translation_id}":
+  - "heygen video-translate get <video-translation-id>"
+"POST /v3/video-translations":
+  - "cat request.json | heygen video-translate create -d -"
+"PATCH /v3/video-translations/{video_translation_id}":
+  - "heygen video-translate update <video-translation-id> --title 'New title'"
+"DELETE /v3/video-translations/{video_translation_id}":
+  - "heygen video-translate delete <video-translation-id>"
+"GET /v3/video-translations/{video_translation_id}/caption":
+  - "heygen video-translate caption get <video-translation-id> --format srt"
+"GET /v3/video-translations/languages":
+  - "heygen video-translate languages list"
+"POST /v3/video-translations/proofreads":
+  - "cat request.json | heygen video-translate proofreads create -d -"
+"GET /v3/video-translations/proofreads/{proofread_id}":
+  - "heygen video-translate proofreads get <proofread-id>"
+"POST /v3/video-translations/proofreads/{proofread_id}/generate":
+  - "heygen video-translate proofreads generate <proofread-id>"
+"GET /v3/video-translations/proofreads/{proofread_id}/srt":
+  - "heygen video-translate proofreads srt get <proofread-id>"
+"PUT /v3/video-translations/proofreads/{proofread_id}/srt":
+  - "heygen video-translate proofreads srt update <proofread-id>"

@@ -1,0 +1,12 @@
+"GET /v3/avatars":
+  - "heygen avatar list --limit 10"
+"GET /v3/avatars/{group_id}":
+  - "heygen avatar get <group-id>"
+"POST /v3/avatars":
+  - "heygen avatar create"
+"POST /v3/avatars/{group_id}/consent":
+  - "heygen avatar consent create <group-id>"
+"GET /v3/avatars/looks":
+  - "heygen avatar looks list --limit 10"
+"GET /v3/avatars/looks/{look_id}":
+  - "heygen avatar looks get <look-id>"

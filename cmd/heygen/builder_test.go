@@ -154,7 +154,7 @@ func TestGenBuilder_PathParam(t *testing.T) {
 		Endpoint: "/v3/videos/{video_id}",
 		Method:   "GET",
 		Args: []command.ArgSpec{
-			{Name: "video-id", Target: "path", Param: "video_id"},
+			{Name: "video-id", Param: "video_id"},
 		},
 		Examples: []string{"heygen video get abc123"},
 	}

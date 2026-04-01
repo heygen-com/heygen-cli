@@ -1,0 +1,2 @@
+"POST /v3/assets":
+  - "heygen asset create --file ./video.mp4"

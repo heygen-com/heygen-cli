@@ -1,0 +1,9 @@
+"GET /v3/videos":
+  - "heygen video list --limit 10"
+  - "heygen video list --folder-id abc123"
+"POST /v3/videos":
+  - "heygen video create --avatar-id josh_lite --script 'Hello world' --voice-id en_male"
+"GET /v3/videos/{video_id}":
+  - "heygen video get <video-id>"
+"DELETE /v3/videos/{video_id}":
+  - "heygen video delete <video-id>"

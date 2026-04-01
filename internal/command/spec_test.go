@@ -74,7 +74,7 @@ func TestBuildInvocation_BodyFieldFlag(t *testing.T) {
 func TestBuildInvocation_PathParamArg(t *testing.T) {
 	spec := &Spec{
 		Args: []ArgSpec{
-			{Name: "video-id", Target: "path", Param: "video_id"},
+			{Name: "video-id", Param: "video_id"},
 		},
 	}
 	cmd := helperCmd(t, spec, nil)
@@ -88,39 +88,7 @@ func TestBuildInvocation_PathParamArg(t *testing.T) {
 	}
 }
 
-func TestBuildInvocation_BodyParamArg(t *testing.T) {
-	spec := &Spec{
-		Args: []ArgSpec{
-			{Name: "prompt", Target: "body", Param: "prompt"},
-		},
-	}
-	cmd := helperCmd(t, spec, nil)
 
-	inv, err := spec.BuildInvocation(cmd, []string{"Hello world"}, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if inv.Body["prompt"] != "Hello world" {
-		t.Errorf("Body[prompt] = %v, want %q", inv.Body["prompt"], "Hello world")
-	}
-}
-
-func TestBuildInvocation_FileArg(t *testing.T) {
-	spec := &Spec{
-		Args: []ArgSpec{
-			{Name: "file", Target: "file", Param: "file"},
-		},
-	}
-	cmd := helperCmd(t, spec, nil)
-
-	inv, err := spec.BuildInvocation(cmd, []string{"/tmp/video.mp4"}, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if inv.FilePath != "/tmp/video.mp4" {
-		t.Errorf("FilePath = %q, want %q", inv.FilePath, "/tmp/video.mp4")
-	}
-}
 
 func TestBuildInvocation_UnchangedFlagOmitted(t *testing.T) {
 	spec := &Spec{
@@ -268,32 +236,6 @@ func TestBuildInvocation_FlagOverridesData(t *testing.T) {
 	}
 }
 
-func TestBuildInvocation_PositionalArgOverridesData(t *testing.T) {
-	spec := &Spec{
-		Args: []ArgSpec{
-			{Name: "prompt", Target: "body", Param: "prompt"},
-		},
-	}
-	cmd := helperCmd(t, spec, nil)
-
-	data := map[string]any{
-		"prompt":   "From JSON",
-		"avatar_id": "josh",
-	}
-
-	inv, err := spec.BuildInvocation(cmd, []string{"From Positional"}, data)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// Positional arg wins over -d/--data
-	if inv.Body["prompt"] != "From Positional" {
-		t.Errorf("Body[prompt] = %v, want %q", inv.Body["prompt"], "From Positional")
-	}
-	// Other fields from -d/--data preserved
-	if inv.Body["avatar_id"] != "josh" {
-		t.Errorf("Body[avatar_id] = %v, want %q", inv.Body["avatar_id"], "josh")
-	}
-}
 
 func TestBuildInvocation_NoBodyWhenNoContent(t *testing.T) {
 	spec := &Spec{

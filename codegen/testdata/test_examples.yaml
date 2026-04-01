@@ -1,0 +1,12 @@
+"GET /v3/widgets":
+  - "heygen widget list --limit 10"
+"POST /v3/widgets":
+  - "heygen widget create --name 'My Widget'"
+"GET /v3/widgets/{widget_id}":
+  - "heygen widget get <widget-id>"
+"DELETE /v3/widgets/{widget_id}":
+  - "heygen widget delete <widget-id>"
+"POST /v3/widgets/{widget_id}/activate":
+  - "heygen widget activate <widget-id>"
+"POST /v3/uploads":
+  - "heygen upload upload --file ./file.txt"
