@@ -7,7 +7,7 @@ build:
 	go build -ldflags "$(LDFLAGS)" -o bin/heygen ./cmd/heygen/
 
 install:
-	go build -ldflags "$(LDFLAGS)" -o $(shell go env GOPATH)/bin/heygen-dev ./cmd/heygen/
+	go build -ldflags "$(LDFLAGS)" -o $(shell go env GOPATH)/bin/heygen ./cmd/heygen/
 
 test:
 	go test ./...
