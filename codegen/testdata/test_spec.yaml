@@ -1,0 +1,227 @@
+openapi: "3.0.0"
+info:
+  title: Test API
+  version: "3.0"
+paths:
+  /v3/videos:
+    get:
+      tags: [Videos]
+      summary: List videos
+      description: Returns a paginated list of videos.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of items to return
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: token
+          in: query
+          description: Pagination token
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      videos:
+                        type: array
+                        items:
+                          type: object
+                      token:
+                        type: string
+    post:
+      tags: [Videos]
+      summary: Create a video
+      description: Creates a new video.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - script
+              properties:
+                script:
+                  type: string
+                  description: Video script text
+                avatar-id:
+                  type: string
+                  description: Avatar to use
+                  enum: [josh, anna, lisa]
+                quality:
+                  type: integer
+                  description: Video quality (1-100)
+                  minimum: 1
+                  maximum: 100
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  description: Tags for the video
+                settings:
+                  type: object
+                  description: Advanced rendering settings
+      responses:
+        "201":
+          description: Created
+
+  /v3/videos/{video_id}:
+    get:
+      tags: [Videos]
+      summary: Get video details
+      description: Returns a single video by ID.
+      parameters:
+        - name: video_id
+          in: path
+          required: true
+          description: The video ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+    delete:
+      tags: [Videos]
+      summary: Delete a video
+      description: Deletes a video by ID.
+      parameters:
+        - name: video_id
+          in: path
+          required: true
+          description: The video ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /v3/videos/{video_id}/caption:
+    get:
+      tags: [Videos]
+      summary: Get video caption
+      description: Returns caption file for a video.
+      parameters:
+        - name: video_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /v3/assets:
+    post:
+      tags: [Assets]
+      summary: Upload an asset
+      description: Uploads a file as an asset.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file to upload
+      responses:
+        "201":
+          description: Created
+
+  /v3/avatars:
+    get:
+      tags: [Avatars]
+      summary: List avatars
+      description: Returns avatars.
+      parameters:
+        - name: ownership
+          in: query
+          description: Filter by ownership
+          schema:
+            anyOf:
+              - type: string
+              - type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+  /v3/avatars/{group_id}:
+    get:
+      tags: [Avatars]
+      summary: Get an avatar group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /v3/avatars/{group_id}/consent:
+    post:
+      tags: [Avatars]
+      summary: Create avatar consent
+      description: Initiates a consent flow for an avatar.
+      x-cli-action: true
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reroute-url:
+                  type: string
+                  description: URL to redirect after consent
+      responses:
+        "200":
+          description: OK
+
+  /v1/legacy:
+    get:
+      tags: [Legacy]
+      summary: Legacy endpoint
+      description: Should be filtered out (x-cli-visible false).
+      x-cli-visible: false
+      responses:
+        "200":
+          description: OK
+
+  /v3/hidden:
+    get:
+      tags: [Hidden]
+      summary: Hidden endpoint
+      description: Should be filtered out (x-cli-visible false).
+      x-cli-visible: false
+      responses:
+        "200":
+          description: OK
