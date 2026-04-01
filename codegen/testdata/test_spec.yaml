@@ -206,6 +206,22 @@ paths:
         "200":
           description: OK
 
+  /v3/user/me:
+    get:
+      tags: [User]
+      summary: Get current user info
+      description: Returns the authenticated user's profile.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+
   /v1/legacy:
     get:
       tags: [Legacy]
