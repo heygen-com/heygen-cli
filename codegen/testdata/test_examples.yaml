@@ -16,3 +16,5 @@
   - "heygen avatar get <group-id>"
 "POST /v3/avatars/{group_id}/consent":
   - "heygen avatar consent <group-id>"
+"GET /v3/user/me":
+  - "heygen user me get"

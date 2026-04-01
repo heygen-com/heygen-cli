@@ -236,14 +236,14 @@ func deriveCommandName(method string, subGroups, allRemaining []string, op *open
 		return strings.Join(subGroups, " ")
 	}
 
-	verb := terminalVerb(method, allRemaining)
+	verb := terminalVerb(method, allRemaining, op)
 	if len(subGroups) == 0 {
 		return verb
 	}
 	return strings.Join(subGroups, " ") + " " + verb
 }
 
-func terminalVerb(method string, remaining []string) string {
+func terminalVerb(method string, remaining []string, op *openapi3.Operation) string {
 	hasParam := slices.ContainsFunc(remaining, func(s string) bool {
 		return strings.HasPrefix(s, "{")
 	})
@@ -251,6 +251,13 @@ func terminalVerb(method string, remaining []string) string {
 	switch method {
 	case "GET":
 		if hasParam {
+			return "get"
+		}
+		// Singleton GET endpoints (e.g., GET /v3/user/me with summary "Get current user info")
+		// are "get" not "list". We detect this from the summary because the URL structure
+		// alone can't distinguish a singleton from a collection when there's no {param}.
+		// This is the one heuristic in the naming algorithm — everything else is structural.
+		if strings.HasPrefix(strings.ToLower(op.Summary), "get ") {
 			return "get"
 		}
 		return "list"
