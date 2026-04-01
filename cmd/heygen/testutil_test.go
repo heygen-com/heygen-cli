@@ -69,6 +69,8 @@ func runCommand(t *testing.T, serverURL, apiKey string, args ...string) cmdResul
 	t.Setenv("HEYGEN_API_BASE", serverURL)
 
 	cmd := newRootCmd("test", formatter)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
 	cmd.SetArgs(args)
 
 	err := cmd.Execute()

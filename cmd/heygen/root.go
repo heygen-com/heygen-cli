@@ -1,8 +1,10 @@
 package main
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/heygen-com/heygen-cli/gen"
 	"github.com/heygen-com/heygen-cli/internal/auth"
 	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/command"
@@ -56,8 +58,7 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 		return clierrors.NewUsage(err.Error())
 	})
 
-	// Register subcommands
-	root.AddCommand(newVideoCmd(ctx))
+	registerGroups(root, ctx, gen.Groups)
 
 	return root
 }
@@ -97,16 +98,25 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 		return clierrors.NewUsage(err.Error())
 	})
 
-	// Register spec-based commands grouped by name
-	for groupName, specs := range groups {
+	registerGroups(root, ctx, groups)
+
+	return root
+}
+
+func registerGroups(root *cobra.Command, ctx *cmdContext, groups map[string][]*command.Spec) {
+	groupNames := make([]string, 0, len(groups))
+	for groupName := range groups {
+		groupNames = append(groupNames, groupName)
+	}
+	slices.Sort(groupNames)
+
+	for _, groupName := range groupNames {
 		groupCmd := &cobra.Command{Use: groupName, Short: humanizeCommandToken(groupName) + " commands"}
-		for _, spec := range specs {
+		for _, spec := range groups[groupName] {
 			registerSpecCommand(groupCmd, spec, ctx)
 		}
 		root.AddCommand(groupCmd)
 	}
-
-	return root
 }
 
 func registerSpecCommand(groupCmd *cobra.Command, spec *command.Spec, ctx *cmdContext) {
