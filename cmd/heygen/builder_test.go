@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/heygen-com/heygen-cli/internal/command"
@@ -41,9 +43,8 @@ func TestGenBuilder_VideoList_Success(t *testing.T) {
 	})
 	defer srv.Close()
 
-	// Build a Cobra tree using the generic builder instead of hand-written newVideoListCmd
-	ctx := &cmdContext{formatter: nil} // will be set by runGenCommand
-	res := runGenCommand(t, srv.URL, "test-key", ctx, videoListSpec, "list")
+	// Build a Cobra tree using the generic builder instead of hand-written newVideoListCmd.
+	res := runGenCommand(t, srv.URL, "test-key", videoListSpec, "list")
 
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
@@ -84,8 +85,7 @@ func TestGenBuilder_VideoList_Flags(t *testing.T) {
 	})
 	defer srv.Close()
 
-	ctx := &cmdContext{}
-	res := runGenCommand(t, srv.URL, "test-key", ctx, videoListSpec,
+	res := runGenCommand(t, srv.URL, "test-key", videoListSpec,
 		"list", "--limit", "25", "--folder-id", "folder_abc", "--token", "cursor_xyz")
 
 	if res.ExitCode != 0 {
@@ -123,8 +123,7 @@ func TestGenBuilder_PostWithBodyFlags(t *testing.T) {
 		Examples: []string{"heygen webhook create --url https://example.com/hook"},
 	}
 
-	ctx := &cmdContext{}
-	res := runGenCommand(t, srv.URL, "test-key", ctx, spec,
+	res := runGenCommand(t, srv.URL, "test-key", spec,
 		"create", "--url", "https://example.com/hook", "--entity-id", "proj_456")
 
 	if res.ExitCode != 0 {
@@ -159,8 +158,7 @@ func TestGenBuilder_PathParam(t *testing.T) {
 		Examples: []string{"heygen video get abc123"},
 	}
 
-	ctx := &cmdContext{}
-	res := runGenCommand(t, srv.URL, "test-key", ctx, spec, "get", "abc123")
+	res := runGenCommand(t, srv.URL, "test-key", spec, "get", "abc123")
 
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
@@ -193,8 +191,7 @@ func TestGenBuilder_BodylessPost_NoBodySent(t *testing.T) {
 		Examples: []string{"heygen avatar create"},
 	}
 
-	ctx := &cmdContext{}
-	res := runGenCommand(t, srv.URL, "test-key", ctx, spec, "create")
+	res := runGenCommand(t, srv.URL, "test-key", spec, "create")
 
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
@@ -217,11 +214,177 @@ func TestGenBuilder_EnumValidation(t *testing.T) {
 		Examples: []string{"heygen voice list --type public"},
 	}
 
-	ctx := &cmdContext{}
-	res := runGenCommand(t, srv.URL, "test-key", ctx, spec, "list", "--type", "invalid")
+	res := runGenCommand(t, srv.URL, "test-key", spec, "list", "--type", "invalid")
 
 	if res.ExitCode != 2 {
 		t.Errorf("ExitCode = %d, want 2 (usage error)\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+}
+
+func TestGenBuilder_NestedCommand_Executes(t *testing.T) {
+	var gotBody map[string]any
+
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/voices/speech": {
+			StatusCode: 200,
+			Body:       `{"data":{"id":"speech_123"}}`,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				body, _ := io.ReadAll(r.Body)
+				_ = json.Unmarshal(body, &gotBody)
+			},
+		},
+	})
+	defer srv.Close()
+
+	spec := &command.Spec{
+		Group:        "voice",
+		Name:         "speech create",
+		Summary:      "Create speech audio",
+		Endpoint:     "/v3/voices/speech",
+		Method:       "POST",
+		BodyEncoding: "json",
+		Flags: []command.FlagSpec{
+			{Name: "text", Type: "string", Source: "body", JSONName: "text", Required: true},
+			{Name: "voice-id", Type: "string", Source: "body", JSONName: "voice_id", Required: true},
+		},
+		Examples: []string{"heygen voice speech create --text 'Hello world' --voice-id en_male"},
+	}
+
+	res := runGenCommand(t, srv.URL, "test-key", spec, "speech", "create",
+		"--text", "Hello world", "--voice-id", "en_male")
+
+	if res.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if gotBody["text"] != "Hello world" {
+		t.Errorf("body.text = %v, want %q", gotBody["text"], "Hello world")
+	}
+	if gotBody["voice_id"] != "en_male" {
+		t.Errorf("body.voice_id = %v, want %q", gotBody["voice_id"], "en_male")
+	}
+}
+
+func TestGenBuilder_DeepNestedCommand_Executes(t *testing.T) {
+	var gotBody map[string]any
+
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/video-agents/sessions/sess_123/messages": {
+			StatusCode: 200,
+			Body:       `{"data":{"id":"msg_123"}}`,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				body, _ := io.ReadAll(r.Body)
+				_ = json.Unmarshal(body, &gotBody)
+			},
+		},
+	})
+	defer srv.Close()
+
+	spec := &command.Spec{
+		Group:        "video-agent",
+		Name:         "sessions messages create",
+		Summary:      "Create a session message",
+		Endpoint:     "/v3/video-agents/sessions/{session_id}/messages",
+		Method:       "POST",
+		BodyEncoding: "json",
+		Args: []command.ArgSpec{
+			{Name: "session-id", Param: "session_id"},
+		},
+		Flags: []command.FlagSpec{
+			{Name: "message", Type: "string", Source: "body", JSONName: "message", Required: true},
+		},
+		Examples: []string{"heygen video-agent sessions messages create <session-id> --message 'Add intro'"},
+	}
+
+	res := runGenCommand(t, srv.URL, "test-key", spec, "sessions", "messages", "create",
+		"sess_123", "--message", "Add intro")
+
+	if res.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if gotBody["message"] != "Add intro" {
+		t.Errorf("body.message = %v, want %q", gotBody["message"], "Add intro")
+	}
+}
+
+func TestGenBuilder_IntermediateHelp_ShowsChildCommands(t *testing.T) {
+	spec := &command.Spec{
+		Group:        "voice",
+		Name:         "speech create",
+		Summary:      "Create speech audio",
+		Endpoint:     "/v3/voices/speech",
+		Method:       "POST",
+		BodyEncoding: "json",
+		Flags: []command.FlagSpec{
+			{Name: "text", Type: "string", Source: "body", JSONName: "text", Required: true},
+		},
+		Examples: []string{"heygen voice speech create --text 'Hello world'"},
+	}
+
+	res := runGeneratedRootCommand(t, "http://example.test", "test-key",
+		map[string][]*command.Spec{"voice": {spec}},
+		"voice", "speech", "--help")
+
+	if res.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "Usage:\n  heygen voice speech [command]") {
+		t.Errorf("help missing nested usage\nstdout: %s", res.Stdout)
+	}
+	if !strings.Contains(res.Stdout, "Available Commands:") || !strings.Contains(res.Stdout, "create") {
+		t.Errorf("help missing child command listing\nstdout: %s", res.Stdout)
+	}
+	if strings.Contains(res.Stdout, "--text") {
+		t.Errorf("intermediate help should not show leaf flags\nstdout: %s", res.Stdout)
+	}
+}
+
+func TestGenBuilder_MultipartFileFlag_RoutesToInvocationFilePath(t *testing.T) {
+	tmpFile, err := os.CreateTemp(t.TempDir(), "upload-*.txt")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	defer tmpFile.Close()
+	if _, err := tmpFile.WriteString("hello upload"); err != nil {
+		t.Fatalf("WriteString: %v", err)
+	}
+
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/assets": {
+			StatusCode: 200,
+			Body:       `{"data":{"id":"asset_123"}}`,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				if got := r.Header.Get("Content-Type"); !strings.HasPrefix(got, "multipart/form-data;") {
+					t.Errorf("Content-Type = %q, want multipart/form-data", got)
+				}
+				body, _ := io.ReadAll(r.Body)
+				if !strings.Contains(string(body), "hello upload") {
+					t.Errorf("multipart body missing file content: %q", string(body))
+				}
+			},
+		},
+	})
+	defer srv.Close()
+
+	spec := &command.Spec{
+		Group:        "asset",
+		Name:         "create",
+		Summary:      "Upload an asset",
+		Endpoint:     "/v3/assets",
+		Method:       "POST",
+		BodyEncoding: "multipart",
+		Flags: []command.FlagSpec{
+			{Name: "file", Type: "string", Source: "file", JSONName: "file", Required: true},
+		},
+		Examples: []string{"heygen asset create --file ./video.mp4"},
+	}
+
+	res := runGenCommand(t, srv.URL, "test-key", spec, "create", "--file", tmpFile.Name())
+
+	if res.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
 }
 
@@ -231,7 +394,15 @@ func TestGenBuilder_EnumValidation(t *testing.T) {
 // It creates a fresh root command (with PersistentPreRunE that sets up the client)
 // and adds the spec-built command under a group. The cmdContext is shared between
 // PersistentPreRunE (which sets ctx.client) and the spec command (which uses it).
-func runGenCommand(t *testing.T, serverURL, apiKey string, _ *cmdContext, spec *command.Spec, args ...string) cmdResult {
+func runGenCommand(t *testing.T, serverURL, apiKey string, spec *command.Spec, args ...string) cmdResult {
+	t.Helper()
+
+	return runGeneratedRootCommand(t, serverURL, apiKey, map[string][]*command.Spec{
+		spec.Group: {spec},
+	}, append([]string{spec.Group}, args...)...)
+}
+
+func runGeneratedRootCommand(t *testing.T, serverURL, apiKey string, groups map[string][]*command.Spec, args ...string) cmdResult {
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
@@ -240,15 +411,10 @@ func runGenCommand(t *testing.T, serverURL, apiKey string, _ *cmdContext, spec *
 	t.Setenv("HEYGEN_API_KEY", apiKey)
 	t.Setenv("HEYGEN_API_BASE", serverURL)
 
-	// Build a root command that registers the spec via the generic builder.
-	// newRootCmdWithSpecs shares a cmdContext between PersistentPreRunE (which
-	// creates the HTTP client) and buildCobraCommand (which uses it in RunE).
-	root := newRootCmdWithSpecs("test", formatter, map[string][]*command.Spec{
-		spec.Group: {spec},
-	})
-
-	fullArgs := append([]string{spec.Group}, args...)
-	root.SetArgs(fullArgs)
+	root := newRootCmdWithSpecs("test", formatter, groups)
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs(args)
 
 	err := root.Execute()
 
@@ -271,4 +437,3 @@ func runGenCommand(t *testing.T, serverURL, apiKey string, _ *cmdContext, spec *
 		ExitCode: exitCode,
 	}
 }
-
