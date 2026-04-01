@@ -3,6 +3,7 @@ package auth
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/heygen-com/heygen-cli/internal/paths"
@@ -43,6 +44,10 @@ func TestFileCredentialStore_CreatesDirectory(t *testing.T) {
 }
 
 func TestFileCredentialStore_FilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix file permissions not supported on Windows")
+	}
+
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
 	s := &FileCredentialStore{}
