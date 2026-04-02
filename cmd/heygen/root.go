@@ -5,59 +5,11 @@ import (
 	"strings"
 
 	"github.com/heygen-com/heygen-cli/gen"
-	"github.com/heygen-com/heygen-cli/internal/auth"
-	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/command"
-	"github.com/heygen-com/heygen-cli/internal/config"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/heygen-com/heygen-cli/internal/output"
 	"github.com/spf13/cobra"
 )
-
-// cmdContext holds shared dependencies created in PersistentPreRunE
-// and consumed by child commands via closures.
-type cmdContext struct {
-	client         *client.Client
-	formatter      output.Formatter
-	configProvider config.Provider
-}
-
-func skipAuth(cmd *cobra.Command) bool {
-	for c := cmd; c != nil; c = c.Parent() {
-		if c.Annotations != nil && c.Annotations["skipAuth"] == "true" {
-			return true
-		}
-	}
-	return false
-}
-
-func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
-	provider := &config.EnvProvider{}
-	ctx.configProvider = provider
-
-	if skipAuth(cmd) {
-		ctx.client = nil
-		return nil
-	}
-
-	resolver := &auth.ChainCredentialResolver{
-		Resolvers: []auth.CredentialResolver{
-			&auth.EnvCredentialResolver{},
-			&auth.FileCredentialResolver{},
-		},
-	}
-	apiKey, err := resolver.Resolve()
-	if err != nil {
-		return err
-	}
-
-	ctx.client = client.New(apiKey,
-		client.WithBaseURL(provider.BaseURL()),
-		client.WithUserAgent("heygen-cli/"+version),
-	)
-
-	return nil
-}
 
 func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 	ctx := &cmdContext{formatter: formatter}
