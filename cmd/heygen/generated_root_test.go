@@ -163,8 +163,8 @@ func TestGeneratedRoot_HumanListOutput(t *testing.T) {
 	if !strings.Contains(got, "ID") || !strings.Contains(got, "Title") || !strings.Contains(got, "Demo") {
 		t.Fatalf("missing curated human table content:\n%s", got)
 	}
-	if !strings.Contains(got, "Showing 4 of 5 fields") {
-		t.Fatalf("expected truncation hint 'Showing 4 of 5 fields', got:\n%s", got)
+	if !strings.Contains(got, "Showing 4 of 5 columns") {
+		t.Fatalf("expected truncation hint 'Showing 4 of 5 columns', got:\n%s", got)
 	}
 }
 
@@ -229,10 +229,10 @@ func TestGeneratedRoot_HumanCuratedNestedListOutput(t *testing.T) {
 	}
 
 	got := stripGeneratedRootANSI(res.Stdout)
-	if !strings.Contains(got, "Preview") || !strings.Contains(got, "Type") || !strings.Contains(got, "Default") {
+	if !strings.Contains(got, "Gender") || !strings.Contains(got, "Type") || !strings.Contains(got, "Default") {
 		t.Fatalf("missing curated nested columns:\n%s", got)
 	}
-	if strings.Contains(got, "Gender") {
+	if strings.Contains(got, "Preview Image Url") {
 		t.Fatalf("expected curated nested columns to override auto-generated headers:\n%s", got)
 	}
 }

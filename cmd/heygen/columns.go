@@ -21,7 +21,7 @@ var DefaultColumns = map[string][]command.Column{
 		{Header: "ID", Field: "id"},
 		{Header: "Name", Field: "name"},
 		{Header: "Type", Field: "avatar_type"},
-		{Header: "Preview", Field: "preview_image_url"},
+		{Header: "Gender", Field: "gender"},
 	},
 	"voice/list": {
 		{Header: "ID", Field: "voice_id"},

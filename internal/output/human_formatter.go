@@ -122,7 +122,7 @@ func (f *HumanFormatter) renderTable(rows []map[string]any, columns []command.Co
 		totalFields := len(rows[0])
 		if totalFields > len(columns) {
 			_, err := fmt.Fprintf(f.out,
-				"Showing %d of %d fields. Remove --human for full JSON output.\n",
+				"Showing %d of %d columns. Remove --human for full JSON output.\n",
 				len(columns), totalFields)
 			return err
 		}

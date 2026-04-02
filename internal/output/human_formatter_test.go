@@ -38,7 +38,7 @@ func TestHumanFormatter_Data_TableWithCuratedColumns(t *testing.T) {
 	if !strings.Contains(got, "vid_123") || !strings.Contains(got, "Demo") {
 		t.Fatalf("missing row values in output:\n%s", got)
 	}
-	if !strings.Contains(got, "Showing 2 of 4 fields") {
+	if !strings.Contains(got, "Showing 2 of 4 columns") {
 		t.Fatalf("missing truncation hint in output:\n%s", got)
 	}
 }
