@@ -7,7 +7,7 @@ package config
 type Provider interface {
 	BaseURL() string
 	Output() string
-	Analytics() *bool
+	Analytics() bool
 	AutoUpdate() bool
 }
 
@@ -32,7 +32,12 @@ const (
 	KeyOutput     = "output"
 	KeyAnalytics  = "analytics"
 	KeyAutoUpdate = "auto_update"
-	KeyAPIBase    = "api_base"
+
+	// KeyAPIBase is internal — settable via HEYGEN_API_BASE env var only,
+	// not exposed in config set/get/list.
+	KeyAPIBase = "api_base"
 )
 
-var ValidKeys = []string{KeyAPIBase, KeyAnalytics, KeyAutoUpdate, KeyOutput}
+// ValidKeys lists user-facing config keys exposed by config set/get/list.
+// api_base is intentionally excluded — it's an internal setting for dev/staging.
+var ValidKeys = []string{KeyAnalytics, KeyAutoUpdate, KeyOutput}

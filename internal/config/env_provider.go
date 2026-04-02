@@ -39,14 +39,9 @@ func (p *EnvProvider) Output() string {
 	return DefaultOutput
 }
 
-// Analytics returns false only when HEYGEN_NO_ANALYTICS is explicitly set.
-// Unset returns nil to preserve the consent-needed state.
-func (p *EnvProvider) Analytics() *bool {
-	if os.Getenv(envNoAnalytics) != "" {
-		v := false
-		return &v
-	}
-	return nil
+// Analytics returns false when HEYGEN_NO_ANALYTICS is set, true otherwise.
+func (p *EnvProvider) Analytics() bool {
+	return os.Getenv(envNoAnalytics) == ""
 }
 
 // AutoUpdate returns false only when HEYGEN_NO_UPDATE_CHECK is set.

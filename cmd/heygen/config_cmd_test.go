@@ -32,6 +32,14 @@ func TestConfigSet_InvalidKey(t *testing.T) {
 	}
 }
 
+func TestConfigSet_APIBaseNotExposed(t *testing.T) {
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	res := runCommand(t, "http://example.invalid", "", "config", "set", "api_base", "https://api-dev.heygen.com")
+	if res.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2 (api_base is internal)\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+}
+
 func TestConfigSet_InvalidOutputValue(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	res := runCommand(t, "http://example.invalid", "", "config", "set", "output", "xml")
@@ -121,7 +129,7 @@ func TestConfigList_AllDefaults(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if len(parsed) != 4 {
+	if len(parsed) != 3 {
 		t.Fatalf("len(parsed) = %d, want 4", len(parsed))
 	}
 }
@@ -129,7 +137,7 @@ func TestConfigList_AllDefaults(t *testing.T) {
 func TestConfigList_MixedSources(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	t.Setenv("HEYGEN_OUTPUT", "json")
-	if err := os.WriteFile(filepath.Join(os.Getenv("HEYGEN_CONFIG_DIR"), "config.toml"), []byte("api_base = \"https://api-dev.heygen.com\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(os.Getenv("HEYGEN_CONFIG_DIR"), "config.toml"), []byte("analytics = false\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -142,7 +150,7 @@ func TestConfigList_MixedSources(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if len(parsed) != 4 {
+	if len(parsed) != 3 {
 		t.Fatalf("len(parsed) = %d, want 4", len(parsed))
 	}
 }

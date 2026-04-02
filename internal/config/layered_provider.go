@@ -13,7 +13,7 @@ func defaultFor(key string) string {
 	case KeyOutput:
 		return DefaultOutput
 	case KeyAnalytics:
-		return "unset"
+		return "true"
 	case KeyAutoUpdate:
 		return "true"
 	default:
@@ -73,14 +73,8 @@ func (p *LayeredProvider) Output() string {
 	return p.resolvedValue(KeyOutput, DefaultOutput)
 }
 
-func (p *LayeredProvider) Analytics() *bool {
-	source, err := p.Resolve(KeyAnalytics)
-	if err != nil || source.Origin == "default" {
-		return nil
-	}
-
-	v := source.Value == "true"
-	return &v
+func (p *LayeredProvider) Analytics() bool {
+	return p.resolvedValue(KeyAnalytics, "true") == "true"
 }
 
 func (p *LayeredProvider) AutoUpdate() bool {

@@ -41,18 +41,17 @@ func TestEnvProvider_Output(t *testing.T) {
 func TestEnvProvider_Analytics(t *testing.T) {
 	p := &EnvProvider{}
 
-	t.Run("unset", func(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
 		t.Setenv(envNoAnalytics, "")
-		if got := p.Analytics(); got != nil {
-			t.Fatalf("Analytics = %v, want nil", *got)
+		if got := p.Analytics(); !got {
+			t.Fatal("Analytics = false, want true")
 		}
 	})
 
 	t.Run("disabled", func(t *testing.T) {
 		t.Setenv(envNoAnalytics, "1")
-		got := p.Analytics()
-		if got == nil || *got {
-			t.Fatalf("Analytics = %v, want false", got)
+		if got := p.Analytics(); got {
+			t.Fatal("Analytics = true, want false")
 		}
 	})
 }

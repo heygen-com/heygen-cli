@@ -22,10 +22,9 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 
 Environment Variables:
   HEYGEN_API_KEY            API key for authentication (overrides stored credentials)
-  HEYGEN_API_BASE           API base URL (default: https://api.heygen.com)
   HEYGEN_OUTPUT             Output format: json, human (default: json)
-  HEYGEN_NO_ANALYTICS       Disable analytics when set to any non-empty value
-  HEYGEN_NO_UPDATE_CHECK    Disable update check when set to any non-empty value
+  HEYGEN_NO_ANALYTICS       Disable analytics when set (default: enabled)
+  HEYGEN_NO_UPDATE_CHECK    Disable update check when set (default: enabled)
   HEYGEN_CONFIG_DIR         Override config directory (default: ~/.heygen)`,
 		Version:       version,
 		SilenceUsage:  true, // we handle usage errors ourselves

@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"slices"
 
 	"github.com/heygen-com/heygen-cli/internal/config"
@@ -61,11 +60,6 @@ func validateConfigValue(key, value string) error {
 	case config.KeyAnalytics, config.KeyAutoUpdate:
 		if value != "true" && value != "false" {
 			return clierrors.NewUsage(key + " must be one of: true, false")
-		}
-	case config.KeyAPIBase:
-		u, err := url.ParseRequestURI(value)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-			return clierrors.NewUsage("api_base must be a valid http or https URL")
 		}
 	}
 	return nil

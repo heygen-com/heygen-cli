@@ -31,7 +31,7 @@ func TestLayeredProvider_DefaultValues(t *testing.T) {
 		KeyOutput:     DefaultOutput,
 		KeyAutoUpdate: "true",
 		KeyAPIBase:    DefaultBaseURL,
-		KeyAnalytics:  "unset",
+		KeyAnalytics:  "true",
 	}
 	for key, want := range cases {
 		got, err := p.Resolve(key)
@@ -108,23 +108,22 @@ func TestLayeredProvider_ResolveAllKeys(t *testing.T) {
 	}
 }
 
-func TestLayeredProvider_AnalyticsUnset(t *testing.T) {
+func TestLayeredProvider_AnalyticsDefault(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	p := newLayeredProvider()
 
-	if got := p.Analytics(); got != nil {
-		t.Fatalf("Analytics = %v, want nil", *got)
+	if got := p.Analytics(); !got {
+		t.Fatal("Analytics = false, want true")
 	}
 }
 
 func TestLayeredProvider_AnalyticsFromFile(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
-	writeConfigFile(t, "analytics = true\n")
+	writeConfigFile(t, "analytics = false\n")
 	p := newLayeredProvider()
 
-	got := p.Analytics()
-	if got == nil || !*got {
-		t.Fatalf("Analytics = %v, want true", got)
+	if got := p.Analytics(); got {
+		t.Fatal("Analytics = true, want false")
 	}
 }
 
@@ -134,8 +133,7 @@ func TestLayeredProvider_AnalyticsEnvDisable(t *testing.T) {
 	writeConfigFile(t, "analytics = true\n")
 	p := newLayeredProvider()
 
-	got := p.Analytics()
-	if got == nil || *got {
-		t.Fatalf("Analytics = %v, want false", got)
+	if got := p.Analytics(); got {
+		t.Fatal("Analytics = true, want false (env overrides file)")
 	}
 }
