@@ -64,10 +64,22 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 	return cmd
 }
 
-// buildUseLine constructs the Cobra Use string from the spec name and args.
-// Example: "get <video-id>" or "list"
+// commandPathParts splits a generated command path into nested Cobra tokens.
+// Example: "sessions messages create" -> ["sessions", "messages", "create"].
+func commandPathParts(spec *command.Spec) []string {
+	return strings.Fields(spec.Name)
+}
+
+// buildUseLine constructs the leaf Cobra Use string from the spec name and args.
+// Example: "create <video-id>" or "list".
 func buildUseLine(spec *command.Spec) string {
-	parts := []string{spec.Name}
+	path := commandPathParts(spec)
+	name := spec.Name
+	if len(path) > 0 {
+		name = path[len(path)-1]
+	}
+
+	parts := []string{name}
 	for _, arg := range spec.Args {
 		parts = append(parts, "<"+arg.Name+">")
 	}

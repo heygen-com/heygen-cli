@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/heygen-com/heygen-cli/internal/auth"
 	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/command"
@@ -13,8 +15,8 @@ import (
 // cmdContext holds shared dependencies created in PersistentPreRunE
 // and consumed by child commands via closures.
 type cmdContext struct {
-	client    *client.Client
-	formatter output.Formatter
+	client         *client.Client
+	formatter      output.Formatter
 	configProvider config.Provider
 }
 
@@ -97,12 +99,53 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 
 	// Register spec-based commands grouped by name
 	for groupName, specs := range groups {
-		groupCmd := &cobra.Command{Use: groupName, Short: "Create and manage " + groupName + "s"}
+		groupCmd := &cobra.Command{Use: groupName, Short: humanizeCommandToken(groupName) + " commands"}
 		for _, spec := range specs {
-			groupCmd.AddCommand(buildCobraCommand(spec, ctx))
+			registerSpecCommand(groupCmd, spec, ctx)
 		}
 		root.AddCommand(groupCmd)
 	}
 
 	return root
+}
+
+func registerSpecCommand(groupCmd *cobra.Command, spec *command.Spec, ctx *cmdContext) {
+	path := commandPathParts(spec)
+	if len(path) == 0 {
+		groupCmd.AddCommand(buildCobraCommand(spec, ctx))
+		return
+	}
+
+	parent := groupCmd
+	for _, token := range path[:len(path)-1] {
+		parent = ensureIntermediateCommand(parent, token)
+	}
+
+	parent.AddCommand(buildCobraCommand(spec, ctx))
+}
+
+func ensureIntermediateCommand(parent *cobra.Command, token string) *cobra.Command {
+	for _, child := range parent.Commands() {
+		if child.Name() == token {
+			return child
+		}
+	}
+
+	child := &cobra.Command{
+		Use:   token,
+		Short: humanizeCommandToken(token) + " commands",
+	}
+	parent.AddCommand(child)
+	return child
+}
+
+func humanizeCommandToken(token string) string {
+	parts := strings.Split(token, "-")
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, " ")
 }
