@@ -57,7 +57,9 @@ var WebhookEndpointsList = &command.Spec{
 	Endpoint:     "/v3/webhooks/endpoints",
 	Method:       "GET",
 	BodyEncoding: "",
+	Paginated:    true,
 	TokenField:   "next_token",
+	TokenParam:   "token",
 	DataField:    "data",
 	Examples: []string{
 		"heygen webhook endpoints list",
@@ -147,7 +149,9 @@ var WebhookEventsList = &command.Spec{
 	Endpoint:     "/v3/webhooks/events",
 	Method:       "GET",
 	BodyEncoding: "",
+	Paginated:    true,
 	TokenField:   "next_token",
+	TokenParam:   "token",
 	DataField:    "data",
 	Examples: []string{
 		"heygen webhook events list --event-type avatar_video.success",

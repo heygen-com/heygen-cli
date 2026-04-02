@@ -14,8 +14,14 @@ var {{pascalCase .Group}}{{pascalCase .Name}} = &command.Spec{
 	Endpoint:    {{quote .Endpoint}},
 	Method:      {{quote .Method}},
 	BodyEncoding: {{quote .BodyEncoding}},
+{{- if .Paginated}}
+	Paginated:   true,
+{{- end}}
 {{- if .TokenField}}
 	TokenField:  {{quote .TokenField}},
+{{- end}}
+{{- if .TokenParam}}
+	TokenParam:  {{quote .TokenParam}},
 {{- end}}
 {{- if .DataField}}
 	DataField:   {{quote .DataField}},

@@ -117,7 +117,9 @@ var WidgetList = &command.Spec{
 	Endpoint:     "/v3/widgets",
 	Method:       "GET",
 	BodyEncoding: "",
+	Paginated:    true,
 	TokenField:   "next_token",
+	TokenParam:   "token",
 	DataField:    "data",
 	Flags: []command.FlagSpec{
 		{

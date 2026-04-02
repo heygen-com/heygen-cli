@@ -203,7 +203,9 @@ var VideoTranslateList = &command.Spec{
 	Endpoint:     "/v3/video-translations",
 	Method:       "GET",
 	BodyEncoding: "",
+	Paginated:    true,
 	TokenField:   "next_token",
+	TokenParam:   "token",
 	DataField:    "data",
 	Examples: []string{
 		"heygen video-translate list --limit 10",

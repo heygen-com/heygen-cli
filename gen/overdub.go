@@ -134,7 +134,9 @@ var OverdubList = &command.Spec{
 	Endpoint:     "/v3/overdubs",
 	Method:       "GET",
 	BodyEncoding: "",
+	Paginated:    true,
 	TokenField:   "next_token",
+	TokenParam:   "token",
 	DataField:    "data",
 	Examples: []string{
 		"heygen overdub list --limit 10",

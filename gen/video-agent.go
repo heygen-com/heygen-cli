@@ -260,7 +260,9 @@ var VideoAgentStylesList = &command.Spec{
 	Endpoint:     "/v3/video-agents/styles",
 	Method:       "GET",
 	BodyEncoding: "",
+	Paginated:    true,
 	TokenField:   "next_token",
+	TokenParam:   "token",
 	DataField:    "data",
 	Examples: []string{
 		"heygen video-agent styles list",

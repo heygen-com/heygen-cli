@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -17,13 +18,14 @@ import (
 // videoListSpec mirrors the hand-written video list command as a Spec,
 // proving the generic builder produces identical behavior.
 var videoListSpec = &command.Spec{
-	Group:    "video",
-	Name:     "list",
-	Summary:  "List videos",
-	Endpoint: "/v3/videos",
-	Method:   "GET",
-	// TokenField/DataField for pagination (used by paginator, not tested here)
+	Group:      "video",
+	Name:       "list",
+	Summary:    "List videos",
+	Endpoint:   "/v3/videos",
+	Method:     "GET",
+	Paginated:  true,
 	TokenField: "next_token",
+	TokenParam: "token",
 	DataField:  "data",
 	Flags: []command.FlagSpec{
 		{Name: "limit", Type: "int", Source: "query", JSONName: "limit"},
@@ -89,6 +91,174 @@ func TestGenBuilder_VideoList_Flags(t *testing.T) {
 
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+}
+
+func TestGenBuilder_VideoList_AllPages(t *testing.T) {
+	var calls int
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos": {
+			StatusCode: 200,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				calls++
+				switch calls {
+				case 1:
+					if got := r.URL.Query().Get("token"); got != "" {
+						t.Fatalf("first page token = %q, want empty", got)
+					}
+				case 2:
+					if got := r.URL.Query().Get("token"); got != "cursor_2" {
+						t.Fatalf("second page token = %q, want %q", got, "cursor_2")
+					}
+				default:
+					t.Fatalf("unexpected request count %d", calls)
+				}
+			},
+			Body: `{"data":[{"id":"v1"},{"id":"v2"}],"next_token":"cursor_2"}`,
+		},
+	})
+	defer srv.Close()
+
+	originalHandler := srv.Config.Handler
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("token") == "cursor_2" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":[{"id":"v3"}],"next_token":null}`))
+			return
+		}
+		originalHandler.ServeHTTP(w, r)
+	})
+
+	res := runGenCommand(t, srv.URL, "test-key", videoListSpec, "list", "--all")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	var parsed []map[string]any
+	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON array: %v\nstdout: %s", err, res.Stdout)
+	}
+	if len(parsed) != 3 {
+		t.Fatalf("len(parsed) = %d, want 3", len(parsed))
+	}
+}
+
+func TestGenBuilder_VideoList_AllPages_SinglePage(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos": {
+			StatusCode: 200,
+			Body:       `{"data":[{"id":"v1"}],"next_token":null}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", videoListSpec, "list", "--all")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	var parsed []map[string]any
+	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON array: %v\nstdout: %s", err, res.Stdout)
+	}
+	if len(parsed) != 1 {
+		t.Fatalf("len(parsed) = %d, want 1", len(parsed))
+	}
+}
+
+func TestGenBuilder_VideoList_AllAndTokenConflict(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", videoListSpec, "list", "--all", "--token", "cursor_abc")
+
+	if res.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "--all and --token are mutually exclusive") {
+		t.Fatalf("stderr = %s, want conflict message", res.Stderr)
+	}
+}
+
+func TestGenBuilder_VideoList_NoAllFlag_NonPaginated(t *testing.T) {
+	nonPaginated := &command.Spec{
+		Group:    "video",
+		Name:     "get",
+		Summary:  "Get video",
+		Endpoint: "/v3/videos/{video_id}",
+		Method:   "GET",
+		Args: []command.ArgSpec{
+			{Name: "video-id", Param: "video_id"},
+		},
+		Examples: []string{"heygen video get <video-id>"},
+	}
+
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", nonPaginated, "get", "vid_123", "--all")
+
+	if res.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "unknown flag: --all") {
+		t.Fatalf("stderr = %s, want unknown flag error", res.Stderr)
+	}
+}
+
+func TestGenBuilder_VideoList_AllPages_Truncated(t *testing.T) {
+	var calls int
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos": {
+			StatusCode: 200,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				calls++
+			},
+			Body: truncatedPageBody(0, 2500, "cursor_1"),
+		},
+	})
+	defer srv.Close()
+
+	originalHandler := srv.Config.Handler
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.URL.Query().Get("token")
+		switch token {
+		case "":
+			originalHandler.ServeHTTP(w, r)
+		case "cursor_1":
+			calls++
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(truncatedPageBody(2500, 2500, "cursor_2")))
+		case "cursor_2":
+			calls++
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(truncatedPageBody(5000, 2500, "cursor_3")))
+		case "cursor_3":
+			calls++
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(truncatedPageBody(7500, 2500, "cursor_4")))
+		default:
+			t.Fatalf("unexpected token %q", token)
+		}
+	})
+
+	res := runGenCommand(t, srv.URL, "test-key", videoListSpec, "list", "--all")
+
+	if res.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "Warning: pagination stopped at 10000 items") {
+		t.Fatalf("stderr = %s, want truncation warning", res.Stderr)
+	}
+
+	var parsed []map[string]any
+	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON array: %v\nstdout: %s", err, res.Stdout)
+	}
+	if len(parsed) != 10000 {
+		t.Fatalf("len(parsed) = %d, want 10000", len(parsed))
 	}
 }
 
@@ -435,4 +605,21 @@ func runGeneratedRootCommand(t *testing.T, serverURL, apiKey string, groups map[
 		Stderr:   stderr.String(),
 		ExitCode: exitCode,
 	}
+}
+
+func truncatedPageBody(start, count int, nextToken string) string {
+	items := make([]map[string]any, 0, count)
+	for i := 0; i < count; i++ {
+		items = append(items, map[string]any{"id": fmt.Sprintf("v%d", start+i)})
+	}
+	body := map[string]any{
+		"data": items,
+	}
+	if nextToken == "" {
+		body["next_token"] = nil
+	} else {
+		body["next_token"] = nextToken
+	}
+	raw, _ := json.Marshal(body)
+	return string(raw)
 }

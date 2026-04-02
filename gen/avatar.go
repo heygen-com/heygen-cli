@@ -60,7 +60,9 @@ var AvatarList = &command.Spec{
 	Endpoint:     "/v3/avatars",
 	Method:       "GET",
 	BodyEncoding: "",
+	Paginated:    true,
 	TokenField:   "next_token",
+	TokenParam:   "token",
 	DataField:    "data",
 	Examples: []string{
 		"heygen avatar list --limit 10",
@@ -130,7 +132,9 @@ var AvatarLooksList = &command.Spec{
 	Endpoint:     "/v3/avatars/looks",
 	Method:       "GET",
 	BodyEncoding: "",
+	Paginated:    true,
 	TokenField:   "next_token",
+	TokenParam:   "token",
 	DataField:    "data",
 	Examples: []string{
 		"heygen avatar looks list --limit 10",

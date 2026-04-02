@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/spf13/cobra"
@@ -41,6 +43,33 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
+			if spec.Paginated {
+				allPages, _ := cmd.Flags().GetBool("all")
+				cursorFlagName := cursorFlagForSpec(spec)
+				cursorSet := cursorFlagName != "" && cmd.Flags().Changed(cursorFlagName)
+
+				if allPages && cursorSet {
+					return clierrors.NewUsage(fmt.Sprintf("--all and --%s are mutually exclusive", cursorFlagName))
+				}
+
+				if allPages {
+					result, err := ctx.client.ExecuteAll(spec, inv)
+					if err != nil {
+						var truncErr *client.ErrPaginationTruncated
+						if errors.As(err, &truncErr) {
+							fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", truncErr.Error())
+							if fmtErr := ctx.formatter.Data(truncErr.Data); fmtErr != nil {
+								return fmtErr
+							}
+							return clierrors.New(truncErr.Error())
+						}
+						return err
+					}
+
+					return ctx.formatter.Data(result)
+				}
+			}
+
 			result, err := ctx.client.Execute(spec, inv)
 			if err != nil {
 				return err
@@ -53,6 +82,10 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 	// Register flags from spec
 	for _, flag := range spec.Flags {
 		registerFlag(cmd, flag)
+	}
+
+	if spec.Paginated {
+		cmd.Flags().Bool("all", false, "Fetch all pages (returns flat JSON array instead of API envelope)")
 	}
 
 	// Add -d/--data for commands with JSON request bodies
@@ -84,6 +117,15 @@ func buildUseLine(spec *command.Spec) string {
 		parts = append(parts, "<"+arg.Name+">")
 	}
 	return strings.Join(parts, " ")
+}
+
+func cursorFlagForSpec(spec *command.Spec) string {
+	for _, flag := range spec.Flags {
+		if flag.JSONName == spec.TokenParam {
+			return flag.Name
+		}
+	}
+	return ""
 }
 
 // registerFlag adds a typed flag to the Cobra command based on the FlagSpec.

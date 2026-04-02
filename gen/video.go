@@ -60,7 +60,9 @@ var VideoList = &command.Spec{
 	Endpoint:     "/v3/videos",
 	Method:       "GET",
 	BodyEncoding: "",
+	Paginated:    true,
 	TokenField:   "next_token",
+	TokenParam:   "token",
 	DataField:    "data",
 	Examples: []string{
 		"heygen video list --limit 10",

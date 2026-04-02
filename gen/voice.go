@@ -12,7 +12,9 @@ var VoiceList = &command.Spec{
 	Endpoint:     "/v3/voices",
 	Method:       "GET",
 	BodyEncoding: "",
+	Paginated:    true,
 	TokenField:   "next_token",
+	TokenParam:   "token",
 	DataField:    "data",
 	Examples: []string{
 		"heygen voice list --type public",

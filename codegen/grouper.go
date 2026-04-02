@@ -53,6 +53,7 @@ import (
 //	  → sessions → sub-group, {session_id} → arg, stop → sub-group
 //	  → x-cli-action: true → no terminal verb appended
 //	  → result: heygen video-agent sessions stop <session-id>
+//
 // GroupDescriptions maps group name → description from the OpenAPI tag.
 // Used by the builder for group command help text.
 type GroupDescriptions map[string]string
@@ -157,7 +158,7 @@ func buildSpec(
 	}
 
 	// Pagination
-	_, spec.TokenField, spec.DataField = detectPagination(op)
+	spec.Paginated, spec.TokenField, spec.TokenParam, spec.DataField = detectPagination(op, pathItem)
 
 	// Flags from query params
 	for _, paramRef := range collectParams(pathItem, op) {
@@ -439,7 +440,7 @@ func isComplexField(s *openapi3.Schema) bool {
 
 // --- Response analysis ---
 
-func detectPagination(op *openapi3.Operation) (hasMore bool, tokenField, dataField string) {
+func detectPagination(op *openapi3.Operation, pathItem *openapi3.PathItem) (paginated bool, tokenField, tokenParam, dataField string) {
 	respSchema := successResponseSchema(op)
 	if respSchema == nil {
 		return
@@ -455,11 +456,39 @@ func detectPagination(op *openapi3.Operation) (hasMore bool, tokenField, dataFie
 	for _, schema := range schemasToCheck {
 		for _, candidate := range []string{"next_token", "token", "cursor"} {
 			if _, ok := schema.Properties[candidate]; ok {
-				return true, candidate, dataField
+				tokenField = candidate
+				break
 			}
 		}
+		if tokenField != "" {
+			break
+		}
 	}
-	return
+	if tokenField == "" {
+		return false, "", "", dataField
+	}
+
+	tokenParam = detectCursorParam(pathItem, op)
+	if tokenParam == "" {
+		return false, tokenField, "", dataField
+	}
+
+	return true, tokenField, tokenParam, dataField
+}
+
+func detectCursorParam(pathItem *openapi3.PathItem, op *openapi3.Operation) string {
+	params := collectParams(pathItem, op)
+	for _, paramRef := range params {
+		param := paramRef.Value
+		if param == nil || param.In != "query" {
+			continue
+		}
+		switch param.Name {
+		case "token", "cursor", "page_token":
+			return param.Name
+		}
+	}
+	return ""
 }
 
 func successResponseSchema(op *openapi3.Operation) *openapi3.Schema {
