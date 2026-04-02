@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -60,18 +61,28 @@ func setupTestServer(t *testing.T, handlers map[string]testHandler) *httptest.Se
 // matches what production emits.
 func runCommand(t *testing.T, serverURL, apiKey string, args ...string) cmdResult {
 	t.Helper()
+	return runCommandWithInput(t, serverURL, apiKey, nil, args...)
+}
+
+func runCommandWithInput(t *testing.T, serverURL, apiKey string, stdin io.Reader, args ...string) cmdResult {
+	t.Helper()
 
 	var stdout, stderr bytes.Buffer
 	formatter := output.NewJSONFormatter(&stdout, &stderr)
 
 	// Set env vars for this test
-	t.Setenv("HEYGEN_API_KEY", apiKey)
+	if apiKey != "" {
+		t.Setenv("HEYGEN_API_KEY", apiKey)
+	}
 	t.Setenv("HEYGEN_API_BASE", serverURL)
 
 	cmd := newRootCmd("test", formatter)
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 	cmd.SetArgs(args)
+	if stdin != nil {
+		cmd.SetIn(stdin)
+	}
 
 	err := cmd.Execute()
 

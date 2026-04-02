@@ -5,22 +5,11 @@ import (
 	"strings"
 
 	"github.com/heygen-com/heygen-cli/gen"
-	"github.com/heygen-com/heygen-cli/internal/auth"
-	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/command"
-	"github.com/heygen-com/heygen-cli/internal/config"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/heygen-com/heygen-cli/internal/output"
 	"github.com/spf13/cobra"
 )
-
-// cmdContext holds shared dependencies created in PersistentPreRunE
-// and consumed by child commands via closures.
-type cmdContext struct {
-	client         *client.Client
-	formatter      output.Formatter
-	configProvider config.Provider
-}
 
 func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 	ctx := &cmdContext{formatter: formatter}
@@ -32,24 +21,7 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 		SilenceUsage:  true, // we handle usage errors ourselves
 		SilenceErrors: true, // we handle error output ourselves
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// 1. Create config provider (BaseURL only — auth is Resolver's job)
-			provider := &config.EnvProvider{}
-			ctx.configProvider = provider
-
-			// 2. Resolve credentials (env var today; file-based storage later)
-			resolver := &auth.EnvCredentialResolver{}
-			apiKey, err := resolver.Resolve()
-			if err != nil {
-				return err
-			}
-
-			// 3. Create client using config.Provider for BaseURL
-			ctx.client = client.New(apiKey,
-				client.WithBaseURL(provider.BaseURL()),
-				client.WithUserAgent("heygen-cli/"+version),
-			)
-
-			return nil
+			return initContext(cmd, version, ctx)
 		},
 	}
 
@@ -58,6 +30,7 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 		return clierrors.NewUsage(err.Error())
 	})
 
+	root.AddCommand(newAuthCmd(ctx))
 	registerGroups(root, ctx, gen.Groups)
 
 	return root
@@ -76,21 +49,7 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			provider := &config.EnvProvider{}
-			ctx.configProvider = provider
-
-			resolver := &auth.EnvCredentialResolver{}
-			apiKey, err := resolver.Resolve()
-			if err != nil {
-				return err
-			}
-
-			ctx.client = client.New(apiKey,
-				client.WithBaseURL(provider.BaseURL()),
-				client.WithUserAgent("heygen-cli/"+version),
-			)
-
-			return nil
+			return initContext(cmd, version, ctx)
 		},
 	}
 
@@ -98,6 +57,7 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 		return clierrors.NewUsage(err.Error())
 	})
 
+	root.AddCommand(newAuthCmd(ctx))
 	registerGroups(root, ctx, groups)
 
 	return root
