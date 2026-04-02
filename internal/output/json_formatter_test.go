@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
@@ -14,7 +15,7 @@ func TestJSONFormatter_Data(t *testing.T) {
 	f := NewJSONFormatter(&out, &errOut)
 
 	input := json.RawMessage(`{"data":[{"id":"v1","status":"completed"}],"has_more":false}`)
-	if err := f.Data(input); err != nil {
+	if err := f.Data(input, "data", nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -74,7 +75,7 @@ func TestJSONFormatter_Data_InvalidJSON(t *testing.T) {
 	var out bytes.Buffer
 	f := NewJSONFormatter(&out, &bytes.Buffer{})
 
-	err := f.Data(json.RawMessage(`not json`))
+	err := f.Data(json.RawMessage(`not json`), "data", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, got nil")
 	}
@@ -105,5 +106,23 @@ func TestJSONFormatter_Error_OmitsEmptyFields(t *testing.T) {
 	}
 	if _, ok := inner["request_id"]; ok {
 		t.Error("request_id should be omitted when empty")
+	}
+}
+
+func TestJSONFormatter_Data_IgnoresDataFieldAndColumns(t *testing.T) {
+	var out bytes.Buffer
+	f := NewJSONFormatter(&out, &bytes.Buffer{})
+
+	input := json.RawMessage(`{"data":{"id":"v1"},"meta":{"count":1}}`)
+	if err := f.Data(input, "data", []command.Column{{Header: "ID", Field: "id"}}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v", err)
+	}
+	if _, ok := parsed["meta"]; !ok {
+		t.Fatalf("expected full response envelope, got: %v", parsed)
 	}
 }

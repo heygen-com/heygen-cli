@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
@@ -29,7 +30,7 @@ func DefaultJSONFormatter() *JSONFormatter {
 
 // Data writes pretty-printed JSON to stdout. Returns an error if the
 // response is not valid JSON — the CLI's contract is structured output.
-func (f *JSONFormatter) Data(v json.RawMessage) error {
+func (f *JSONFormatter) Data(v json.RawMessage, _ string, _ []command.Column) error {
 	var parsed json.RawMessage
 	if err := json.Unmarshal(v, &parsed); err != nil {
 		return fmt.Errorf("API returned invalid JSON: %w", err)
