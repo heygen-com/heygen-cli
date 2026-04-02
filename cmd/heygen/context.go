@@ -57,5 +57,10 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 		client.WithUserAgent("heygen-cli/"+version),
 	)
 
+	human, _ := cmd.Flags().GetBool("human")
+	if human {
+		ctx.formatter = output.NewHumanFormatter(cmd.OutOrStdout(), cmd.ErrOrStderr())
+	}
+
 	return nil
 }

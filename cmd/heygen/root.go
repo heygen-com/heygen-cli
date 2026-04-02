@@ -37,6 +37,7 @@ Environment Variables:
 	root.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		return clierrors.NewUsage(err.Error())
 	})
+	root.PersistentFlags().Bool("human", false, "Display output as a formatted table instead of JSON")
 
 	root.AddCommand(newAuthCmd(ctx))
 	root.AddCommand(newConfigCmd(ctx))
@@ -65,6 +66,7 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 	root.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		return clierrors.NewUsage(err.Error())
 	})
+	root.PersistentFlags().Bool("human", false, "Display output as a formatted table instead of JSON")
 
 	root.AddCommand(newAuthCmd(ctx))
 	root.AddCommand(newConfigCmd(ctx))

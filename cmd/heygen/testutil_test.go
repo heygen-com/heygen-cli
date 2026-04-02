@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
-	"github.com/heygen-com/heygen-cli/internal/output"
 )
 
 // testHandler is a handler for the mock API server.
@@ -55,10 +54,10 @@ func setupTestServer(t *testing.T, handlers map[string]testHandler) *httptest.Se
 // runCommand executes a CLI command against a test server, mirroring the
 // production error-rendering path from main().
 //
-// It creates a fresh Cobra command tree with a JSONFormatter backed by
-// buffers, executes the command, and renders returned errors through the
-// formatter — same path as main(). This ensures stderr content in tests
-// matches what production emits.
+// It creates a fresh Cobra command tree with the same formatter-selection
+// logic as main(), executes the command, and renders returned errors through
+// that formatter. This ensures stdout/stderr content in tests matches
+// production behavior for both JSON and --human paths.
 func runCommand(t *testing.T, serverURL, apiKey string, args ...string) cmdResult {
 	t.Helper()
 	return runCommandWithInput(t, serverURL, apiKey, nil, args...)
@@ -68,7 +67,7 @@ func runCommandWithInput(t *testing.T, serverURL, apiKey string, stdin io.Reader
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
-	formatter := output.NewJSONFormatter(&stdout, &stderr)
+	formatter := formatterForArgs(args, &stdout, &stderr)
 
 	// Set env vars for this test
 	if apiKey != "" {
