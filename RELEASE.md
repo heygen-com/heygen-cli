@@ -1,0 +1,91 @@
+# Release Process
+
+## Install the CLI
+
+### Internal dev build
+
+Recommended for internal users who do not want to build from source.
+
+If `gh` is installed and authenticated:
+
+```bash
+gh api repos/heygen-com/heygen-cli/contents/scripts/install.sh \
+  --jq '.content' | base64 -d | bash
+```
+
+If you want to use a token directly:
+
+```bash
+curl -fsSL \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Accept: application/vnd.github.raw" \
+  https://api.github.com/repos/heygen-com/heygen-cli/contents/scripts/install.sh \
+  | bash
+```
+
+The installer downloads the latest internal dev build from the rolling `dev`
+prerelease and installs `heygen` into `~/.local/bin` by default.
+
+### Manual download
+
+1. Open the repo's Releases page.
+2. Find the `Internal Dev Build` prerelease.
+3. Download the archive for your platform.
+4. Extract the archive and move `heygen` into your `PATH`.
+
+### From source
+
+For contributors with Go installed:
+
+```bash
+git clone git@github.com:heygen-com/heygen-cli.git
+cd heygen-cli
+make install
+```
+
+## Release Types
+
+### Dev builds
+
+- Rolling prerelease tagged `dev`
+- Built from `main`
+- Version format: `dev-<sha>`
+- Intended for internal users and fast feedback
+
+### Stable releases
+
+- Immutable tagged releases like `v0.1.0`
+- Built from a tagged commit via GoReleaser
+- Intended for milestone cuts and broader distribution later
+
+## How to Cut a Dev Release
+
+1. Make sure `main` is in a good state.
+2. Trigger the GitHub Actions workflow:
+
+```bash
+gh workflow run dev-release.yml
+```
+
+3. Wait for the workflow to finish.
+4. Verify the `Internal Dev Build` prerelease was updated with the latest commit
+   SHA.
+5. Share the installer command or release link with internal users as needed.
+
+## How to Cut a Stable Release
+
+1. Make sure `main` is ready for a stable cut.
+2. Tag and push:
+
+```bash
+git tag v0.1.0
+git push --tags
+```
+
+3. The tag-based release workflow publishes the stable release artifacts.
+
+## Version Scheme
+
+- `dev-<sha>` for rolling internal builds
+- `v0.x.y` for pre-1.0 stable releases
+- `v1.x.y` and beyond once the CLI surface is considered stable
