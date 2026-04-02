@@ -80,10 +80,10 @@ download_with_gh() {
     return 1
   fi
 
-  if ! gh release download "$RELEASE_TAG" --repo "$REPO" --pattern "$asset_name" --dir "$TMPDIR"; then
+  if ! gh release download "$RELEASE_TAG" --repo "$REPO" --pattern "$asset_name" --dir "$TMPDIR" >/dev/null 2>&1; then
     return 1
   fi
-  if ! gh release download "$RELEASE_TAG" --repo "$REPO" --pattern "$checksums_name" --dir "$TMPDIR"; then
+  if ! gh release download "$RELEASE_TAG" --repo "$REPO" --pattern "$checksums_name" --dir "$TMPDIR" >/dev/null 2>&1; then
     return 1
   fi
   if [[ ! -f "${TMPDIR}/${asset_name}" || ! -f "${TMPDIR}/${checksums_name}" ]]; then
