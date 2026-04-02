@@ -27,7 +27,7 @@ func loadTestExamples(t *testing.T) Examples {
 func TestGroupEndpoints_FilterHidden(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestGroupEndpoints_FilterHidden(t *testing.T) {
 func TestGroupEndpoints_GroupNames(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestGroupEndpoints_GroupNames(t *testing.T) {
 func TestGroupEndpoints_TerminalVerbs(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestGroupEndpoints_TerminalVerbs(t *testing.T) {
 func TestGroupEndpoints_QueryFlags(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestGroupEndpoints_QueryFlags(t *testing.T) {
 func TestGroupEndpoints_BodyFlagsSkipComplex(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestGroupEndpoints_BodyFlagsSkipComplex(t *testing.T) {
 func TestGroupEndpoints_PathArgs(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestGroupEndpoints_PathArgs(t *testing.T) {
 func TestGroupEndpoints_Pagination(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestGroupEndpoints_Pagination(t *testing.T) {
 func TestGroupEndpoints_Multipart(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestGroupEndpoints_Multipart(t *testing.T) {
 func TestGroupEndpoints_Examples(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestGroupEndpoints_Examples(t *testing.T) {
 func TestGroupEndpoints_XCliAction(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestGroupEndpoints_XCliAction(t *testing.T) {
 func TestGroupEndpoints_SubGroupNaming(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestGroupEndpoints_SubGroupNaming(t *testing.T) {
 func TestGroupEndpoints_SingletonGetUsesGetVerb(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}

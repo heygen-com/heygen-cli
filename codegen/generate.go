@@ -32,7 +32,7 @@ import (
 //
 // All output is gofmt'd. Variable names are PascalCase derived from
 // group + command name via strcase.ToCamel.
-func Generate(groups command.Groups, tmplDir, outDir string) error {
+func Generate(groups command.Groups, descriptions GroupDescriptions, tmplDir, outDir string) error {
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
@@ -63,9 +63,10 @@ func Generate(groups command.Groups, tmplDir, outDir string) error {
 
 	// Registry file
 	regData := struct {
-		Groups     command.Groups
-		GroupNames []string
-	}{groups, groupNames}
+		Groups       command.Groups
+		GroupNames   []string
+		Descriptions GroupDescriptions
+	}{groups, groupNames, descriptions}
 	regFilename := filepath.Join(outDir, "registry.go")
 	if err := writeFromTemplate(regTmpl, regData, regFilename); err != nil {
 		return fmt.Errorf("generating registry: %w", err)

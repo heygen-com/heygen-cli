@@ -29,7 +29,7 @@ func TestGoldenFiles(t *testing.T) {
 		t.Fatalf("LoadExamples failed: %v", err)
 	}
 
-	groups, err := GroupEndpoints(doc, examples)
+	groups, _, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		t.Fatalf("GroupEndpoints: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestGoldenFiles(t *testing.T) {
 	}
 
 	outDir := t.TempDir()
-	if err := Generate(groups, "templates", outDir); err != nil {
+	if err := Generate(groups, nil, "templates", outDir); err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 

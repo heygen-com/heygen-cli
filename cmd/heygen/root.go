@@ -111,7 +111,11 @@ func registerGroups(root *cobra.Command, ctx *cmdContext, groups map[string][]*c
 	slices.Sort(groupNames)
 
 	for _, groupName := range groupNames {
-		groupCmd := &cobra.Command{Use: groupName, Short: humanizeCommandToken(groupName) + " commands"}
+		short := gen.GroupDescriptions[groupName]
+		if short == "" {
+			short = humanizeCommandToken(groupName) + " commands"
+		}
+		groupCmd := &cobra.Command{Use: groupName, Short: short}
 		for _, spec := range groups[groupName] {
 			registerSpecCommand(groupCmd, spec, ctx)
 		}

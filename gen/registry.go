@@ -73,3 +73,16 @@ var Groups = map[string][]*command.Spec{
 		WebhookEventsList,
 	},
 }
+
+// GroupDescriptions maps group name → help text from OpenAPI tag descriptions.
+var GroupDescriptions = map[string]string{
+	"asset":           "Upload files for use in video creation",
+	"avatar":          "List and manage avatars and looks",
+	"overdub":         "Dub or replace audio on existing videos",
+	"user":            "Account information and billing",
+	"video":           "Create, list, retrieve, and delete videos",
+	"video-agent":     "Create videos from text prompts using AI",
+	"video-translate": "Translate videos into other languages",
+	"voice":           "Text-to-speech and voice management",
+	"webhook":         "Manage webhook endpoints and events",
+}

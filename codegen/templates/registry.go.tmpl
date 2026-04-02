@@ -17,3 +17,13 @@ var Groups = map[string][]*command.Spec{
 	},
 {{- end}}
 }
+
+// GroupDescriptions maps group name → help text from OpenAPI tag descriptions.
+var GroupDescriptions = map[string]string{
+{{- range .GroupNames}}
+{{- $desc := index $.Descriptions .}}
+{{- if $desc}}
+	{{quote .}}: {{quote $desc}},
+{{- end}}
+{{- end}}
+}
