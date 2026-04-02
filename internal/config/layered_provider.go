@@ -8,8 +8,6 @@ type LayeredProvider struct {
 
 func defaultFor(key string) string {
 	switch key {
-	case KeyAPIBase:
-		return DefaultBaseURL
 	case KeyOutput:
 		return DefaultOutput
 	case KeyAnalytics:
@@ -31,8 +29,6 @@ func (p *LayeredProvider) envSource(key string) (Source, bool) {
 		return Source{Value: "false", Origin: "env"}, true
 	case KeyAutoUpdate:
 		return Source{Value: "false", Origin: "env"}, true
-	case KeyAPIBase:
-		return Source{Value: p.Env.BaseURL(), Origin: "env"}, true
 	case KeyOutput:
 		return Source{Value: p.Env.Output(), Origin: "env"}, true
 	default:
@@ -66,7 +62,7 @@ func (p *LayeredProvider) Resolve(key string) (Source, error) {
 }
 
 func (p *LayeredProvider) BaseURL() string {
-	return p.resolvedValue(KeyAPIBase, DefaultBaseURL)
+	return p.Env.BaseURL()
 }
 
 func (p *LayeredProvider) Output() string {

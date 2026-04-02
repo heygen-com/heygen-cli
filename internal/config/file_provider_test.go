@@ -34,7 +34,7 @@ func TestFileProvider_GetMissing(t *testing.T) {
 	}
 
 	p := &FileProvider{}
-	_, ok, err := p.Get(KeyAPIBase)
+	_, ok, err := p.Get(KeyAutoUpdate)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestFileProvider_SetUpdateExisting(t *testing.T) {
 	}
 
 	p := &FileProvider{}
-	if err := p.Set(KeyAPIBase, "https://api-dev.heygen.com"); err != nil {
+	if err := p.Set(KeyAnalytics, "false"); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 
@@ -101,8 +101,8 @@ func TestFileProvider_SetUpdateExisting(t *testing.T) {
 	if all[KeyOutput] != "json" {
 		t.Fatalf("output = %q, want %q", all[KeyOutput], "json")
 	}
-	if all[KeyAPIBase] != "https://api-dev.heygen.com" {
-		t.Fatalf("api_base = %q, want %q", all[KeyAPIBase], "https://api-dev.heygen.com")
+	if all[KeyAnalytics] != "false" {
+		t.Fatalf("analytics = %q, want %q", all[KeyAnalytics], "false")
 	}
 }
 

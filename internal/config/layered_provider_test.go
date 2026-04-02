@@ -30,7 +30,6 @@ func TestLayeredProvider_DefaultValues(t *testing.T) {
 	cases := map[string]string{
 		KeyOutput:     DefaultOutput,
 		KeyAutoUpdate: "true",
-		KeyAPIBase:    DefaultBaseURL,
 		KeyAnalytics:  "true",
 	}
 	for key, want := range cases {
@@ -89,13 +88,13 @@ func TestLayeredProvider_EnvOverridesFile(t *testing.T) {
 
 func TestLayeredProvider_ResolveAllKeys(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
-	writeConfigFile(t, "output = \"human\"\nauto_update = false\napi_base = \"https://api-dev.heygen.com\"\n")
+	writeConfigFile(t, "output = \"human\"\nauto_update = false\nanalytics = false\n")
 	p := newLayeredProvider()
 
 	cases := map[string]string{
 		KeyOutput:     "human",
 		KeyAutoUpdate: "false",
-		KeyAPIBase:    "https://api-dev.heygen.com",
+		KeyAnalytics:  "false",
 	}
 	for key, want := range cases {
 		got, err := p.Resolve(key)

@@ -3,7 +3,6 @@ package config
 import "os"
 
 const (
-	envBaseURL      = "HEYGEN_API_BASE"
 	envOutput       = "HEYGEN_OUTPUT"
 	envNoAnalytics  = "HEYGEN_NO_ANALYTICS"
 	envNoAutoUpdate = "HEYGEN_NO_UPDATE_CHECK"
@@ -13,7 +12,6 @@ const (
 )
 
 var envVarByKey = map[string]string{
-	KeyAPIBase:    envBaseURL,
 	KeyOutput:     envOutput,
 	KeyAnalytics:  envNoAnalytics,
 	KeyAutoUpdate: envNoAutoUpdate,
@@ -23,9 +21,10 @@ var envVarByKey = map[string]string{
 // Falls back to built-in defaults when a variable is not set.
 type EnvProvider struct{}
 
-// BaseURL returns HEYGEN_API_BASE if set, otherwise https://api.heygen.com.
+// BaseURL returns the API base URL. Reads HEYGEN_API_BASE if set (undocumented,
+// used by tests and internal dev only). Defaults to https://api.heygen.com.
 func (p *EnvProvider) BaseURL() string {
-	if v := os.Getenv(envBaseURL); v != "" {
+	if v := os.Getenv("HEYGEN_API_BASE"); v != "" {
 		return v
 	}
 	return DefaultBaseURL

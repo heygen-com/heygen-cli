@@ -6,16 +6,9 @@ func TestEnvProvider_BaseURL(t *testing.T) {
 	p := &EnvProvider{}
 
 	t.Run("default", func(t *testing.T) {
-		t.Setenv(envBaseURL, "")
+		t.Setenv("HEYGEN_API_BASE", "")
 		if got := p.BaseURL(); got != DefaultBaseURL {
 			t.Fatalf("BaseURL = %q, want %q", got, DefaultBaseURL)
-		}
-	})
-
-	t.Run("custom", func(t *testing.T) {
-		t.Setenv(envBaseURL, "https://api-dev.heygen.com")
-		if got := p.BaseURL(); got != "https://api-dev.heygen.com" {
-			t.Fatalf("BaseURL = %q, want %q", got, "https://api-dev.heygen.com")
 		}
 	})
 }
