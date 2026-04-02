@@ -246,3 +246,18 @@ func TestGroupEndpoints_SubGroupNaming(t *testing.T) {
 	}
 	t.Error("video 'caption get' not found")
 }
+
+func TestGroupEndpoints_SingletonGetUsesGetVerb(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	examples := loadTestExamples(t)
+	groups, err := GroupEndpoints(doc, examples)
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	for _, s := range groups["user"] {
+		if s.Name == "me get" {
+			return
+		}
+	}
+	t.Error("user 'me get' not found")
+}

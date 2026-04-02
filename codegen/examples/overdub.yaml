@@ -1,0 +1,10 @@
+"GET /v3/overdubs":
+  - "heygen overdub list --limit 10"
+"POST /v3/overdubs":
+  - "cat request.json | heygen overdub create -d -"
+"GET /v3/overdubs/{overdub_id}":
+  - "heygen overdub get <overdub-id>"
+"PATCH /v3/overdubs/{overdub_id}":
+  - "heygen overdub update <overdub-id> --title 'Updated title'"
+"DELETE /v3/overdubs/{overdub_id}":
+  - "heygen overdub delete <overdub-id>"
