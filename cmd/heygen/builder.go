@@ -58,7 +58,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 						var truncErr *client.ErrPaginationTruncated
 						if errors.As(err, &truncErr) {
 							fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", truncErr.Error())
-							if fmtErr := ctx.formatter.Data(truncErr.Data); fmtErr != nil {
+							if fmtErr := ctx.formatter.Data(truncErr.Data, "", nil); fmtErr != nil {
 								return fmtErr
 							}
 							return clierrors.New(truncErr.Error())
@@ -66,7 +66,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 						return err
 					}
 
-					return ctx.formatter.Data(result)
+					return ctx.formatter.Data(result, "", nil)
 				}
 			}
 
