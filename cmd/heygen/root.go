@@ -42,6 +42,7 @@ Environment Variables:
 	root.AddCommand(newAuthCmd(ctx))
 	root.AddCommand(newConfigCmd(ctx))
 	registerGroups(root, ctx, gen.Groups)
+	installFlattenedHelp(root)
 
 	return root
 }
@@ -71,6 +72,7 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 	root.AddCommand(newAuthCmd(ctx))
 	root.AddCommand(newConfigCmd(ctx))
 	registerGroups(root, ctx, groups)
+	installFlattenedHelp(root)
 
 	return root
 }
