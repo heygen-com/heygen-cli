@@ -130,6 +130,86 @@ func TestGeneratedRoot_IntermediateHelp(t *testing.T) {
 	}
 }
 
+func TestGeneratedRoot_VideoAgentHelp_FlattensNestedLeaves(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video-agent", "--help")
+
+	if res.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "sessions create") {
+		t.Errorf("help missing flattened sessions create entry\nstdout: %s", res.Stdout)
+	}
+	if !strings.Contains(res.Stdout, "sessions messages create") {
+		t.Errorf("help missing flattened deep leaf entry\nstdout: %s", res.Stdout)
+	}
+	if !strings.Contains(res.Stdout, "styles list") {
+		t.Errorf("help missing flattened styles list entry\nstdout: %s", res.Stdout)
+	}
+	if strings.Contains(res.Stdout, "Sessions commands") {
+		t.Errorf("help still shows generic intermediate command label\nstdout: %s", res.Stdout)
+	}
+}
+
+func TestGeneratedRoot_VideoAgentSessionsHelp_FlattensNestedLeaves(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video-agent", "sessions", "--help")
+
+	if res.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "messages create") {
+		t.Errorf("help missing flattened messages create entry\nstdout: %s", res.Stdout)
+	}
+	if !strings.Contains(res.Stdout, "resources get") {
+		t.Errorf("help missing flattened resources get entry\nstdout: %s", res.Stdout)
+	}
+	if strings.Contains(res.Stdout, "Messages commands") {
+		t.Errorf("help still shows generic messages intermediate label\nstdout: %s", res.Stdout)
+	}
+}
+
+func TestGeneratedRoot_WebhookHelp_FlattensNestedLeaves(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "webhook", "--help")
+
+	if res.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "endpoints create") {
+		t.Errorf("help missing flattened endpoints create entry\nstdout: %s", res.Stdout)
+	}
+	if !strings.Contains(res.Stdout, "event-types list") {
+		t.Errorf("help missing flattened event-types list entry\nstdout: %s", res.Stdout)
+	}
+	if strings.Contains(res.Stdout, "Endpoints commands") {
+		t.Errorf("help still shows generic endpoints intermediate label\nstdout: %s", res.Stdout)
+	}
+}
+
+func TestGeneratedRoot_VideoHelp_RemainsFlat(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "--help")
+
+	if res.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "list") || !strings.Contains(res.Stdout, "create") {
+		t.Errorf("flat group help missing expected leaf commands\nstdout: %s", res.Stdout)
+	}
+	if strings.Contains(res.Stdout, "video get") {
+		t.Errorf("flat group help should not rewrite direct leaf commands\nstdout: %s", res.Stdout)
+	}
+}
+
 func TestGeneratedRoot_UnknownFlagStillUsageError(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{})
 	defer srv.Close()
