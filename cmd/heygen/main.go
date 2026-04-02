@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
-	"github.com/heygen-com/heygen-cli/internal/output"
 )
 
 // version is set at build time via ldflags.
@@ -14,8 +13,8 @@ var version = "dev"
 
 func main() {
 	// Bootstrap formatter created before the Cobra tree so it's available
-	// for errors from PersistentPreRunE (auth failures, config loading).
-	formatter := output.DefaultJSONFormatter()
+	// for errors returned from command execution, including in --human mode.
+	formatter := formatterForArgs(os.Args[1:], os.Stdout, os.Stderr)
 
 	cmd := newRootCmd(version, formatter)
 	if err := cmd.Execute(); err != nil {

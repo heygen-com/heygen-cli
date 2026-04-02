@@ -46,7 +46,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
-			return ctx.formatter.Data(result, spec.DataField, nil)
+			return ctx.formatter.Data(result, spec.DataField, defaultColumnsForSpec(spec))
 		},
 	}
 

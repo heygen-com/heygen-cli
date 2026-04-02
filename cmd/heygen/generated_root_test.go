@@ -5,11 +5,18 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
+
+var generatedRootANSIPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripGeneratedRootANSI(s string) string {
+	return generatedRootANSIPattern.ReplaceAllString(s, "")
+}
 
 func TestGeneratedRoot_VoiceSpeechCreate(t *testing.T) {
 	var gotBody map[string]any
@@ -131,5 +138,74 @@ func TestGeneratedRoot_UnknownFlagStillUsageError(t *testing.T) {
 
 	if res.ExitCode != clierrors.ExitUsage {
 		t.Errorf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
+	}
+}
+
+func TestGeneratedRoot_HumanListOutput(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos": {
+			StatusCode: 200,
+			Body:       `{"data":[{"id":"vid_123","title":"Demo","status":"completed","created_at":1710000000}]}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "list", "--human")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	got := stripGeneratedRootANSI(res.Stdout)
+	if strings.Contains(strings.TrimSpace(got), "{") {
+		t.Fatalf("expected human table output, got JSON-like output:\n%s", got)
+	}
+	if !strings.Contains(got, "Id") || !strings.Contains(got, "Title") || !strings.Contains(got, "Demo") {
+		t.Fatalf("missing human table content:\n%s", got)
+	}
+}
+
+func TestGeneratedRoot_HumanGetOutput(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos/abc123": {
+			StatusCode: 200,
+			Body:       `{"data":{"id":"abc123","status":"completed","title":"Demo"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "get", "abc123", "--human")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	got := stripGeneratedRootANSI(res.Stdout)
+	if !strings.Contains(got, "Id:") || !strings.Contains(got, "abc123") || !strings.Contains(got, "Status:") {
+		t.Fatalf("expected human key-value output:\n%s", got)
+	}
+}
+
+func TestGeneratedRoot_HumanAPIError(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos/abc123": {
+			StatusCode: 404,
+			Body:       `{"error":{"code":"not_found","message":"Video abc123 not found"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "get", "abc123", "--human")
+
+	if res.ExitCode != clierrors.ExitGeneral {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stderr)
+	}
+
+	got := stripGeneratedRootANSI(res.Stderr)
+	if strings.Contains(got, `"error"`) {
+		t.Fatalf("expected human error output, got JSON:\n%s", got)
+	}
+	if !strings.Contains(got, "Error: Video abc123 not found") {
+		t.Fatalf("missing human error line:\n%s", got)
 	}
 }

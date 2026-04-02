@@ -12,7 +12,6 @@ import (
 
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
-	"github.com/heygen-com/heygen-cli/internal/output"
 )
 
 // videoListSpec mirrors the hand-written video list command as a Spec,
@@ -406,7 +405,7 @@ func runGeneratedRootCommand(t *testing.T, serverURL, apiKey string, groups map[
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
-	formatter := output.NewJSONFormatter(&stdout, &stderr)
+	formatter := formatterForArgs(args, &stdout, &stderr)
 
 	t.Setenv("HEYGEN_API_KEY", apiKey)
 	t.Setenv("HEYGEN_API_BASE", serverURL)
