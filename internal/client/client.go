@@ -19,6 +19,7 @@ type Client struct {
 	baseURL    string
 	apiKey     string
 	userAgent  string
+	retry      RetryConfig
 }
 
 // Option configures the Client.
@@ -34,6 +35,16 @@ func WithHTTPClient(hc *http.Client) Option {
 	return func(c *Client) { c.httpClient = hc }
 }
 
+// WithRetry overrides the default retry configuration.
+func WithRetry(config RetryConfig) Option {
+	return func(c *Client) { c.retry = config }
+}
+
+// WithNoRetry disables retries entirely.
+func WithNoRetry() Option {
+	return func(c *Client) { c.retry.MaxRetries = 0 }
+}
+
 // WithUserAgent overrides the default User-Agent header.
 func WithUserAgent(ua string) Option {
 	return func(c *Client) { c.userAgent = ua }
@@ -46,10 +57,23 @@ func New(apiKey string, opts ...Option) *Client {
 		baseURL:    DefaultBaseURL,
 		apiKey:     apiKey,
 		userAgent:  DefaultUserAgent,
+		retry:      DefaultRetryConfig(),
 	}
 	for _, opt := range opts {
 		opt(c)
 	}
+
+	copied := *c.httpClient
+	transport := copied.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	copied.Transport = &retryTransport{
+		base:   transport,
+		config: c.retry,
+	}
+	c.httpClient = &copied
+
 	return c
 }
 
