@@ -94,15 +94,22 @@ func TestFileProvider_SetUpdateExisting(t *testing.T) {
 		t.Fatalf("Set: %v", err)
 	}
 
-	all, err := p.GetAll()
+	// Verify the original key is preserved
+	val, ok, err := p.Get(KeyOutput)
 	if err != nil {
-		t.Fatalf("GetAll: %v", err)
+		t.Fatalf("Get output: %v", err)
 	}
-	if all[KeyOutput] != "json" {
-		t.Fatalf("output = %q, want %q", all[KeyOutput], "json")
+	if !ok || val != "json" {
+		t.Fatalf("output = (%q, %v), want (%q, true)", val, ok, "json")
 	}
-	if all[KeyAnalytics] != "false" {
-		t.Fatalf("analytics = %q, want %q", all[KeyAnalytics], "false")
+
+	// Verify the new key was written
+	val, ok, err = p.Get(KeyAnalytics)
+	if err != nil {
+		t.Fatalf("Get analytics: %v", err)
+	}
+	if !ok || val != "false" {
+		t.Fatalf("analytics = (%q, %v), want (%q, true)", val, ok, "false")
 	}
 }
 
@@ -162,34 +169,3 @@ func TestFileProvider_SetStringType(t *testing.T) {
 	}
 }
 
-func TestFileProvider_GetAll(t *testing.T) {
-	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
-	p := &FileProvider{}
-	if err := p.Set(KeyOutput, "human"); err != nil {
-		t.Fatalf("Set output: %v", err)
-	}
-	if err := p.Set(KeyAnalytics, "false"); err != nil {
-		t.Fatalf("Set analytics: %v", err)
-	}
-
-	all, err := p.GetAll()
-	if err != nil {
-		t.Fatalf("GetAll: %v", err)
-	}
-	if all[KeyOutput] != "human" || all[KeyAnalytics] != "false" {
-		t.Fatalf("GetAll = %#v", all)
-	}
-}
-
-func TestFileProvider_GetAllCorruptFile(t *testing.T) {
-	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
-	path := filepath.Join(paths.ConfigDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("bad = [toml\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	p := &FileProvider{}
-	if _, err := p.GetAll(); err == nil {
-		t.Fatal("expected corrupt file error")
-	}
-}

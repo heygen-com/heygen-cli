@@ -80,20 +80,3 @@ func coerceValue(key, value string) any {
 		return value
 	}
 }
-
-// GetAll returns all keys from config.toml.
-func (p *FileProvider) GetAll() (map[string]string, error) {
-	data, err := p.load()
-	if err != nil {
-		return nil, err
-	}
-	if data == nil {
-		return nil, nil
-	}
-
-	result := make(map[string]string, len(data))
-	for k, v := range data {
-		result[k] = fmt.Sprintf("%v", v)
-	}
-	return result, nil
-}
