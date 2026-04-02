@@ -163,8 +163,8 @@ func TestGeneratedRoot_HumanListOutput(t *testing.T) {
 	if !strings.Contains(got, "ID") || !strings.Contains(got, "Title") || !strings.Contains(got, "Demo") {
 		t.Fatalf("missing curated human table content:\n%s", got)
 	}
-	if !strings.Contains(got, "Showing 4 of 4 fields") && !strings.Contains(got, "Showing 4 of") {
-		t.Fatalf("expected curated column truncation/footer behavior:\n%s", got)
+	if !strings.Contains(got, "Showing 4 of 5 fields") {
+		t.Fatalf("expected truncation hint 'Showing 4 of 5 fields', got:\n%s", got)
 	}
 }
 
