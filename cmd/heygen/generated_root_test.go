@@ -145,7 +145,7 @@ func TestGeneratedRoot_HumanListOutput(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/videos": {
 			StatusCode: 200,
-			Body:       `{"data":[{"id":"vid_123","title":"Demo","status":"completed","created_at":1710000000}]}`,
+			Body:       `{"data":[{"id":"vid_123","title":"Demo","status":"completed","created_at":1710000000,"thumbnail_url":"https://cdn.example/thumb.jpg"}]}`,
 		},
 	})
 	defer srv.Close()
@@ -160,8 +160,11 @@ func TestGeneratedRoot_HumanListOutput(t *testing.T) {
 	if strings.Contains(strings.TrimSpace(got), "{") {
 		t.Fatalf("expected human table output, got JSON-like output:\n%s", got)
 	}
-	if !strings.Contains(got, "Id") || !strings.Contains(got, "Title") || !strings.Contains(got, "Demo") {
-		t.Fatalf("missing human table content:\n%s", got)
+	if !strings.Contains(got, "ID") || !strings.Contains(got, "Title") || !strings.Contains(got, "Demo") {
+		t.Fatalf("missing curated human table content:\n%s", got)
+	}
+	if !strings.Contains(got, "Showing 4 of 5 columns") {
+		t.Fatalf("expected truncation hint 'Showing 4 of 5 columns', got:\n%s", got)
 	}
 }
 
@@ -207,5 +210,29 @@ func TestGeneratedRoot_HumanAPIError(t *testing.T) {
 	}
 	if !strings.Contains(got, "Error: Video abc123 not found") {
 		t.Fatalf("missing human error line:\n%s", got)
+	}
+}
+
+func TestGeneratedRoot_HumanCuratedNestedListOutput(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/avatars/looks": {
+			StatusCode: 200,
+			Body:       `{"data":[{"id":"look_001","name":"Default","avatar_type":"studio_avatar","preview_image_url":"https://cdn.example/look.png","gender":"female"}]}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "avatar", "looks", "list", "--human")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	got := stripGeneratedRootANSI(res.Stdout)
+	if !strings.Contains(got, "Gender") || !strings.Contains(got, "Type") || !strings.Contains(got, "Default") {
+		t.Fatalf("missing curated nested columns:\n%s", got)
+	}
+	if strings.Contains(got, "Preview Image Url") {
+		t.Fatalf("expected curated nested columns to override auto-generated headers:\n%s", got)
 	}
 }
