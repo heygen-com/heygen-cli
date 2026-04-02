@@ -31,15 +31,15 @@ var DefaultColumns = map[string][]command.Column{
 	},
 	"video-translate/list": {
 		{Header: "ID", Field: "id"},
-		{Header: "Title", Field: "title"},
+		{Header: "Language", Field: "output_language"},
 		{Header: "Status", Field: "status"},
-		{Header: "Created", Field: "created_at"},
+		{Header: "Title", Field: "title"},
 	},
 	"webhook/endpoints list": {
 		{Header: "ID", Field: "endpoint_id"},
 		{Header: "URL", Field: "url"},
+		{Header: "Events", Field: "events"},
 		{Header: "Status", Field: "status"},
-		{Header: "Created", Field: "created_at"},
 	},
 	"webhook/event-types list": {
 		{Header: "Event Type", Field: "event_type"},
