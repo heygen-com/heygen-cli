@@ -53,8 +53,21 @@ import (
 //	  → sessions → sub-group, {session_id} → arg, stop → sub-group
 //	  → x-cli-action: true → no terminal verb appended
 //	  → result: heygen video-agent sessions stop <session-id>
-func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, error) {
+// GroupDescriptions maps group name → description from the OpenAPI tag.
+// Used by the builder for group command help text.
+type GroupDescriptions map[string]string
+
+func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDescriptions, error) {
 	groups := make(command.Groups)
+	descriptions := make(GroupDescriptions)
+
+	// Collect tag descriptions from the spec's top-level tags array
+	for _, tag := range doc.Tags {
+		groupName := deriveGroupName(tag.Name)
+		if tag.Description != "" {
+			descriptions[groupName] = tag.Description
+		}
+	}
 
 	for _, path := range sortedMapKeys(doc.Paths.Map()) {
 		pathItem := doc.Paths.Find(path)
@@ -86,10 +99,10 @@ func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, error) 
 	}
 
 	if err := validateFlagNames(groups); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return groups, nil
+	return groups, descriptions, nil
 }
 
 // buildSpec creates a command.Spec from an OpenAPI operation.

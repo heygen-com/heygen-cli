@@ -20,3 +20,6 @@ var Groups = map[string][]*command.Spec{
 		WidgetList,
 	},
 }
+
+// GroupDescriptions maps group name → help text from OpenAPI tag descriptions.
+var GroupDescriptions = map[string]string{}

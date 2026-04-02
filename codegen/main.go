@@ -43,7 +43,7 @@ func main() {
 	}
 
 	// Step 3: Group endpoints into command specs
-	groups, err := GroupEndpoints(doc, examples)
+	groups, descriptions, err := GroupEndpoints(doc, examples)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -56,7 +56,7 @@ func main() {
 	}
 
 	// Step 5: Generate Go source files
-	if err := Generate(groups, "codegen/templates", *outDir); err != nil {
+	if err := Generate(groups, descriptions, "codegen/templates", *outDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error generating: %v\n", err)
 		os.Exit(1)
 	}
