@@ -30,7 +30,10 @@ func skipAuth(cmd *cobra.Command) bool {
 // initContext sets up the config provider and, for commands that require
 // auth, resolves credentials and creates the HTTP client.
 func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
-	provider := &config.EnvProvider{}
+	provider := &config.LayeredProvider{
+		Env:  &config.EnvProvider{},
+		File: &config.FileProvider{},
+	}
 	ctx.configProvider = provider
 
 	if skipAuth(cmd) {
