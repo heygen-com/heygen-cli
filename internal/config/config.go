@@ -8,7 +8,6 @@ type Provider interface {
 	BaseURL() string
 	Output() string
 	Analytics() bool
-	AutoUpdate() bool
 }
 
 // Source captures an effective config value and where it came from.
@@ -29,10 +28,9 @@ type WritableProvider interface {
 }
 
 const (
-	KeyOutput     = "output"
-	KeyAnalytics  = "analytics"
-	KeyAutoUpdate = "auto_update"
+	KeyOutput   = "output"
+	KeyAnalytics = "analytics"
 )
 
 // ValidKeys lists config keys exposed by config set/get/list.
-var ValidKeys = []string{KeyAnalytics, KeyAutoUpdate, KeyOutput}
+var ValidKeys = []string{KeyAnalytics, KeyOutput}

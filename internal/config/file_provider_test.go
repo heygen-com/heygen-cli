@@ -34,7 +34,7 @@ func TestFileProvider_GetMissing(t *testing.T) {
 	}
 
 	p := &FileProvider{}
-	_, ok, err := p.Get(KeyAutoUpdate)
+	_, ok, err := p.Get(KeyAnalytics)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -168,15 +168,15 @@ func TestFileProvider_GetAll(t *testing.T) {
 	if err := p.Set(KeyOutput, "human"); err != nil {
 		t.Fatalf("Set output: %v", err)
 	}
-	if err := p.Set(KeyAutoUpdate, "false"); err != nil {
-		t.Fatalf("Set auto_update: %v", err)
+	if err := p.Set(KeyAnalytics, "false"); err != nil {
+		t.Fatalf("Set analytics: %v", err)
 	}
 
 	all, err := p.GetAll()
 	if err != nil {
 		t.Fatalf("GetAll: %v", err)
 	}
-	if all[KeyOutput] != "human" || all[KeyAutoUpdate] != "false" {
+	if all[KeyOutput] != "human" || all[KeyAnalytics] != "false" {
 		t.Fatalf("GetAll = %#v", all)
 	}
 }

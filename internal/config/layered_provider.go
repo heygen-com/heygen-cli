@@ -12,8 +12,6 @@ func defaultFor(key string) string {
 		return DefaultOutput
 	case KeyAnalytics:
 		return "true"
-	case KeyAutoUpdate:
-		return "true"
 	default:
 		return ""
 	}
@@ -26,8 +24,6 @@ func (p *LayeredProvider) envSource(key string) (Source, bool) {
 
 	switch key {
 	case KeyAnalytics:
-		return Source{Value: "false", Origin: "env"}, true
-	case KeyAutoUpdate:
 		return Source{Value: "false", Origin: "env"}, true
 	case KeyOutput:
 		return Source{Value: p.Env.Output(), Origin: "env"}, true
@@ -71,10 +67,6 @@ func (p *LayeredProvider) Output() string {
 
 func (p *LayeredProvider) Analytics() bool {
 	return p.resolvedValue(KeyAnalytics, "true") == "true"
-}
-
-func (p *LayeredProvider) AutoUpdate() bool {
-	return p.resolvedValue(KeyAutoUpdate, "true") == "true"
 }
 
 // Set persists a configuration value via the file provider.

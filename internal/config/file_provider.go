@@ -74,7 +74,7 @@ func (p *FileProvider) Set(key, value string) error {
 
 func coerceValue(key, value string) any {
 	switch key {
-	case KeyAnalytics, KeyAutoUpdate:
+	case KeyAnalytics:
 		return value == "true"
 	default:
 		return value

@@ -24,7 +24,6 @@ Environment Variables:
   HEYGEN_API_KEY            API key for authentication (overrides stored credentials)
   HEYGEN_OUTPUT             Output format: json, human (default: json)
   HEYGEN_NO_ANALYTICS       Disable analytics when set (default: enabled)
-  HEYGEN_NO_UPDATE_CHECK    Disable update check when set (default: enabled)
   HEYGEN_CONFIG_DIR         Override config directory (default: ~/.heygen)`,
 		Version:       version,
 		SilenceUsage:  true, // we handle usage errors ourselves

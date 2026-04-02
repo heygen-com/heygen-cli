@@ -49,24 +49,6 @@ func TestEnvProvider_Analytics(t *testing.T) {
 	})
 }
 
-func TestEnvProvider_AutoUpdate(t *testing.T) {
-	p := &EnvProvider{}
-
-	t.Run("default", func(t *testing.T) {
-		t.Setenv(envNoAutoUpdate, "")
-		if got := p.AutoUpdate(); !got {
-			t.Fatal("AutoUpdate = false, want true")
-		}
-	})
-
-	t.Run("disabled", func(t *testing.T) {
-		t.Setenv(envNoAutoUpdate, "1")
-		if got := p.AutoUpdate(); got {
-			t.Fatal("AutoUpdate = true, want false")
-		}
-	})
-}
-
 func TestEnvProvider_GetEnv(t *testing.T) {
 	p := &EnvProvider{}
 	t.Setenv(envOutput, "human")

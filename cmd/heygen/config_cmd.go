@@ -57,7 +57,7 @@ func validateConfigValue(key, value string) error {
 		if value != "json" && value != "human" {
 			return clierrors.NewUsage("output must be one of: json, human")
 		}
-	case config.KeyAnalytics, config.KeyAutoUpdate:
+	case config.KeyAnalytics:
 		if value != "true" && value != "false" {
 			return clierrors.NewUsage(key + " must be one of: true, false")
 		}

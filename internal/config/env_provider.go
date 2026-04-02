@@ -3,18 +3,16 @@ package config
 import "os"
 
 const (
-	envOutput       = "HEYGEN_OUTPUT"
-	envNoAnalytics  = "HEYGEN_NO_ANALYTICS"
-	envNoAutoUpdate = "HEYGEN_NO_UPDATE_CHECK"
+	envOutput      = "HEYGEN_OUTPUT"
+	envNoAnalytics = "HEYGEN_NO_ANALYTICS"
 
 	DefaultBaseURL = "https://api.heygen.com"
 	DefaultOutput  = "json"
 )
 
 var envVarByKey = map[string]string{
-	KeyOutput:     envOutput,
-	KeyAnalytics:  envNoAnalytics,
-	KeyAutoUpdate: envNoAutoUpdate,
+	KeyOutput:    envOutput,
+	KeyAnalytics: envNoAnalytics,
 }
 
 // EnvProvider implements Provider by reading from environment variables.
@@ -41,11 +39,6 @@ func (p *EnvProvider) Output() string {
 // Analytics returns false when HEYGEN_NO_ANALYTICS is set, true otherwise.
 func (p *EnvProvider) Analytics() bool {
 	return os.Getenv(envNoAnalytics) == ""
-}
-
-// AutoUpdate returns false only when HEYGEN_NO_UPDATE_CHECK is set.
-func (p *EnvProvider) AutoUpdate() bool {
-	return os.Getenv(envNoAutoUpdate) == ""
 }
 
 // GetEnv reports whether the env var for a config key is explicitly set.

@@ -129,7 +129,7 @@ func TestConfigList_AllDefaults(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if len(parsed) != 3 {
+	if len(parsed) != 2 {
 		t.Fatalf("len(parsed) = %d, want 4", len(parsed))
 	}
 }
@@ -150,7 +150,7 @@ func TestConfigList_MixedSources(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if len(parsed) != 3 {
+	if len(parsed) != 2 {
 		t.Fatalf("len(parsed) = %d, want 4", len(parsed))
 	}
 }
