@@ -4,24 +4,44 @@ A Go CLI wrapping HeyGen's v3 API. Auto-generated from our OpenAPI spec. Single 
 
 ## Install
 
-### From source (contributors)
+> **This is a private repo.** All install methods require GitHub access (org membership or a personal access token with `repo` scope).
+
+Pick the method that fits you:
+
+### I just want to use the CLI (no Go needed)
+
+Run the install script — it detects your platform, downloads the latest build, and installs to `~/.local/bin`:
+
+```bash
+# If you have the GitHub CLI (gh) installed and authenticated:
+bash <(gh api repos/heygen-com/heygen-cli/contents/scripts/install.sh --jq '.content' | base64 -d)
+
+# Or with a GitHub token:
+export GITHUB_TOKEN=<your-token>
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/heygen-com/heygen-cli/main/scripts/install.sh | bash
+```
+
+Make sure `~/.local/bin` is in your PATH. To update, run the same command again.
+
+### I want to build from source (contributors)
 
 Requires Go 1.23+.
 
 ```bash
 git clone git@github.com:heygen-com/heygen-cli.git
 cd heygen-cli
-make install
+make install    # installs to $GOPATH/bin/heygen
 ```
 
-This installs `heygen` to your `$GOPATH/bin` (typically `~/go/bin`).
+### I want to download manually
 
-### From GitHub Releases (everyone else)
+Go to [Releases](https://github.com/heygen-com/heygen-cli/releases), download the `Internal Dev Build` asset for your platform, extract, and add to PATH:
 
-Download the binary for your platform from [Releases](https://github.com/heygen-com/heygen-cli/releases) and put it in your PATH.
-
-GitHub Releases is the intended install path for non-contributors who just want to use the CLI. Source builds are mainly for contributors working on the repo itself.
-For this internal repository, users still need GitHub read access to download release assets.
+```bash
+tar xzf heygen_darwin_arm64.tar.gz
+sudo mv heygen /usr/local/bin/
+```
 
 ## Setup
 
