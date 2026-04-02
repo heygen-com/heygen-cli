@@ -83,18 +83,18 @@ jobs:
           actor="@${GITHUB_ACTOR}"
 
           cat > /tmp/dev-release-notes.md <<EOF
-          ## Internal Dev Build
+## Internal Dev Build
 
-          Latest CLI build from \`main\`. Manually triggered.
+Latest CLI build from \`main\`. Manually triggered.
 
-          - **Commit:** ${short_sha}
-          - **Date:** ${commit_date}
-          - **Source:** \`main\`
-          - **Commit message:** ${commit_subject}
-          - **Triggered by:** ${actor}
+- **Commit:** ${short_sha}
+- **Date:** ${commit_date}
+- **Source:** \`main\`
+- **Commit message:** ${commit_subject}
+- **Triggered by:** ${actor}
 
-          Download the archive for your platform from the assets below and add \`heygen\` to your \`PATH\`.
-          EOF
+Download the archive for your platform from the assets below and add \`heygen\` to your \`PATH\`.
+EOF
 
       - name: Recreate dev prerelease
         env:
