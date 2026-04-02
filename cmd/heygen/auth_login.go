@@ -50,7 +50,7 @@ The env var takes priority over stored credentials.`,
 				return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
 			}
 
-			return ctx.formatter.Data(data)
+			return ctx.formatter.Data(data, "", nil)
 		},
 	}
 }

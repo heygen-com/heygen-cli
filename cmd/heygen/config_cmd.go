@@ -101,7 +101,7 @@ func newConfigSetCmd(ctx *cmdContext) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return ctx.formatter.Data(data)
+			return ctx.formatter.Data(data, "", nil)
 		},
 	}
 }
@@ -134,7 +134,7 @@ func newConfigGetCmd(ctx *cmdContext) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return ctx.formatter.Data(data)
+			return ctx.formatter.Data(data, "", nil)
 		},
 	}
 }
@@ -167,7 +167,7 @@ func newConfigListCmd(ctx *cmdContext) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return ctx.formatter.Data(data)
+			return ctx.formatter.Data(data, "", nil)
 		},
 	}
 }
