@@ -2,7 +2,9 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -10,7 +12,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
@@ -22,6 +27,117 @@ const (
 	APIDataField = "data"
 )
 
+// PollOptions controls ExecuteAndPoll behavior.
+type PollOptions struct {
+	Timeout   time.Duration
+	BaseDelay time.Duration
+	MaxDelay  time.Duration
+	OnStatus  func(status string, elapsed time.Duration)
+}
+
+// ErrPollFailed is returned when polling reaches a terminal failure state.
+// It carries the full status response so callers can output it (the response
+// often contains error details the user needs to diagnose the failure).
+type ErrPollFailed struct {
+	Data   json.RawMessage
+	Status string
+}
+
+func (e *ErrPollFailed) Error() string {
+	return fmt.Sprintf("operation reached terminal failure state: %s", e.Status)
+}
+
+// ExecuteAndPoll executes a create request, then polls a status endpoint until
+// the resource reaches a terminal state or the context is canceled.
+func (c *Client) ExecuteAndPoll(
+	ctx context.Context,
+	spec *command.Spec,
+	inv *command.Invocation,
+	opts PollOptions,
+) (json.RawMessage, error) {
+	if spec.PollConfig == nil {
+		return nil, clierrors.New("spec is not configured for polling")
+	}
+
+	opts = defaultPollOptions(opts)
+	pollCtx, cancel := ensurePollContext(ctx, opts.Timeout)
+	defer cancel()
+
+	createResp, err := c.executeWithContext(pollCtx, spec, inv)
+	if err != nil {
+		return nil, translatePollContextError(pollCtx, err)
+	}
+
+	resourceID, err := extractJSONPath(createResp, spec.PollConfig.IDField)
+	if err != nil {
+		return nil, clierrors.New(fmt.Sprintf(
+			"failed to extract resource ID from %q: %v. This command may require manual polling for batch responses",
+			spec.PollConfig.IDField, err,
+		))
+	}
+
+	// If IDField uses an array index (e.g., "data.ids.0"), reject batch
+	// responses with multiple IDs. --wait only supports single-resource polling.
+	if arrayLen, ok := extractArrayLen(createResp, spec.PollConfig.IDField); ok && arrayLen > 1 {
+		return nil, &clierrors.CLIError{
+			Code:     "batch_not_supported",
+			Message:  fmt.Sprintf("--wait does not support batch operations (got %d resources)", arrayLen),
+			Hint:     "Poll each resource individually with the corresponding get command",
+			ExitCode: clierrors.ExitGeneral,
+		}
+	}
+
+	pathParams, err := statusPathParams(spec.PollConfig.StatusEndpoint, resourceID)
+	if err != nil {
+		return nil, err
+	}
+
+	statusSpec := buildStatusSpec(spec.PollConfig.StatusEndpoint)
+	statusInv := &command.Invocation{
+		PathParams:  pathParams,
+		QueryParams: make(url.Values),
+	}
+	pollBackoff := RetryConfig{
+		BaseDelay: opts.BaseDelay,
+		MaxDelay:  opts.MaxDelay,
+	}
+	start := time.Now()
+
+	for attempt := 0; ; attempt++ {
+		if err := pollCtx.Err(); err != nil {
+			return nil, newPollContextError(err)
+		}
+
+		statusResp, err := c.executeWithContext(pollCtx, statusSpec, statusInv)
+		if err != nil {
+			return nil, translatePollContextError(pollCtx, err)
+		}
+
+		status, err := extractJSONPath(statusResp, spec.PollConfig.StatusField)
+		if err != nil {
+			return nil, clierrors.New(fmt.Sprintf(
+				"failed to extract status from %q: %v",
+				spec.PollConfig.StatusField, err,
+			))
+		}
+
+		if slices.Contains(spec.PollConfig.TerminalOK, status) {
+			return statusResp, nil
+		}
+		if slices.Contains(spec.PollConfig.TerminalFail, status) {
+			return nil, &ErrPollFailed{Data: statusResp, Status: status}
+		}
+		if opts.OnStatus != nil {
+			opts.OnStatus(status, time.Since(start))
+		}
+
+		delay := backoffDelay(attempt, pollBackoff)
+		if err := waitForRetry(pollCtx, delay); err != nil {
+			return nil, newPollContextError(err)
+		}
+	}
+}
+
 // Execute sends an HTTP request described by the Spec (static metadata)
 // and Invocation (resolved user values). Returns the raw JSON response.
 //
@@ -29,6 +145,10 @@ const (
 // and behavioral flags (pagination, polling). The Invocation provides
 // the concrete path params, query params, body, and file path.
 func (c *Client) Execute(spec *command.Spec, inv *command.Invocation) (json.RawMessage, error) {
+	return c.executeWithContext(context.Background(), spec, inv)
+}
+
+func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv *command.Invocation) (json.RawMessage, error) {
 	if spec.Method == "" {
 		return nil, clierrors.New("Spec.Method must be set")
 	}
@@ -50,6 +170,7 @@ func (c *Client) Execute(spec *command.Spec, inv *command.Invocation) (json.RawM
 	if err != nil {
 		return nil, err
 	}
+	req = req.WithContext(ctx)
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -153,6 +274,181 @@ func buildMultipartRequest(method, reqURL, filePath string) (*http.Request, erro
 	req.Header.Set("Content-Type", multipartWriter.FormDataContentType())
 
 	return req, nil
+}
+
+func defaultPollOptions(opts PollOptions) PollOptions {
+	if opts.Timeout <= 0 {
+		opts.Timeout = 10 * time.Minute
+	}
+	if opts.BaseDelay <= 0 {
+		opts.BaseDelay = 2 * time.Second
+	}
+	if opts.MaxDelay <= 0 {
+		opts.MaxDelay = 30 * time.Second
+	}
+	return opts
+}
+
+func ensurePollContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); ok || timeout <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, timeout)
+}
+
+func buildStatusSpec(endpoint string) *command.Spec {
+	return &command.Spec{
+		Endpoint: endpoint,
+		Method:   http.MethodGet,
+	}
+}
+
+func statusPathParams(endpoint, resourceID string) (map[string]string, error) {
+	params := make(map[string]string)
+	start := strings.Index(endpoint, "{")
+	end := strings.Index(endpoint, "}")
+	if start == -1 || end == -1 || end <= start+1 {
+		return nil, clierrors.New(fmt.Sprintf("status endpoint %q must contain exactly one path parameter", endpoint))
+	}
+	if strings.Contains(endpoint[end+1:], "{") {
+		return nil, clierrors.New(fmt.Sprintf("status endpoint %q must contain exactly one path parameter", endpoint))
+	}
+	params[endpoint[start+1:end]] = resourceID
+	return params, nil
+}
+
+// extractArrayLen checks if a dot-notation path ends with a numeric index
+// (e.g., "data.ids.0"), and if so, returns the length of that array.
+// Returns (0, false) if the path doesn't end with an array index.
+func extractArrayLen(raw json.RawMessage, path string) (int, bool) {
+	parts := strings.Split(path, ".")
+	if len(parts) < 2 {
+		return 0, false
+	}
+	// Check if the last segment is a numeric index
+	if _, err := strconv.Atoi(parts[len(parts)-1]); err != nil {
+		return 0, false
+	}
+	// Walk to the parent array
+	arrayPath := strings.Join(parts[:len(parts)-1], ".")
+
+	var current any
+	if err := json.Unmarshal(raw, &current); err != nil {
+		return 0, false
+	}
+	for _, part := range strings.Split(arrayPath, ".") {
+		obj, ok := current.(map[string]any)
+		if !ok {
+			return 0, false
+		}
+		next, ok := obj[part]
+		if !ok {
+			return 0, false
+		}
+		current = next
+	}
+	arr, ok := current.([]any)
+	if !ok {
+		return 0, false
+	}
+	return len(arr), true
+}
+
+// extractJSONPath extracts a string value from JSON using dot-notation.
+// Supports object fields ("data.status") and array indices ("data.ids.0").
+func extractJSONPath(raw json.RawMessage, path string) (string, error) {
+	if path == "" {
+		return "", clierrors.New("JSON path is required")
+	}
+
+	var current any
+	if err := json.Unmarshal(raw, &current); err != nil {
+		return "", clierrors.New(fmt.Sprintf("failed to parse JSON response: %v", err))
+	}
+
+	for _, part := range strings.Split(path, ".") {
+		// Try numeric index for arrays
+		if idx, err := strconv.Atoi(part); err == nil {
+			arr, ok := current.([]any)
+			if !ok {
+				return "", clierrors.New(fmt.Sprintf("field at %q is not an array", part))
+			}
+			if idx < 0 || idx >= len(arr) {
+				return "", clierrors.New(fmt.Sprintf("array index %d out of bounds (length %d)", idx, len(arr)))
+			}
+			current = arr[idx]
+			continue
+		}
+
+		obj, ok := current.(map[string]any)
+		if !ok {
+			return "", clierrors.New(fmt.Sprintf("field %q is not an object", part))
+		}
+
+		next, ok := obj[part]
+		if !ok {
+			return "", clierrors.New(fmt.Sprintf("field %q not found", part))
+		}
+		current = next
+	}
+
+	value, ok := current.(string)
+	if !ok || value == "" {
+		return "", clierrors.New(fmt.Sprintf("field %q is not a string", path))
+	}
+	return value, nil
+}
+
+// translatePollContextError converts context deadline/cancellation errors into
+// user-friendly CLIErrors. This includes unwrapping context errors that were
+// stringified into CLIError.Message by executeWithContext — CLIError doesn't
+// preserve the error chain, so string matching is the fallback. If the message
+// format in executeWithContext changes, this degrades to returning the original
+// error (generic network failure), which is safe but less user-friendly.
+func translatePollContextError(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return newPollContextError(ctxErr)
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return newPollContextError(err)
+	}
+
+	var cliErr *clierrors.CLIError
+	if errors.As(err, &cliErr) && cliErr.Code == "network_error" {
+		msg := strings.ToLower(cliErr.Message)
+		switch {
+		case strings.Contains(msg, "context deadline exceeded"):
+			return newPollContextError(context.DeadlineExceeded)
+		case strings.Contains(msg, "context canceled"), strings.Contains(msg, "context cancelled"):
+			return newPollContextError(context.Canceled)
+		}
+	}
+
+	return err
+}
+
+func newPollContextError(err error) error {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return &clierrors.CLIError{
+			Code:     "timeout",
+			Message:  "polling timed out before the operation completed",
+			Hint:     "Re-run the corresponding get command to check the current status manually",
+			ExitCode: clierrors.ExitGeneral,
+		}
+	case errors.Is(err, context.Canceled):
+		return &clierrors.CLIError{
+			Code:     "canceled",
+			Message:  "polling was canceled before the operation completed",
+			Hint:     "Re-run the corresponding get command to check the current status manually",
+			ExitCode: clierrors.ExitGeneral,
+		}
+	default:
+		return clierrors.New(err.Error())
+	}
 }
 
 // parseErrorResponse parses an API error response into a CLIError.

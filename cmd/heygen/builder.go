@@ -2,15 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
+	"github.com/heygen-com/heygen-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -42,6 +45,57 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
+			// Poll config is looked up at call time, not attached to Spec.
+			// Spec is immutable (generated); poll configs are hand-written in cmd/.
+			pc := pollConfigs[spec.Group+"/"+spec.Name]
+			if pc != nil {
+				wait, _ := cmd.Flags().GetBool("wait")
+				if wait {
+					timeout, _ := cmd.Flags().GetDuration("timeout")
+
+					// Let ExecuteAndPoll own the timeout via ensurePollContext.
+					// Don't wrap cmd.Context() with WithTimeout here.
+					pollSpec := *spec
+					pollSpec.PollConfig = pc
+
+					opts := client.PollOptions{
+						Timeout:   timeout,
+						BaseDelay: 2 * time.Second,
+						MaxDelay:  30 * time.Second,
+					}
+					// Only emit progress in human mode. JSON mode keeps stderr
+					// clean for machine consumption (structured errors only).
+					if _, ok := ctx.formatter.(*output.HumanFormatter); ok {
+						var lastStatus string
+						opts.OnStatus = func(status string, elapsed time.Duration) {
+							if status == lastStatus {
+								return
+							}
+							fmt.Fprintf(cmd.ErrOrStderr(), "Polling: status=%s (elapsed %s)\n", status, elapsed.Round(time.Second))
+							lastStatus = status
+						}
+					}
+
+					result, err := ctx.client.ExecuteAndPoll(cmd.Context(), &pollSpec, inv, opts)
+					if err != nil {
+						var failErr *client.ErrPollFailed
+						if errors.As(err, &failErr) {
+							// Output the failure response (contains error details),
+							// then signal failure via CLIError for exit code 1.
+							if fmtErr := ctx.formatter.Data(failErr.Data, "data", nil); fmtErr != nil {
+								return fmtErr
+							}
+							return clierrors.New(failErr.Error())
+						}
+						return err
+					}
+
+					// --wait result is a single resource from the GET endpoint.
+					// Columns are nil — HumanFormatter renders single objects as
+					// key-value pairs, not tables. This matches `heygen video get`.
+					return ctx.formatter.Data(result, "data", nil)
+				}
+			}
 			result, err := ctx.client.Execute(spec, inv)
 			if err != nil {
 				return err
@@ -56,6 +110,10 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 		registerFlag(cmd, flag)
 	}
 
+	if pollConfigs[spec.Group+"/"+spec.Name] != nil {
+		cmd.Flags().Bool("wait", false, "Poll until the operation completes or fails")
+		cmd.Flags().Duration("timeout", 10*time.Minute, "Max time to wait when using --wait")
+	}
 	// Add -d/--data for commands with JSON request bodies
 	if spec.BodyEncoding == "json" {
 		cmd.Flags().StringVarP(&rawData, "data", "d", "",
