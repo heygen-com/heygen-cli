@@ -16,6 +16,17 @@ import (
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
+const (
+	// APIDataField is the response envelope field containing the payload.
+	// Exported so the builder can pass it to the formatter for --human rendering.
+	APIDataField = "data"
+
+	// HeyGen API pagination conventions — consistent across all v3 endpoints.
+	apiCursorField = "next_token" // response field with the next page cursor
+	apiCursorParam = "token"      // request query parameter for the cursor
+)
+
+
 // Execute sends an HTTP request described by the Spec (static metadata)
 // and Invocation (resolved user values). Returns the raw JSON response.
 //
@@ -65,6 +76,37 @@ func (c *Client) Execute(spec *command.Spec, inv *command.Invocation) (json.RawM
 	}
 
 	return json.RawMessage(respBody), nil
+}
+
+// ExecuteAll fetches all pages of a paginated endpoint and returns a flat JSON
+// array containing all accumulated items.
+func (c *Client) ExecuteAll(spec *command.Spec, inv *command.Invocation) (json.RawMessage, error) {
+	if !spec.Paginated {
+		return nil, clierrors.New("spec is not configured for pagination")
+	}
+
+	workingInv := cloneInvocation(inv)
+	accumulated := make([]json.RawMessage, 0)
+
+	for {
+		page, err := c.Execute(spec, workingInv)
+		if err != nil {
+			return nil, err
+		}
+
+		items, nextToken, err := extractPage(page, APIDataField, apiCursorField)
+		if err != nil {
+			return nil, err
+		}
+
+		accumulated = append(accumulated, items...)
+
+		if nextToken == "" {
+			return marshalItems(accumulated)
+		}
+
+		workingInv.QueryParams.Set(apiCursorParam, nextToken)
+	}
 }
 
 // buildURL constructs the full URL with path param substitution and query params.
@@ -147,6 +189,72 @@ func buildMultipartRequest(method, reqURL, filePath string) (*http.Request, erro
 	req.Header.Set("Content-Type", multipartWriter.FormDataContentType())
 
 	return req, nil
+}
+
+func cloneInvocation(inv *command.Invocation) *command.Invocation {
+	cloned := &command.Invocation{
+		PathParams:  make(map[string]string, len(inv.PathParams)),
+		QueryParams: make(url.Values, len(inv.QueryParams)),
+		FilePath:    inv.FilePath,
+	}
+
+	for key, value := range inv.PathParams {
+		cloned.PathParams[key] = value
+	}
+	for key, values := range inv.QueryParams {
+		copied := make([]string, len(values))
+		copy(copied, values)
+		cloned.QueryParams[key] = copied
+	}
+	if inv.Body != nil {
+		// Shallow copy — nested maps/slices are shared. Safe because pagination
+		// only mutates QueryParams, never Body values.
+		cloned.Body = make(map[string]any, len(inv.Body))
+		for key, value := range inv.Body {
+			cloned.Body[key] = value
+		}
+	}
+
+	return cloned
+}
+
+func extractPage(raw json.RawMessage, dataField, tokenField string) ([]json.RawMessage, string, error) {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, "", clierrors.New(fmt.Sprintf("failed to parse paginated response: %v", err))
+	}
+
+	dataRaw, ok := envelope[dataField]
+	if !ok {
+		return nil, "", clierrors.New(fmt.Sprintf("response missing %q field", dataField))
+	}
+
+	var items []json.RawMessage
+	if err := json.Unmarshal(dataRaw, &items); err != nil {
+		return nil, "", clierrors.New(fmt.Sprintf("response field %q is not an array: %v", dataField, err))
+	}
+
+	tokenRaw, ok := envelope[tokenField]
+	if !ok {
+		return items, "", nil
+	}
+	if string(tokenRaw) == "null" {
+		return items, "", nil
+	}
+
+	var token string
+	if err := json.Unmarshal(tokenRaw, &token); err != nil {
+		return nil, "", clierrors.New(fmt.Sprintf("response field %q is not a string: %v", tokenField, err))
+	}
+	return items, token, nil
+}
+
+func marshalItems(items []json.RawMessage) (json.RawMessage, error) {
+	data, err := json.Marshal(items)
+	if err != nil {
+		return nil, clierrors.New(fmt.Sprintf("failed to marshal paginated results: %v", err))
+	}
+	return json.RawMessage(data), nil
 }
 
 // parseErrorResponse parses an API error response into a CLIError.

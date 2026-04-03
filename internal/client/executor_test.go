@@ -26,7 +26,7 @@ func TestExecute_GETWithQueryParams(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
 
 	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
 	inv := &command.Invocation{
@@ -61,7 +61,7 @@ func TestExecute_RepeatedQueryParams(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
 
 	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
 	inv := &command.Invocation{
@@ -318,6 +318,158 @@ func TestExecute_RetryPreservesBody(t *testing.T) {
 		t.Fatalf("result = %s, want %s", result, `{"id":"new123"}`)
 	}
 }
+
+func TestExecuteAll_SinglePage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[{"id":"v1"}],"next_token":null}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+	spec := &command.Spec{
+		Endpoint:   "/v3/videos",
+		Method:     "GET",
+		Paginated:  true,
+	}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	result, err := c.ExecuteAll(spec, inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var parsed []map[string]any
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Fatalf("result is not valid JSON array: %v", err)
+	}
+	if len(parsed) != 1 {
+		t.Fatalf("len(parsed) = %d, want 1", len(parsed))
+	}
+	if parsed[0]["id"] != "v1" {
+		t.Fatalf("parsed[0].id = %v, want %q", parsed[0]["id"], "v1")
+	}
+}
+
+func TestExecuteAll_MultiplePages(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		switch r.URL.Query().Get("token") {
+		case "":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":[{"id":"v1"},{"id":"v2"}],"next_token":"cursor_2"}`))
+		case "cursor_2":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":[{"id":"v3"},{"id":"v4"}],"next_token":"cursor_3"}`))
+		case "cursor_3":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":[{"id":"v5"},{"id":"v6"}],"next_token":""}`))
+		default:
+			t.Fatalf("unexpected token %q", r.URL.Query().Get("token"))
+		}
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+	spec := &command.Spec{
+		Endpoint:   "/v3/videos",
+		Method:     "GET",
+		Paginated:  true,
+	}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	result, err := c.ExecuteAll(spec, inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var parsed []map[string]any
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Fatalf("result is not valid JSON array: %v", err)
+	}
+	if len(parsed) != 6 {
+		t.Fatalf("len(parsed) = %d, want 6", len(parsed))
+	}
+	if calls != 3 {
+		t.Fatalf("calls = %d, want 3", calls)
+	}
+}
+
+func TestExecuteAll_EmptyFirstPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[],"next_token":null}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+	spec := &command.Spec{
+		Endpoint:   "/v3/videos",
+		Method:     "GET",
+		Paginated:  true,
+	}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	result, err := c.ExecuteAll(spec, inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(result) != "[]" {
+		t.Fatalf("result = %s, want []", result)
+	}
+}
+
+func TestExecuteAll_ErrorOnSecondPage(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Query().Get("token") == "" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":[{"id":"v1"}],"next_token":"cursor_2"}`))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":{"code":"server_error","message":"boom"}}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+	spec := &command.Spec{
+		Endpoint:   "/v3/videos",
+		Method:     "GET",
+		Paginated:  true,
+	}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	_, err := c.ExecuteAll(spec, inv)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
+
+func TestExecuteAll_MissingDataField(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"next_token":null}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+	spec := &command.Spec{
+		Endpoint:   "/v3/videos",
+		Method:     "GET",
+		Paginated:  true,
+	}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	_, err := c.ExecuteAll(spec, inv)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 
 func TestExecute_MultipartUpload(t *testing.T) {
 	var gotContentType string

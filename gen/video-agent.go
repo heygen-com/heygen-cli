@@ -12,7 +12,6 @@ var VideoAgentCreate = &command.Spec{
 	Endpoint:     "/v3/video-agents",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-agent create --prompt 'Make a product demo' --style-id modern",
 	},
@@ -52,7 +51,6 @@ var VideoAgentSessionsCreate = &command.Spec{
 	Endpoint:     "/v3/video-agents/sessions",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-agent sessions create --prompt 'Interview video'",
 	},
@@ -104,7 +102,6 @@ var VideoAgentSessionsGet = &command.Spec{
 	Endpoint:     "/v3/video-agents/sessions/{session_id}",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-agent sessions get <session-id>",
 	},
@@ -121,7 +118,6 @@ var VideoAgentSessionsMessagesCreate = &command.Spec{
 	Endpoint:     "/v3/video-agents/sessions/{session_id}/messages",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-agent sessions messages create <session-id> --message 'Add intro'",
 	},
@@ -164,7 +160,6 @@ var VideoAgentSessionsResourcesGet = &command.Spec{
 	Endpoint:     "/v3/video-agents/sessions/{session_id}/resources",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-agent sessions resources list <session-id>",
 	},
@@ -243,7 +238,6 @@ var VideoAgentSessionsStop = &command.Spec{
 	Endpoint:     "/v3/video-agents/sessions/{session_id}/stop",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-agent sessions stop <session-id>",
 	},
@@ -260,8 +254,7 @@ var VideoAgentStylesList = &command.Spec{
 	Endpoint:     "/v3/video-agents/styles",
 	Method:       "GET",
 	BodyEncoding: "",
-	TokenField:   "next_token",
-	DataField:    "data",
+	Paginated:    true,
 	Examples: []string{
 		"heygen video-agent styles list",
 	},

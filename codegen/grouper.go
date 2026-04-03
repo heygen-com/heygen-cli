@@ -53,6 +53,7 @@ import (
 //	  → sessions → sub-group, {session_id} → arg, stop → sub-group
 //	  → x-cli-action: true → no terminal verb appended
 //	  → result: heygen video-agent sessions stop <session-id>
+//
 // GroupDescriptions maps group name → description from the OpenAPI tag.
 // Used by the builder for group command help text.
 type GroupDescriptions map[string]string
@@ -156,8 +157,9 @@ func buildSpec(
 		spec.BodyEncoding = "multipart"
 	}
 
-	// Pagination
-	_, spec.TokenField, spec.DataField = detectPagination(op)
+	// Pagination — only sets Paginated bool. The cursor field names and data
+	// field are API conventions hardcoded in the client package.
+	spec.Paginated = detectPagination(op, pathItem)
 
 	// Flags from query params
 	for _, paramRef := range collectParams(pathItem, op) {
@@ -439,27 +441,47 @@ func isComplexField(s *openapi3.Schema) bool {
 
 // --- Response analysis ---
 
-func detectPagination(op *openapi3.Operation) (hasMore bool, tokenField, dataField string) {
+// detectPagination returns true if the endpoint supports cursor-based pagination.
+// An endpoint is paginated when both: (1) the response has a cursor field
+// (next_token, token, or cursor), and (2) the request has a cursor query param
+// (token, cursor, or page_token).
+func detectPagination(op *openapi3.Operation, pathItem *openapi3.PathItem) bool {
 	respSchema := successResponseSchema(op)
 	if respSchema == nil {
-		return
+		return false
 	}
-	if dataProp := respSchema.Properties["data"]; dataProp != nil && dataProp.Value != nil {
-		dataField = "data"
-	}
-	// Check for token at root level and inside data wrapper
+
+	// Check for cursor field in response (at root or inside data wrapper)
+	hasCursorField := false
 	schemasToCheck := []*openapi3.Schema{respSchema}
-	if dataField != "" {
-		schemasToCheck = append(schemasToCheck, respSchema.Properties["data"].Value)
+	if dataProp := respSchema.Properties["data"]; dataProp != nil && dataProp.Value != nil {
+		schemasToCheck = append(schemasToCheck, dataProp.Value)
 	}
 	for _, schema := range schemasToCheck {
-		for _, candidate := range []string{"next_token", "token", "cursor"} {
-			if _, ok := schema.Properties[candidate]; ok {
-				return true, candidate, dataField
-			}
+		if _, ok := schema.Properties["next_token"]; ok {
+			hasCursorField = true
+			break
 		}
 	}
-	return
+	if !hasCursorField {
+		return false
+	}
+
+	return detectCursorParam(pathItem, op) != ""
+}
+
+func detectCursorParam(pathItem *openapi3.PathItem, op *openapi3.Operation) string {
+	params := collectParams(pathItem, op)
+	for _, paramRef := range params {
+		param := paramRef.Value
+		if param == nil || param.In != "query" {
+			continue
+		}
+		if param.Name == "token" {
+			return param.Name
+		}
+	}
+	return ""
 }
 
 func successResponseSchema(op *openapi3.Operation) *openapi3.Schema {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
@@ -70,10 +71,11 @@ func runCommandWithInput(t *testing.T, serverURL, apiKey string, stdin io.Reader
 	formatter := formatterForArgs(args, &stdout, &stderr)
 
 	// Set env vars for this test
-	if apiKey != "" {
-		t.Setenv("HEYGEN_API_KEY", apiKey)
-	}
+	t.Setenv("HEYGEN_API_KEY", apiKey)
 	t.Setenv("HEYGEN_API_BASE", serverURL)
+	if _, ok := os.LookupEnv("HEYGEN_CONFIG_DIR"); !ok {
+		t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	}
 
 	cmd := newRootCmd("test", formatter)
 	cmd.SetOut(&stdout)

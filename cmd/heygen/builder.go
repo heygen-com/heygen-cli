@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/spf13/cobra"
@@ -41,18 +42,44 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
+			if spec.Paginated {
+				allPages, _ := cmd.Flags().GetBool("all")
+				cursorFlagName := cursorFlagForSpec(spec)
+				cursorSet := cursorFlagName != "" && cmd.Flags().Changed(cursorFlagName)
+
+				if allPages && cursorSet {
+					return clierrors.NewUsage(fmt.Sprintf("--all and --%s are mutually exclusive", cursorFlagName))
+				}
+
+				if allPages {
+					// --all returns a flat array (no envelope), so dataField is empty.
+					// Columns are still passed so --human renders a curated table.
+					cols := defaultColumnsForSpec(spec)
+					result, err := ctx.client.ExecuteAll(spec, inv)
+					if err != nil {
+						return err
+					}
+
+					return ctx.formatter.Data(result, "", cols)
+				}
+			}
+
 			result, err := ctx.client.Execute(spec, inv)
 			if err != nil {
 				return err
 			}
 
-			return ctx.formatter.Data(result, spec.DataField, defaultColumnsForSpec(spec))
+			return ctx.formatter.Data(result, client.APIDataField, defaultColumnsForSpec(spec))
 		},
 	}
 
 	// Register flags from spec
 	for _, flag := range spec.Flags {
 		registerFlag(cmd, flag)
+	}
+
+	if spec.Paginated {
+		cmd.Flags().Bool("all", false, "Fetch all pages into a single JSON array. For datasets over 10,000 items, consider paginating manually with --token.")
 	}
 
 	// Add -d/--data for commands with JSON request bodies
@@ -84,6 +111,15 @@ func buildUseLine(spec *command.Spec) string {
 		parts = append(parts, "<"+arg.Name+">")
 	}
 	return strings.Join(parts, " ")
+}
+
+func cursorFlagForSpec(spec *command.Spec) string {
+	for _, flag := range spec.Flags {
+		if flag.JSONName == "token" {
+			return flag.Name
+		}
+	}
+	return ""
 }
 
 // registerFlag adds a typed flag to the Cobra command based on the FlagSpec.
