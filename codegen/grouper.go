@@ -458,13 +458,8 @@ func detectPagination(op *openapi3.Operation, pathItem *openapi3.PathItem) bool 
 		schemasToCheck = append(schemasToCheck, dataProp.Value)
 	}
 	for _, schema := range schemasToCheck {
-		for _, candidate := range []string{"next_token", "token", "cursor"} {
-			if _, ok := schema.Properties[candidate]; ok {
-				hasCursorField = true
-				break
-			}
-		}
-		if hasCursorField {
+		if _, ok := schema.Properties["next_token"]; ok {
+			hasCursorField = true
 			break
 		}
 	}
@@ -482,8 +477,7 @@ func detectCursorParam(pathItem *openapi3.PathItem, op *openapi3.Operation) stri
 		if param == nil || param.In != "query" {
 			continue
 		}
-		switch param.Name {
-		case "token", "cursor", "page_token":
+		if param.Name == "token" {
 			return param.Name
 		}
 	}
