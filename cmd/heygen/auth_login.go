@@ -16,8 +16,9 @@ import (
 
 func newAuthLoginCmd(ctx *cmdContext) *cobra.Command {
 	return &cobra.Command{
-		Use:   "login",
-		Short: "Store API key for CLI authentication",
+		Use:         "login",
+		Short:       "Store API key for CLI authentication",
+		Annotations: map[string]string{"skipAuth": "true"},
 		Long: `Reads an API key from stdin and stores it for future CLI use.
 
 Interactive:
