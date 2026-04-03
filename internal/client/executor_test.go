@@ -229,7 +229,7 @@ func TestExecute_NetworkError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	srv.Close()
 
-	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
 
 	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
 	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
@@ -242,6 +242,80 @@ func TestExecute_NetworkError(t *testing.T) {
 	}
 	if cliErr.Code != "network_error" {
 		t.Errorf("Code = %q, want %q", cliErr.Code, "network_error")
+	}
+}
+
+func TestExecute_RetryOn429(t *testing.T) {
+	var calls int
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":{"code":"rate_limited","message":"too many requests"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), withFastRetries(1))
+
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
+	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
+
+	result, err := c.Execute(spec, inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want %d", calls, 2)
+	}
+	if string(result) != `{"data":[]}` {
+		t.Fatalf("result = %s, want %s", result, `{"data":[]}`)
+	}
+}
+
+func TestExecute_RetryPreservesBody(t *testing.T) {
+	var calls int
+	var bodies []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(body))
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":{"code":"rate_limited","message":"too many requests"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"new123"}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), withFastRetries(1))
+
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "POST", BodyEncoding: "json"}
+	inv := &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: make(url.Values),
+		Body:        map[string]any{"title": "My Video", "draft": true},
+	}
+
+	result, err := c.Execute(spec, inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want %d", calls, 2)
+	}
+	if len(bodies) != 2 || bodies[0] != bodies[1] {
+		t.Fatalf("bodies = %#v, want two identical request bodies", bodies)
+	}
+	if string(result) != `{"id":"new123"}` {
+		t.Fatalf("result = %s, want %s", result, `{"id":"new123"}`)
 	}
 }
 

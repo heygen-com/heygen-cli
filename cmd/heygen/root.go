@@ -17,14 +17,16 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "heygen",
 		Short: "HeyGen CLI — create and manage videos, avatars, and more",
-		// NOTE: env var list is hardcoded. Keep in sync with envVarByKey in env_provider.go.
+		// NOTE: Only user-facing env vars are listed here. Internal/operational
+		// vars (HEYGEN_MAX_RETRIES, HEYGEN_NO_ANALYTICS, HEYGEN_CONFIG_DIR) are
+		// intentionally hidden. Use "heygen config list" to see all settings.
 		Long: `HeyGen CLI — create and manage videos, avatars, and more.
 
 Environment Variables:
-  HEYGEN_API_KEY            API key for authentication (overrides stored credentials)
-  HEYGEN_OUTPUT             Output format: json, human (default: json)
-  HEYGEN_NO_ANALYTICS       Disable analytics when set (default: enabled)
-  HEYGEN_CONFIG_DIR         Override config directory (default: ~/.heygen)`,
+  HEYGEN_API_KEY     API key for authentication (overrides stored credentials)
+  HEYGEN_OUTPUT      Output format: json, human (default: json)
+
+Use "heygen config list" to see all configuration settings and their sources.`,
 		Version:       version,
 		SilenceUsage:  true, // we handle usage errors ourselves
 		SilenceErrors: true, // we handle error output ourselves
