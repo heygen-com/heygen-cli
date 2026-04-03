@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/heygen-com/heygen-cli/internal/command"
@@ -98,7 +99,7 @@ func (f *HumanFormatter) renderTable(rows []map[string]any, columns []command.Co
 
 	for _, row := range rows {
 		for i, col := range columns {
-			cell := formatValue(fieldValue(row, col.Field))
+			cell := formatCell(fieldValue(row, col.Field), col.Field)
 			if w := lipgloss.Width(cell); w > widths[i] {
 				widths[i] = w
 			}
@@ -111,7 +112,7 @@ func (f *HumanFormatter) renderTable(rows []map[string]any, columns []command.Co
 	for _, row := range rows {
 		values := make([]string, len(columns))
 		for i, col := range columns {
-			values[i] = formatValue(fieldValue(row, col.Field))
+			values[i] = formatCell(fieldValue(row, col.Field), col.Field)
 		}
 		if _, err := fmt.Fprintln(f.out, renderTableLine(values, widths, true)); err != nil {
 			return err
@@ -159,7 +160,7 @@ func (f *HumanFormatter) renderKeyValue(obj map[string]any) error {
 	for _, key := range keys {
 		label := humanizeKey(key)
 		padding := strings.Repeat(" ", max(0, maxLabelWidth-lipgloss.Width(label)))
-		if _, err := fmt.Fprintf(f.out, "%s:%s  %s\n", label, padding, formatValue(obj[key])); err != nil {
+		if _, err := fmt.Fprintf(f.out, "%s:%s  %s\n", label, padding, formatCell(obj[key], key)); err != nil {
 			return err
 		}
 	}
@@ -232,6 +233,18 @@ func fieldValue(row map[string]any, path string) any {
 	return current
 }
 
+func formatCell(v any, fieldName string) string {
+	if value, ok := v.(float64); ok {
+		if isUnixTimestamp(value) {
+			return time.Unix(int64(value), 0).UTC().Format("2006-01-02 15:04")
+		}
+		if strings.Contains(strings.ToLower(fieldName), "duration") {
+			return formatDuration(value)
+		}
+	}
+	return formatValue(v)
+}
+
 func formatValue(v any) string {
 	switch value := v.(type) {
 	case nil:
@@ -261,6 +274,24 @@ func formatValue(v any) string {
 	}
 }
 
+func isUnixTimestamp(value float64) bool {
+	if value != float64(int64(value)) {
+		return false
+	}
+	return value > 1.5e9 && value < 2.2e9
+}
+
+func formatDuration(seconds float64) string {
+	d := time.Duration(seconds * float64(time.Second))
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%dh %dm %ds", int(d.Hours()), int(d.Minutes())%60, int(d.Seconds())%60)
+}
+
 func humanizeKey(key string) string {
 	parts := strings.FieldsFunc(key, func(r rune) bool {
 		return r == '_' || r == '-' || r == '.'
@@ -273,4 +304,3 @@ func humanizeKey(key string) string {
 	}
 	return strings.Join(parts, " ")
 }
-
