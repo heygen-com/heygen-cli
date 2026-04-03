@@ -54,6 +54,9 @@ func TestVideoDownload_Success(t *testing.T) {
 	if payload["path"] != dest {
 		t.Fatalf("path = %q, want %q", payload["path"], dest)
 	}
+	if payload["asset"] != "video" {
+		t.Fatalf("asset = %q, want %q", payload["asset"], "video")
+	}
 }
 
 func TestVideoDownload_DefaultFilename(t *testing.T) {
@@ -128,6 +131,89 @@ func TestVideoDownload_WithOutputPath(t *testing.T) {
 	}
 	if string(data) != "custom-bytes" {
 		t.Fatalf("file contents = %q, want %q", string(data), "custom-bytes")
+	}
+}
+
+func TestVideoDownload_AssetCaptioned(t *testing.T) {
+	tmpDir := t.TempDir()
+	dest := filepath.Join(tmpDir, "captioned.mp4")
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v3/videos/vid_123":
+			writeJSON(t, w, map[string]any{
+				"data": map[string]any{
+					"captioned_video_url": srv.URL + "/download/captioned.mp4",
+					"status":              "completed",
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/download/captioned.mp4":
+			_, _ = w.Write([]byte("captioned-bytes"))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "download", "vid_123", "--asset", "captioned", "--output-path", dest)
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "captioned-bytes" {
+		t.Fatalf("file contents = %q, want %q", string(data), "captioned-bytes")
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal([]byte(res.Stdout), &payload); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
+	}
+	if payload["asset"] != "captioned" {
+		t.Fatalf("asset = %q, want %q", payload["asset"], "captioned")
+	}
+}
+
+func TestVideoDownload_AssetInvalid(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "download", "vid_123", "--asset", "foo")
+	if res.ExitCode != clierrors.ExitUsage {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "must be one of: video, captioned") {
+		t.Fatalf("stderr = %q, want valid asset list", res.Stderr)
+	}
+}
+
+func TestVideoDownload_AssetNotAvailable(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos/vid_123": {
+			StatusCode: http.StatusOK,
+			Body:       `{"data":{"status":"completed","captioned_video_url":""}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "download", "vid_123", "--asset", "captioned")
+	if res.ExitCode != clierrors.ExitGeneral {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stderr)
+	}
+
+	var envelope map[string]map[string]any
+	if err := json.Unmarshal([]byte(res.Stderr), &envelope); err != nil {
+		t.Fatalf("stderr is not valid JSON: %v\nstderr: %s", err, res.Stderr)
+	}
+	if envelope["error"]["code"] != "asset_not_available" {
+		t.Fatalf("error.code = %v, want %q", envelope["error"]["code"], "asset_not_available")
+	}
+	if !strings.Contains(res.Stderr, "captions enabled") {
+		t.Fatalf("stderr = %q, want captions hint", res.Stderr)
 	}
 }
 

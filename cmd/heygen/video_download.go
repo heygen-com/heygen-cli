@@ -18,17 +18,35 @@ import (
 
 var downloadClient = &http.Client{Timeout: 10 * time.Minute}
 
+type assetInfo struct {
+	field string
+	ext   string
+	label string
+}
+
+var assetTypes = map[string]assetInfo{
+	"video":     {field: "video_url", ext: ".mp4", label: "video"},
+	"captioned": {field: "captioned_video_url", ext: ".mp4", label: "captioned video"},
+}
+
 func newVideoDownloadCmd(ctx *cmdContext) *cobra.Command {
 	var outputPath string
+	var asset string
 
 	cmd := &cobra.Command{
 		Use:   "download <video-id>",
-		Short: "Download a video file to disk",
+		Short: "Download a video file or related asset to disk",
 		Args:  cobra.ExactArgs(1),
 		Example: "heygen video download <video-id>\n" +
+			"heygen video download <video-id> --asset captioned\n" +
 			"heygen video download <video-id> --output-path my-video.mp4",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			videoID := args[0]
+			info, ok := assetTypes[asset]
+			if !ok {
+				return clierrors.NewUsage(
+					fmt.Sprintf("invalid --asset value %q: must be one of: video, captioned", asset))
+			}
 
 			spec := &command.Spec{
 				Endpoint: "/v3/videos/{video_id}",
@@ -43,7 +61,7 @@ func newVideoDownloadCmd(ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
-			videoURL, err := extractVideoURL(result, videoID)
+			assetURL, err := extractAssetURL(result, videoID, info)
 			if err != nil {
 				return err
 			}
@@ -52,15 +70,16 @@ func newVideoDownloadCmd(ctx *cmdContext) *cobra.Command {
 			if dest == "" {
 				// Sanitize: strip directory components from video ID to prevent
 				// path traversal. Handles IDs with / or \ safely.
-				dest = filepath.Base(videoID) + ".mp4"
+				dest = filepath.Base(videoID) + info.ext
 			}
 
-			if err := downloadFile(cmd.Context(), videoURL, dest); err != nil {
+			if err := downloadFile(cmd.Context(), assetURL, dest); err != nil {
 				return err
 			}
 
 			data, err := json.Marshal(map[string]string{
-				"message": "Downloaded to " + dest,
+				"asset":   asset,
+				"message": fmt.Sprintf("Downloaded %s to %s", info.label, dest),
 				"path":    dest,
 			})
 			if err != nil {
@@ -71,34 +90,49 @@ func newVideoDownloadCmd(ctx *cmdContext) *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringVar(&asset, "asset", "video", "Asset to download: video, captioned")
 	cmd.Flags().StringVar(&outputPath, "output-path", "", "Output file path (default: {video-id}.mp4)")
 	return cmd
 }
 
-func extractVideoURL(raw json.RawMessage, videoID string) (string, error) {
+func extractAssetURL(raw json.RawMessage, videoID string, info assetInfo) (string, error) {
 	var resp struct {
-		Data struct {
-			VideoURL string `json:"video_url"`
-			Status   string `json:"status"`
-		} `json:"data"`
+		Data map[string]json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return "", clierrors.New("failed to parse video response")
 	}
 
-	if resp.Data.VideoURL == "" {
-		switch resp.Data.Status {
+	var status string
+	if rawStatus, ok := resp.Data["status"]; ok {
+		_ = json.Unmarshal(rawStatus, &status)
+	}
+
+	var assetURL string
+	if rawURL, ok := resp.Data[info.field]; ok {
+		_ = json.Unmarshal(rawURL, &assetURL)
+	}
+
+	if assetURL == "" {
+		switch status {
 		case "failed", "error":
 			return "", &clierrors.CLIError{
 				Code:     "video_failed",
-				Message:  fmt.Sprintf("video rendering failed (status: %s)", resp.Data.Status),
+				Message:  fmt.Sprintf("video rendering failed (status: %s)", status),
 				Hint:     "Check details with: heygen video get " + videoID,
 				ExitCode: clierrors.ExitGeneral,
 			}
+		case "completed":
+			return "", &clierrors.CLIError{
+				Code:     "asset_not_available",
+				Message:  fmt.Sprintf("%s not available for this video", info.label),
+				Hint:     assetHint(info.field),
+				ExitCode: clierrors.ExitGeneral,
+			}
 		default:
-			msg := "video URL not available"
-			if resp.Data.Status != "" {
-				msg = fmt.Sprintf("video URL not available (status: %s)", resp.Data.Status)
+			msg := fmt.Sprintf("%s URL not available", info.label)
+			if status != "" {
+				msg = fmt.Sprintf("%s URL not available (status: %s)", info.label, status)
 			}
 			return "", &clierrors.CLIError{
 				Code:     "video_not_ready",
@@ -109,7 +143,16 @@ func extractVideoURL(raw json.RawMessage, videoID string) (string, error) {
 		}
 	}
 
-	return resp.Data.VideoURL, nil
+	return assetURL, nil
+}
+
+func assetHint(field string) string {
+	switch field {
+	case "captioned_video_url":
+		return "Video may not have been created with captions enabled."
+	default:
+		return ""
+	}
 }
 
 func downloadFile(ctx context.Context, videoURL, dest string) error {
