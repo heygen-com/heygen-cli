@@ -31,6 +31,18 @@ var videoListSpec = &command.Spec{
 	Examples: []string{"heygen video list --limit 10"},
 }
 
+// videoCreateWaitSpec has Group/Name matching pollConfigs["video/create"],
+// so the builder picks up PollConfig at call time — no need to set it here.
+var videoCreateWaitSpec = &command.Spec{
+	Group:        "video",
+	Name:         "create",
+	Summary:      "Create a video",
+	Endpoint:     "/v3/videos",
+	Method:       "POST",
+	BodyEncoding: "json",
+	Examples:     []string{"heygen video create --wait"},
+}
+
 func TestGenBuilder_VideoList_Success(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/videos": {
@@ -87,6 +99,177 @@ func TestGenBuilder_VideoList_Flags(t *testing.T) {
 
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+}
+
+func TestGenBuilder_VideoCreate_Wait_Success(t *testing.T) {
+	var statusCalls int
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/videos": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123"}}`,
+		},
+		"GET /v3/videos/vid_123": {
+			StatusCode: 200,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				statusCalls++
+			},
+			Body: `{"data":{"video_id":"vid_123","status":"processing"}}`,
+		},
+	})
+	defer srv.Close()
+
+	originalHandler := srv.Config.Handler
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/v3/videos/vid_123" {
+			statusCalls++
+			w.WriteHeader(http.StatusOK)
+			if statusCalls < 2 {
+				_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"processing"}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"completed","video_url":"https://cdn.test/video.mp4"}}`))
+			return
+		}
+		originalHandler.ServeHTTP(w, r)
+	})
+
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
+	}
+	data := parsed["data"].(map[string]any)
+	if data["status"] != "completed" {
+		t.Fatalf("status = %v, want completed", data["status"])
+	}
+	// JSON mode: no progress on stderr (keeps it machine-readable).
+	// Progress is only emitted in --human mode.
+	if strings.Contains(res.Stderr, "Polling:") {
+		t.Fatalf("stderr should not contain progress in JSON mode: %s", res.Stderr)
+	}
+}
+
+func TestGenBuilder_VideoCreate_Wait_Failure(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/videos": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123"}}`,
+		},
+		"GET /v3/videos/vid_123": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123","status":"failed"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait")
+
+	if res.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "operation reached terminal failure state: failed") {
+		t.Fatalf("stderr = %s, want failure message", res.Stderr)
+	}
+	// Failure response should be output to stdout so users can see error details
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
+		t.Fatalf("stdout should contain failure response: %v\nstdout: %s", err, res.Stdout)
+	}
+	data := parsed["data"].(map[string]any)
+	if data["status"] != "failed" {
+		t.Fatalf("status = %v, want failed", data["status"])
+	}
+}
+
+func TestGenBuilder_VideoCreate_Wait_Timeout(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/videos": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123"}}`,
+		},
+		"GET /v3/videos/vid_123": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123","status":"processing"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--timeout", "20ms")
+
+	if res.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "polling timed out before the operation completed") {
+		t.Fatalf("stderr = %s, want timeout message", res.Stderr)
+	}
+}
+
+func TestGenBuilder_VideoCreate_NoWait(t *testing.T) {
+	var statusCalled bool
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/videos": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123","status":"pending"}}`,
+		},
+		"GET /v3/videos/vid_123": {
+			StatusCode: 200,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				statusCalled = true
+			},
+			Body: `{"data":{"video_id":"vid_123","status":"completed"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if statusCalled {
+		t.Fatal("status endpoint should not be called without --wait")
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
+	}
+	data := parsed["data"].(map[string]any)
+	if data["status"] != "pending" {
+		t.Fatalf("status = %v, want pending", data["status"])
+	}
+}
+
+func TestGenBuilder_VideoCreate_WaitNotAvailable(t *testing.T) {
+	nonPollable := &command.Spec{
+		Group:    "video",
+		Name:     "get",
+		Summary:  "Get video",
+		Endpoint: "/v3/videos/{video_id}",
+		Method:   "GET",
+		Args: []command.ArgSpec{
+			{Name: "video-id", Param: "video_id"},
+		},
+		Examples: []string{"heygen video get <video-id>"},
+	}
+
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", nonPollable, "get", "vid_123", "--wait")
+
+	if res.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "unknown flag: --wait") {
+		t.Fatalf("stderr = %s, want unknown flag error", res.Stderr)
 	}
 }
 
@@ -407,6 +590,9 @@ func runGeneratedRootCommand(t *testing.T, serverURL, apiKey string, groups map[
 
 	t.Setenv("HEYGEN_API_KEY", apiKey)
 	t.Setenv("HEYGEN_API_BASE", serverURL)
+	if _, ok := os.LookupEnv("HEYGEN_CONFIG_DIR"); !ok {
+		t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	}
 
 	root := newRootCmdWithSpecs("test", formatter, groups)
 	root.SetOut(&stdout)

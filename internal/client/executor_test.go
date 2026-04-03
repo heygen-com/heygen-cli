@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
@@ -433,5 +435,405 @@ func TestExecute_MethodRequired(t *testing.T) {
 	_, err := c.Execute(spec, inv)
 	if err == nil {
 		t.Fatal("expected error for empty Method, got nil")
+	}
+}
+
+func TestExecuteAndPoll_ImmediateSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/videos":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123"}}`))
+		case "/v3/videos/vid_123":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"completed"}}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	result, err := c.ExecuteAndPoll(context.Background(), pollableVideoCreateSpec(), emptyInvocation(), PollOptions{
+		BaseDelay: time.Millisecond,
+		MaxDelay:  time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(result) != `{"data":{"video_id":"vid_123","status":"completed"}}` {
+		t.Fatalf("result = %s", result)
+	}
+}
+
+func TestExecuteAndPoll_PollsUntilComplete(t *testing.T) {
+	var statusCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/videos":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123"}}`))
+		case "/v3/videos/vid_123":
+			statusCalls++
+			w.WriteHeader(http.StatusOK)
+			switch statusCalls {
+			case 1, 2:
+				_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"processing"}}`))
+			case 3:
+				_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"completed"}}`))
+			default:
+				t.Fatalf("unexpected status call %d", statusCalls)
+			}
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	result, err := c.ExecuteAndPoll(context.Background(), pollableVideoCreateSpec(), emptyInvocation(), PollOptions{
+		BaseDelay: time.Millisecond,
+		MaxDelay:  time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if statusCalls != 3 {
+		t.Fatalf("statusCalls = %d, want 3", statusCalls)
+	}
+	if string(result) != `{"data":{"video_id":"vid_123","status":"completed"}}` {
+		t.Fatalf("result = %s", result)
+	}
+}
+
+func TestExecuteAndPoll_FailureState(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/videos":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123"}}`))
+		case "/v3/videos/vid_123":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"failed"}}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	_, err := c.ExecuteAndPoll(context.Background(), pollableVideoCreateSpec(), emptyInvocation(), PollOptions{
+		BaseDelay: time.Millisecond,
+		MaxDelay:  time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var failErr *ErrPollFailed
+	if !errors.As(err, &failErr) {
+		t.Fatalf("expected *ErrPollFailed, got %T: %v", err, err)
+	}
+	if failErr.Status != "failed" {
+		t.Fatalf("status = %q, want %q", failErr.Status, "failed")
+	}
+	// Verify the full response is preserved
+	if !strings.Contains(string(failErr.Data), `"status":"failed"`) {
+		t.Fatalf("data = %s, want failure response", failErr.Data)
+	}
+}
+
+func TestExecuteAndPoll_TimeoutWhileWaiting(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/videos":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123"}}`))
+		case "/v3/videos/vid_123":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"processing"}}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	_, err := c.ExecuteAndPoll(ctx, pollableVideoCreateSpec(), emptyInvocation(), PollOptions{
+		BaseDelay: 50 * time.Millisecond,
+		MaxDelay:  50 * time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected *CLIError, got %T", err)
+	}
+	if cliErr.Code != "timeout" {
+		t.Fatalf("code = %q, want timeout", cliErr.Code)
+	}
+}
+
+func TestExecuteAndPoll_TimeoutDuringRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/videos":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123"}}`))
+		case "/v3/videos/vid_123":
+			<-r.Context().Done()
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	_, err := c.ExecuteAndPoll(ctx, pollableVideoCreateSpec(), emptyInvocation(), PollOptions{
+		BaseDelay: time.Millisecond,
+		MaxDelay:  time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected *CLIError, got %T", err)
+	}
+	if cliErr.Code != "timeout" {
+		t.Fatalf("code = %q, want timeout", cliErr.Code)
+	}
+}
+
+func TestExecuteAndPoll_CreateFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_parameter","message":"bad request"}}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	_, err := c.ExecuteAndPoll(context.Background(), pollableVideoCreateSpec(), emptyInvocation(), PollOptions{
+		BaseDelay: time.Millisecond,
+		MaxDelay:  time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected *CLIError, got %T", err)
+	}
+	if cliErr.Code != "invalid_parameter" {
+		t.Fatalf("code = %q, want invalid_parameter", cliErr.Code)
+	}
+}
+
+func TestExecuteAndPoll_StatusCallbackCalled(t *testing.T) {
+	var statuses []string
+	var statusCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/videos":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123"}}`))
+		case "/v3/videos/vid_123":
+			statusCalls++
+			w.WriteHeader(http.StatusOK)
+			if statusCalls == 1 {
+				_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"processing"}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"completed"}}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	_, err := c.ExecuteAndPoll(context.Background(), pollableVideoCreateSpec(), emptyInvocation(), PollOptions{
+		BaseDelay: time.Millisecond,
+		MaxDelay:  time.Millisecond,
+		OnStatus: func(status string, elapsed time.Duration) {
+			statuses = append(statuses, status)
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(statuses) != 1 || statuses[0] != "processing" {
+		t.Fatalf("statuses = %v, want [processing]", statuses)
+	}
+}
+
+func TestExtractJSONPath_Nested(t *testing.T) {
+	value, err := extractJSONPath(json.RawMessage(`{"data":{"video_id":"abc123"}}`), "data.video_id")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if value != "abc123" {
+		t.Fatalf("value = %q, want %q", value, "abc123")
+	}
+}
+
+func TestExtractJSONPath_Missing(t *testing.T) {
+	_, err := extractJSONPath(json.RawMessage(`{"data":{}}`), "data.video_id")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestExtractJSONPath_ArrayIndex(t *testing.T) {
+	value, err := extractJSONPath(json.RawMessage(`{"data":{"ids":["abc","def"]}}`), "data.ids.0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if value != "abc" {
+		t.Fatalf("value = %q, want %q", value, "abc")
+	}
+}
+
+func TestExtractJSONPath_ArrayIndexOutOfBounds(t *testing.T) {
+	_, err := extractJSONPath(json.RawMessage(`{"data":{"ids":["abc"]}}`), "data.ids.5")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestExtractJSONPath_ArrayOnNonArray(t *testing.T) {
+	_, err := extractJSONPath(json.RawMessage(`{"data":{"id":"abc"}}`), "data.id.0")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestExecuteAndPoll_RejectsBatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		// Create response returns multiple IDs (batch translation)
+		_, _ = w.Write([]byte(`{"data":{"video_translation_ids":["id_1","id_2","id_3"]}}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	spec := &command.Spec{
+		Endpoint:     "/v3/video-translations",
+		Method:       http.MethodPost,
+		BodyEncoding: "json",
+		PollConfig: &command.PollConfig{
+			StatusEndpoint: "/v3/video-translations/{video_translation_id}",
+			StatusField:    "data.status",
+			TerminalOK:     []string{"completed"},
+			TerminalFail:   []string{"failed"},
+			IDField:        "data.video_translation_ids.0",
+		},
+	}
+
+	_, err := c.ExecuteAndPoll(context.Background(), spec, emptyInvocation(), PollOptions{
+		BaseDelay: time.Millisecond,
+		MaxDelay:  time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected *CLIError, got %T: %v", err, err)
+	}
+	if cliErr.Code != "batch_not_supported" {
+		t.Fatalf("code = %q, want %q", cliErr.Code, "batch_not_supported")
+	}
+	if !strings.Contains(cliErr.Message, "3 resources") {
+		t.Fatalf("message = %q, want mention of 3 resources", cliErr.Message)
+	}
+}
+
+func TestExecuteAndPoll_SingleArrayElement_OK(t *testing.T) {
+	var statusCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/video-translations":
+			w.WriteHeader(http.StatusOK)
+			// Single-language: array with 1 element
+			_, _ = w.Write([]byte(`{"data":{"video_translation_ids":["trans_123"]}}`))
+		case "/v3/video-translations/trans_123":
+			statusCalls++
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"id":"trans_123","status":"completed"}}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	spec := &command.Spec{
+		Endpoint:     "/v3/video-translations",
+		Method:       http.MethodPost,
+		BodyEncoding: "json",
+		PollConfig: &command.PollConfig{
+			StatusEndpoint: "/v3/video-translations/{video_translation_id}",
+			StatusField:    "data.status",
+			TerminalOK:     []string{"completed"},
+			TerminalFail:   []string{"failed"},
+			IDField:        "data.video_translation_ids.0",
+		},
+	}
+
+	result, err := c.ExecuteAndPoll(context.Background(), spec, emptyInvocation(), PollOptions{
+		BaseDelay: time.Millisecond,
+		MaxDelay:  time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if statusCalls != 1 {
+		t.Fatalf("statusCalls = %d, want 1", statusCalls)
+	}
+	if !strings.Contains(string(result), "completed") {
+		t.Fatalf("result = %s, want completed", result)
+	}
+}
+
+func pollableVideoCreateSpec() *command.Spec {
+	return &command.Spec{
+		Endpoint:     "/v3/videos",
+		Method:       http.MethodPost,
+		BodyEncoding: "json",
+		PollConfig: &command.PollConfig{
+			StatusEndpoint: "/v3/videos/{video_id}",
+			StatusField:    "data.status",
+			TerminalOK:     []string{"completed"},
+			TerminalFail:   []string{"failed", "error"},
+			IDField:        "data.video_id",
+		},
+	}
+}
+
+func emptyInvocation() *command.Invocation {
+	return &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: make(url.Values),
 	}
 }
