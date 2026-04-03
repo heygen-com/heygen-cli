@@ -75,26 +75,23 @@ jobs:
       - name: Write release notes
         shell: bash
         run: |
-          set -euo pipefail
-
           short_sha="$(git rev-parse --short HEAD)"
           commit_date="$(git show -s --format=%ci HEAD)"
           commit_subject="$(git show -s --format=%s HEAD)"
-          actor="@${GITHUB_ACTOR}"
 
-          cat > /tmp/dev-release-notes.md <<EOF
-## Internal Dev Build
-
-Latest CLI build from \`main\`. Manually triggered.
-
-- **Commit:** ${short_sha}
-- **Date:** ${commit_date}
-- **Source:** \`main\`
-- **Commit message:** ${commit_subject}
-- **Triggered by:** ${actor}
-
-Download the archive for your platform from the assets below and add \`heygen\` to your \`PATH\`.
-EOF
+          {
+            echo "## Internal Dev Build"
+            echo ""
+            echo "Latest CLI build from \`main\`. Manually triggered."
+            echo ""
+            echo "- **Commit:** ${short_sha}"
+            echo "- **Date:** ${commit_date}"
+            echo "- **Source:** \`main\`"
+            echo "- **Commit message:** ${commit_subject}"
+            echo "- **Triggered by:** @${GITHUB_ACTOR}"
+            echo ""
+            echo "Download the archive for your platform from the assets below and add \`heygen\` to your \`PATH\`."
+          } > /tmp/dev-release-notes.md
 
       - name: Recreate dev prerelease
         env:
