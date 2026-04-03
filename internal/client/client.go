@@ -35,25 +35,10 @@ func WithHTTPClient(hc *http.Client) Option {
 	return func(c *Client) { c.httpClient = hc }
 }
 
-// WithRetry merges the given config into the default retry configuration.
-// MaxRetries is always applied (0 is valid — means no retries).
-// BaseDelay and MaxDelay are only applied if positive, so
-// WithRetry(RetryConfig{MaxRetries: 1}) keeps the default delays.
-func WithRetry(config RetryConfig) Option {
-	return func(c *Client) {
-		c.retry.MaxRetries = config.MaxRetries
-		if config.BaseDelay > 0 {
-			c.retry.BaseDelay = config.BaseDelay
-		}
-		if config.MaxDelay > 0 {
-			c.retry.MaxDelay = config.MaxDelay
-		}
-	}
-}
-
-// WithNoRetry disables retries entirely.
-func WithNoRetry() Option {
-	return func(c *Client) { c.retry.MaxRetries = 0 }
+// WithMaxRetries sets the maximum number of retries for transient failures.
+// 0 disables retries. Delays remain at their defaults.
+func WithMaxRetries(n int) Option {
+	return func(c *Client) { c.retry.MaxRetries = n }
 }
 
 // WithUserAgent overrides the default User-Agent header.

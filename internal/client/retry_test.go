@@ -26,7 +26,7 @@ func TestRetry_429ThenSuccess_GET(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 1}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(1))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -57,7 +57,7 @@ func TestRetry_429ThenSuccess_POST(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 1}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(1))
 	req, _ := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(`{"title":"demo"}`))
 	resp, err := c.Do(req)
 	if err != nil {
@@ -85,7 +85,7 @@ func TestRetry_500ThenSuccess_GET(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 1}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(1))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -109,7 +109,7 @@ func TestRetry_500NoRetry_POST(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 2}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(2))
 	req, _ := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(`{"title":"demo"}`))
 	resp, err := c.Do(req)
 	if err != nil {
@@ -133,7 +133,7 @@ func TestRetry_400NoRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 2}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(2))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -154,7 +154,7 @@ func TestRetry_401NoRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 2}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(2))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -175,7 +175,7 @@ func TestRetry_ExhaustedRetries(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 2}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(2))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -206,7 +206,7 @@ func TestRetry_NetworkErrorThenSuccess_GET(t *testing.T) {
 				base: srv.Client().Transport,
 			},
 		}),
-		WithRetry(RetryConfig{MaxRetries: 1}),
+		WithMaxRetries(1),
 	)
 
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
@@ -226,7 +226,7 @@ func TestRetry_NetworkErrorNoRetry_POST(t *testing.T) {
 		WithHTTPClient(&http.Client{
 			Transport: &failOnceTransport{err: errors.New("temporary network error")},
 		}),
-		WithRetry(RetryConfig{MaxRetries: 2}),
+		WithMaxRetries(2),
 	)
 
 	req, _ := http.NewRequest(http.MethodPost, "http://example.invalid", strings.NewReader(`{"title":"demo"}`))
@@ -261,7 +261,7 @@ func TestRetry_RetryAfterSeconds(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 1}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(1))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 
 	start := time.Now()
@@ -291,7 +291,7 @@ func TestRetry_RetryAfterHTTPDate(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 1}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(1))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 
 	start := time.Now()
@@ -315,7 +315,7 @@ func TestRetry_MaxRetriesZero(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 0}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(0))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -334,11 +334,7 @@ func TestRetry_ContextCancellation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{
-		MaxRetries: 1,
-		BaseDelay:  2 * time.Second,
-		MaxDelay:   2 * time.Second,
-	}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(1))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -379,7 +375,7 @@ func TestRetry_NoGetBody_SkipsRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithRetry(RetryConfig{MaxRetries: 2}))
+	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(2))
 	req, _ := http.NewRequest(http.MethodPost, srv.URL, nil)
 	req.Body = io.NopCloser(strings.NewReader(`{"title":"demo"}`))
 	req.ContentLength = int64(len(`{"title":"demo"}`))

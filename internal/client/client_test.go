@@ -80,8 +80,19 @@ func TestClient_Defaults(t *testing.T) {
 	}
 }
 
-func TestClient_WithNoRetry(t *testing.T) {
-	c := New("key", WithNoRetry())
+func TestClient_WithMaxRetries(t *testing.T) {
+	c := New("key", WithMaxRetries(5))
+	if c.retry.MaxRetries != 5 {
+		t.Errorf("retry.MaxRetries = %d, want %d", c.retry.MaxRetries, 5)
+	}
+	// Delays stay at defaults
+	if c.retry.BaseDelay != time.Second {
+		t.Errorf("retry.BaseDelay = %v, want %v", c.retry.BaseDelay, time.Second)
+	}
+}
+
+func TestClient_WithMaxRetries_Zero(t *testing.T) {
+	c := New("key", WithMaxRetries(0))
 	if c.retry.MaxRetries != 0 {
 		t.Errorf("retry.MaxRetries = %d, want %d", c.retry.MaxRetries, 0)
 	}
