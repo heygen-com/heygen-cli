@@ -37,7 +37,7 @@ paths:
                         type: array
                         items:
                           type: object
-                      token:
+                      next_token:
                         type: string
     post:
       tags: [Videos]

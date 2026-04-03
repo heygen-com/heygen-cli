@@ -17,14 +17,12 @@ import (
 // videoListSpec mirrors the hand-written video list command as a Spec,
 // proving the generic builder produces identical behavior.
 var videoListSpec = &command.Spec{
-	Group:    "video",
-	Name:     "list",
-	Summary:  "List videos",
-	Endpoint: "/v3/videos",
-	Method:   "GET",
-	// TokenField/DataField for pagination (used by paginator, not tested here)
-	TokenField: "next_token",
-	DataField:  "data",
+	Group:     "video",
+	Name:      "list",
+	Summary:   "List videos",
+	Endpoint:  "/v3/videos",
+	Method:    "GET",
+	Paginated: true,
 	Flags: []command.FlagSpec{
 		{Name: "limit", Type: "int", Source: "query", JSONName: "limit"},
 		{Name: "token", Type: "string", Source: "query", JSONName: "token"},

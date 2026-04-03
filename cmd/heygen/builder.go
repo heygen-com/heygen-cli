@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/spf13/cobra"
@@ -46,7 +47,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
-			return ctx.formatter.Data(result, spec.DataField, defaultColumnsForSpec(spec))
+			return ctx.formatter.Data(result, client.APIDataField, defaultColumnsForSpec(spec))
 		},
 	}
 

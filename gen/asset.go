@@ -12,7 +12,6 @@ var AssetCreate = &command.Spec{
 	Endpoint:     "/v3/assets",
 	Method:       "POST",
 	BodyEncoding: "multipart",
-	DataField:    "data",
 	Examples: []string{
 		"heygen asset create --file ./video.mp4",
 	},
