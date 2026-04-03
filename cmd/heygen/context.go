@@ -19,12 +19,28 @@ type cmdContext struct {
 // skipAuth checks whether the command (or any parent) is annotated to
 // bypass credential resolution. Used by auth and config commands.
 func skipAuth(cmd *cobra.Command) bool {
+	if isSchemaRequest(cmd) {
+		return true
+	}
 	for c := cmd; c != nil; c = c.Parent() {
 		if c.Annotations != nil && c.Annotations["skipAuth"] == "true" {
 			return true
 		}
 	}
 	return false
+}
+
+func isSchemaRequest(cmd *cobra.Command) bool {
+	return schemaFlagEnabled(cmd, "request-schema") || schemaFlagEnabled(cmd, "response-schema")
+}
+
+func schemaFlagEnabled(cmd *cobra.Command, name string) bool {
+	flag := cmd.Flags().Lookup(name)
+	if flag == nil || !flag.Changed {
+		return false
+	}
+	enabled, err := cmd.Flags().GetBool(name)
+	return err == nil && enabled
 }
 
 // initContext sets up the config provider and, for commands that require

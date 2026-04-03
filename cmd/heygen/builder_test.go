@@ -43,6 +43,58 @@ var videoCreateWaitSpec = &command.Spec{
 	Examples:     []string{"heygen video create --wait"},
 }
 
+<<<<<<< HEAD
+var videoCreateSchemaSpec = &command.Spec{
+	Group:          "video",
+	Name:           "create",
+	Summary:        "Create a video",
+	Endpoint:       "/v3/videos",
+	Method:         "POST",
+	BodyEncoding:   "json",
+	RequestSchema:  "{\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"data\": {\n      \"type\": \"object\"\n    }\n  }\n}",
+	Examples:       []string{"heygen video create --request-schema"},
+}
+
+var videoGetSchemaSpec = &command.Spec{
+	Group:          "video",
+	Name:           "get",
+	Summary:        "Get video",
+	Endpoint:       "/v3/videos/{video_id}",
+	Method:         "GET",
+	ResponseSchema: "{\n  \"type\": \"object\"\n}",
+	Args: []command.ArgSpec{
+		{Name: "video-id", Param: "video_id"},
+	},
+	Examples: []string{"heygen video get <video-id>"},
+}
+
+var videoTranslateSchemaSpec = &command.Spec{
+	Group:         "video-translate",
+	Name:          "create",
+	Summary:       "Create video translation",
+	Endpoint:      "/v3/video-translations",
+	Method:        "POST",
+	RequestSchema: "{\n  \"type\": \"object\"\n}",
+	Flags: []command.FlagSpec{
+		{Name: "output-languages", Type: "string-slice", Source: "body", JSONName: "output_languages", Required: true},
+	},
+	Examples: []string{"heygen video-translate create --request-schema"},
+}
+
+var webhookEndpointUpdateSchemaSpec = &command.Spec{
+	Group:         "webhook",
+	Name:          "endpoints update",
+	Summary:       "Update webhook endpoint",
+	Endpoint:      "/v3/webhooks/endpoints/{endpoint_id}",
+	Method:        "PATCH",
+	RequestSchema: "{\n  \"type\": \"object\"\n}",
+	Args: []command.ArgSpec{
+		{Name: "endpoint-id", Param: "endpoint_id"},
+	},
+	Examples: []string{"heygen webhook endpoints update <endpoint-id> --request-schema"},
+}
+
 var videoAgentWaitSpec = &command.Spec{
 	Group:        "video-agent",
 	Name:         "create",
@@ -112,6 +164,102 @@ func TestGenBuilder_VideoList_Flags(t *testing.T) {
 	}
 }
 
+func TestGenBuilder_VideoCreate_RequestSchema(t *testing.T) {
+	res := runGenCommand(t, "http://example.test", "", videoCreateSchemaSpec, "create", "--request-schema")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if res.Stdout != videoCreateSchemaSpec.RequestSchema+"\n" {
+		t.Fatalf("stdout = %q, want request schema", res.Stdout)
+	}
+	if res.Stderr != "" {
+		t.Fatalf("stderr = %q, want empty", res.Stderr)
+	}
+}
+
+func TestGenBuilder_VideoGet_ResponseSchema(t *testing.T) {
+	res := runGenCommand(t, "http://example.test", "", videoGetSchemaSpec, "get", "vid_123", "--response-schema")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if res.Stdout != videoGetSchemaSpec.ResponseSchema+"\n" {
+		t.Fatalf("stdout = %q, want response schema", res.Stdout)
+	}
+}
+
+func TestGenBuilder_VideoList_NoRequestSchema(t *testing.T) {
+	res := runGenCommand(t, "http://example.test", "test-key", videoListSpec, "list", "--request-schema")
+
+	if res.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "unknown flag: --request-schema") {
+		t.Fatalf("stderr = %s, want unknown flag error", res.Stderr)
+	}
+}
+
+func TestGenBuilder_VideoCreate_SchemaSkipsAuth(t *testing.T) {
+	res := runGenCommand(t, "http://example.test", "", videoCreateSchemaSpec, "create", "--response-schema")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if res.Stdout != videoCreateSchemaSpec.ResponseSchema+"\n" {
+		t.Fatalf("stdout = %q, want response schema", res.Stdout)
+	}
+}
+
+func TestGenBuilder_SchemaBypassesRequiredFlags(t *testing.T) {
+	res := runGenCommand(t, "http://example.test", "", videoTranslateSchemaSpec, "create", "--request-schema")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if res.Stdout != videoTranslateSchemaSpec.RequestSchema+"\n" {
+		t.Fatalf("stdout = %q, want request schema", res.Stdout)
+	}
+	if res.Stderr != "" {
+		t.Fatalf("stderr = %q, want empty", res.Stderr)
+	}
+}
+
+func TestGenBuilder_SchemaBypassesArgs(t *testing.T) {
+	res := runGenCommand(t, "http://example.test", "", webhookEndpointUpdateSchemaSpec, "endpoints", "update", "--request-schema")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if res.Stdout != webhookEndpointUpdateSchemaSpec.RequestSchema+"\n" {
+		t.Fatalf("stdout = %q, want request schema", res.Stdout)
+	}
+	if res.Stderr != "" {
+		t.Fatalf("stderr = %q, want empty", res.Stderr)
+	}
+}
+
+func TestGenBuilder_RequiredFlagsStillValidatedWithoutSchema(t *testing.T) {
+	res := runGenCommand(t, "http://example.test", "test-key", videoTranslateSchemaSpec, "create")
+
+	if res.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "required flag(s)") || !strings.Contains(res.Stderr, "output-languages") {
+		t.Fatalf("stderr = %q, want required flag error", res.Stderr)
+	}
+}
+
+func TestGenBuilder_ArgsStillValidatedWithoutSchema(t *testing.T) {
+	res := runGenCommand(t, "http://example.test", "", webhookEndpointUpdateSchemaSpec, "endpoints", "update")
+
+	if res.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "accepts 1 arg(s), received 0") {
+		t.Fatalf("stderr = %q, want positional arg error", res.Stderr)
+	}
+}
 func TestGenBuilder_VideoCreate_Wait_Success(t *testing.T) {
 	var statusCalls int
 	srv := setupTestServer(t, map[string]testHandler{

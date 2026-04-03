@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/heygen-com/heygen-cli/internal/output"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"golang.org/x/term"
 )
 
@@ -29,8 +31,26 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 		Short:   spec.Summary,
 		Long:    spec.Description,
 		Example: strings.Join(spec.Examples, "\n"),
-		Args:    cobra.ExactArgs(len(spec.Args)),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if isSchemaRequest(cmd) {
+				return nil
+			}
+			return cobra.ExactArgs(len(spec.Args))(cmd, args)
+		},
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if isSchemaRequest(cmd) {
+				clearRequiredFlagAnnotations(cmd)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			defer restoreRequiredFlagAnnotations(cmd)
+
+			if show, schema := requestedSchema(cmd, spec); show {
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), schema)
+				return err
+			}
+
 			// Parse -d/--data if provided
 			var parsedData map[string]any
 			if rawData != "" {
@@ -140,6 +160,12 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 		registerFlag(cmd, flag)
 	}
 
+	if spec.RequestSchema != "" {
+		cmd.Flags().Bool("request-schema", false, "Output the underlying API request body JSON schema and exit")
+	}
+	if spec.ResponseSchema != "" {
+		cmd.Flags().Bool("response-schema", false, "Output the underlying API response JSON schema and exit")
+	}
 	if pollConfigs[spec.Group+"/"+spec.Name] != nil {
 		cmd.Flags().Bool("wait", false, "Poll until the operation completes or fails")
 		cmd.Flags().Duration("timeout", 10*time.Minute, "Max time to wait when using --wait")
@@ -181,6 +207,58 @@ func isTerminal(w io.Writer) bool {
 		return false
 	}
 	return term.IsTerminal(int(f.Fd()))
+}
+
+func requestedSchema(cmd *cobra.Command, spec *command.Spec) (bool, string) {
+	if spec.RequestSchema != "" {
+		if show, _ := cmd.Flags().GetBool("request-schema"); show {
+			return true, spec.RequestSchema
+		}
+	}
+	if spec.ResponseSchema != "" {
+		if show, _ := cmd.Flags().GetBool("response-schema"); show {
+			return true, spec.ResponseSchema
+		}
+	}
+	return false, ""
+}
+
+type requiredFlagAnnotationsKey struct{}
+
+func clearRequiredFlagAnnotations(cmd *cobra.Command) {
+	saved := make(map[string][]string)
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		annotations, ok := f.Annotations[cobra.BashCompOneRequiredFlag]
+		if !ok {
+			return
+		}
+		saved[f.Name] = append([]string(nil), annotations...)
+		delete(f.Annotations, cobra.BashCompOneRequiredFlag)
+		if len(f.Annotations) == 0 {
+			f.Annotations = nil
+		}
+	})
+	if len(saved) == 0 {
+		return
+	}
+	cmd.SetContext(context.WithValue(cmd.Context(), requiredFlagAnnotationsKey{}, saved))
+}
+
+func restoreRequiredFlagAnnotations(cmd *cobra.Command) {
+	saved, _ := cmd.Context().Value(requiredFlagAnnotationsKey{}).(map[string][]string)
+	if len(saved) == 0 {
+		return
+	}
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		annotations, ok := saved[f.Name]
+		if !ok {
+			return
+		}
+		if f.Annotations == nil {
+			f.Annotations = make(map[string][]string)
+		}
+		f.Annotations[cobra.BashCompOneRequiredFlag] = append([]string(nil), annotations...)
+	})
 }
 
 // registerFlag adds a typed flag to the Cobra command based on the FlagSpec.

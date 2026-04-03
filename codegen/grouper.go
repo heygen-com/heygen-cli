@@ -148,14 +148,16 @@ func buildSpec(
 	}
 
 	spec := &command.Spec{
-		Group:       groupName,
-		Name:        deriveCommandName(method, subGroups, remaining, op),
-		Summary:     op.Summary,
-		Description: op.Description,
-		Endpoint:    path,
-		Method:      method,
-		Args:        args,
-		Examples:    examples[method+" "+path],
+		Group:          groupName,
+		Name:           deriveCommandName(method, subGroups, remaining, op),
+		Summary:        op.Summary,
+		Description:    op.Description,
+		Endpoint:       path,
+		Method:         method,
+		Args:           args,
+		Examples:       examples[method+" "+path],
+		RequestSchema:  schemaJSON(bodySchemaRef(op, contentType)),
+		ResponseSchema: schemaJSON(successResponseSchemaRef(op)),
 	}
 
 	// Body encoding
@@ -357,6 +359,14 @@ func collectParams(pathItem *openapi3.PathItem, op *openapi3.Operation) openapi3
 }
 
 func bodySchema(op *openapi3.Operation, contentType string) *openapi3.Schema {
+	ref := bodySchemaRef(op, contentType)
+	if ref == nil {
+		return nil
+	}
+	return ref.Value
+}
+
+func bodySchemaRef(op *openapi3.Operation, contentType string) *openapi3.SchemaRef {
 	if op.RequestBody == nil || op.RequestBody.Value == nil {
 		return nil
 	}
@@ -368,7 +378,7 @@ func bodySchema(op *openapi3.Operation, contentType string) *openapi3.Schema {
 	if mt == nil || mt.Schema == nil || mt.Schema.Value == nil {
 		return nil
 	}
-	return mt.Schema.Value
+	return mt.Schema
 }
 
 // --- Schema type mapping ---
@@ -493,6 +503,14 @@ func detectCursorParam(pathItem *openapi3.PathItem, op *openapi3.Operation) stri
 }
 
 func successResponseSchema(op *openapi3.Operation) *openapi3.Schema {
+	ref := successResponseSchemaRef(op)
+	if ref == nil {
+		return nil
+	}
+	return ref.Value
+}
+
+func successResponseSchemaRef(op *openapi3.Operation) *openapi3.SchemaRef {
 	if op.Responses == nil {
 		return nil
 	}
@@ -505,7 +523,7 @@ func successResponseSchema(op *openapi3.Operation) *openapi3.Schema {
 		if ct == nil || ct.Schema == nil || ct.Schema.Value == nil {
 			continue
 		}
-		return ct.Schema.Value
+		return ct.Schema
 	}
 	return nil
 }

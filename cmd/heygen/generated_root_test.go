@@ -252,6 +252,38 @@ func TestGeneratedRoot_UnknownFlagStillUsageError(t *testing.T) {
 	}
 }
 
+func TestGeneratedRoot_VideoCreate_RequestSchema_NoAuth(t *testing.T) {
+	res := runCommand(t, "http://example.test", "", "video", "create", "--request-schema")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON schema: %v\nstdout: %s", err, res.Stdout)
+	}
+	if parsed["type"] != "object" {
+		t.Fatalf("schema.type = %v, want object", parsed["type"])
+	}
+}
+
+func TestGeneratedRoot_VideoGet_ResponseSchema_NoAuth(t *testing.T) {
+	res := runCommand(t, "http://example.test", "", "video", "get", "vid_123", "--response-schema")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON schema: %v\nstdout: %s", err, res.Stdout)
+	}
+	if parsed["type"] != "object" {
+		t.Fatalf("schema.type = %v, want object", parsed["type"])
+	}
+}
+
 func TestGeneratedRoot_HumanListOutput(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/videos": {

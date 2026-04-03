@@ -126,6 +126,28 @@ func TestGroupEndpoints_BodyFlagsSkipComplex(t *testing.T) {
 	}
 }
 
+func TestGroupEndpoints_Schemas(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	examples := loadTestExamples(t)
+	groups, _, err := GroupEndpoints(doc, examples)
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+
+	for _, s := range groups["video"] {
+		switch s.Name {
+		case "create":
+			if s.RequestSchema == "" {
+				t.Fatal("video create RequestSchema is empty")
+			}
+		case "list":
+			if s.ResponseSchema == "" {
+				t.Fatal("video list ResponseSchema is empty")
+			}
+		}
+	}
+}
+
 func TestGroupEndpoints_PathArgs(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
