@@ -64,6 +64,11 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		delay := backoffDelay(attempt, t.config)
 		if resp != nil {
 			if retryAfter := parseRetryAfter(resp.Header.Get("Retry-After")); retryAfter > delay {
+				// Clamp Retry-After to MaxDelay — a server sending Retry-After: 86400
+				// shouldn't block the CLI for 24 hours.
+				if t.config.MaxDelay > 0 && retryAfter > t.config.MaxDelay {
+					retryAfter = t.config.MaxDelay
+				}
 				delay = retryAfter
 			}
 			drainAndClose(resp.Body)
@@ -97,13 +102,16 @@ func shouldRetry(req *http.Request, resp *http.Response, err error) bool {
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return true
 	}
-	return isRetryableStatus(resp.StatusCode) && isIdempotent(req.Method)
+	// 5xx server errors — only retry for idempotent methods.
+	return isRetryableServerError(resp.StatusCode) && isIdempotent(req.Method)
 }
 
-func isRetryableStatus(code int) bool {
+// isRetryableServerError returns true for server-side errors worth retrying.
+// 429 (rate limited) is handled separately in shouldRetry — it's always retried
+// regardless of method because the server explicitly rejected without processing.
+func isRetryableServerError(code int) bool {
 	switch code {
-	case http.StatusTooManyRequests,
-		http.StatusInternalServerError,
+	case http.StatusInternalServerError,
 		http.StatusBadGateway,
 		http.StatusServiceUnavailable,
 		http.StatusGatewayTimeout:
@@ -209,6 +217,8 @@ func drainAndClose(body io.ReadCloser) {
 	if body == nil {
 		return
 	}
-	_, _ = io.Copy(io.Discard, body)
+	// Cap the drain to 4KB — response bodies on 429/5xx should be tiny.
+	// A misbehaving server sending a large body won't block the retry loop.
+	_, _ = io.Copy(io.Discard, io.LimitReader(body, 4096))
 	_ = body.Close()
 }
