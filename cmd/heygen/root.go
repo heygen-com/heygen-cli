@@ -51,6 +51,7 @@ Exit Codes:
 	root.AddCommand(newAuthCmd(ctx))
 	root.AddCommand(newConfigCmd(ctx))
 	registerGroups(root, ctx, gen.Groups)
+	attachCustomCommands(root, ctx)
 	installFlattenedHelp(root)
 
 	return root
@@ -81,6 +82,7 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 	root.AddCommand(newAuthCmd(ctx))
 	root.AddCommand(newConfigCmd(ctx))
 	registerGroups(root, ctx, groups)
+	attachCustomCommands(root, ctx)
 	installFlattenedHelp(root)
 
 	return root
@@ -106,6 +108,12 @@ func registerGroups(root *cobra.Command, ctx *cmdContext, groups map[string][]*c
 	}
 }
 
+func attachCustomCommands(root *cobra.Command, ctx *cmdContext) {
+	if videoGroup := findGroup(root, "video"); videoGroup != nil {
+		videoGroup.AddCommand(newVideoDownloadCmd(ctx))
+	}
+}
+
 func registerSpecCommand(groupCmd *cobra.Command, spec *command.Spec, ctx *cmdContext) {
 	path := commandPathParts(spec)
 	if len(path) == 0 {
@@ -119,6 +127,15 @@ func registerSpecCommand(groupCmd *cobra.Command, spec *command.Spec, ctx *cmdCo
 	}
 
 	parent.AddCommand(buildCobraCommand(spec, ctx))
+}
+
+func findGroup(root *cobra.Command, name string) *cobra.Command {
+	for _, child := range root.Commands() {
+		if child.Name() == name {
+			return child
+		}
+	}
+	return nil
 }
 
 func ensureIntermediateCommand(parent *cobra.Command, token string) *cobra.Command {
