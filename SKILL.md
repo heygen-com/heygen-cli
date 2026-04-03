@@ -28,7 +28,6 @@ heygen video download <video-id>
 
 # List resources
 heygen video list --limit 5
-heygen video list --all
 heygen avatar list --limit 10
 heygen voice list
 
@@ -79,7 +78,7 @@ Both output valid JSON Schema. Available on all create/update commands (`--reque
 
 - **stdout**: JSON (always). Parseable by `jq`. This is the only output agents should consume.
 - **stderr**: JSON error envelope on failure: `{"error":{"code":"...","message":"...","hint":"..."}}`
-- **Pagination**: `--all` fetches all pages into a flat JSON array.
+- **Pagination**: Use `--limit` and `--token` for manual pagination. Read `next_token` from the response to fetch the next page.
 - Do not pass `--human`. It produces unstructured text that cannot be parsed.
 
 ## Exit Codes
