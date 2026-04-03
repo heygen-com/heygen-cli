@@ -26,7 +26,7 @@ func TestRetry_429ThenSuccess_GET(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(1))
+	c := New("key", WithHTTPClient(srv.Client()), withFastRetries(1))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -57,7 +57,7 @@ func TestRetry_429ThenSuccess_POST(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(1))
+	c := New("key", WithHTTPClient(srv.Client()), withFastRetries(1))
 	req, _ := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(`{"title":"demo"}`))
 	resp, err := c.Do(req)
 	if err != nil {
@@ -85,7 +85,7 @@ func TestRetry_500ThenSuccess_GET(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(1))
+	c := New("key", WithHTTPClient(srv.Client()), withFastRetries(1))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -175,7 +175,7 @@ func TestRetry_ExhaustedRetries(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithHTTPClient(srv.Client()), WithMaxRetries(2))
+	c := New("key", WithHTTPClient(srv.Client()), withFastRetries(2))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := c.Do(req)
 	if err != nil {
@@ -206,7 +206,7 @@ func TestRetry_NetworkErrorThenSuccess_GET(t *testing.T) {
 				base: srv.Client().Transport,
 			},
 		}),
-		WithMaxRetries(1),
+		withFastRetries(1),
 	)
 
 	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
@@ -398,6 +398,16 @@ func TestRetry_NoGetBody_SkipsRetry(t *testing.T) {
 func TestParseRetryAfter_Invalid(t *testing.T) {
 	if got := parseRetryAfter("not-a-date"); got != 0 {
 		t.Fatalf("parseRetryAfter() = %v, want 0", got)
+	}
+}
+
+// withFastRetries sets millisecond delays for tests. Unexported — only
+// available to tests in package client. The public API is WithMaxRetries(n).
+func withFastRetries(maxRetries int) Option {
+	return func(c *Client) {
+		c.retry.MaxRetries = maxRetries
+		c.retry.BaseDelay = time.Millisecond
+		c.retry.MaxDelay = time.Millisecond
 	}
 }
 

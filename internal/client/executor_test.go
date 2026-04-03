@@ -260,7 +260,7 @@ func TestExecute_RetryOn429(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(1))
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), withFastRetries(1))
 
 	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
 	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
@@ -295,7 +295,7 @@ func TestExecute_RetryPreservesBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(1))
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), withFastRetries(1))
 
 	spec := &command.Spec{Endpoint: "/v3/videos", Method: "POST", BodyEncoding: "json"}
 	inv := &command.Invocation{
