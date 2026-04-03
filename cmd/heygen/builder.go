@@ -147,7 +147,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 	// Add -d/--data for commands with JSON request bodies
 	if spec.BodyEncoding == "json" {
 		cmd.Flags().StringVarP(&rawData, "data", "d", "",
-			"JSON request body (inline JSON, file path, or - for stdin)")
+			"JSON request body (inline JSON, file path, or - for stdin). When used with individual flags, flags override matching fields in the JSON.")
 	}
 
 	return cmd

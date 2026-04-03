@@ -58,6 +58,11 @@ import (
 // Used by the builder for group command help text.
 type GroupDescriptions map[string]string
 
+var descriptionOverrides = GroupDescriptions{
+	"voice":   "Create speech audio and manage voices",
+	"webhook": "Create, list, and manage webhook endpoints and events",
+}
+
 func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDescriptions, error) {
 	groups := make(command.Groups)
 	descriptions := make(GroupDescriptions)
@@ -65,6 +70,10 @@ func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDe
 	// Collect tag descriptions from the spec's top-level tags array
 	for _, tag := range doc.Tags {
 		groupName := deriveGroupName(tag.Name)
+		if override, ok := descriptionOverrides[groupName]; ok {
+			descriptions[groupName] = override
+			continue
+		}
 		if tag.Description != "" {
 			descriptions[groupName] = tag.Description
 		}
