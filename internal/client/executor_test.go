@@ -332,9 +332,6 @@ func TestExecuteAll_SinglePage(t *testing.T) {
 		Endpoint:   "/v3/videos",
 		Method:     "GET",
 		Paginated:  true,
-		TokenField: "next_token",
-		TokenParam: "token",
-		DataField:  "data",
 	}
 	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
 
@@ -379,9 +376,6 @@ func TestExecuteAll_MultiplePages(t *testing.T) {
 		Endpoint:   "/v3/videos",
 		Method:     "GET",
 		Paginated:  true,
-		TokenField: "next_token",
-		TokenParam: "token",
-		DataField:  "data",
 	}
 	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
 
@@ -413,9 +407,6 @@ func TestExecuteAll_EmptyFirstPage(t *testing.T) {
 		Endpoint:   "/v3/videos",
 		Method:     "GET",
 		Paginated:  true,
-		TokenField: "next_token",
-		TokenParam: "token",
-		DataField:  "data",
 	}
 	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
 
@@ -447,9 +438,6 @@ func TestExecuteAll_ErrorOnSecondPage(t *testing.T) {
 		Endpoint:   "/v3/videos",
 		Method:     "GET",
 		Paginated:  true,
-		TokenField: "next_token",
-		TokenParam: "token",
-		DataField:  "data",
 	}
 	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
 
@@ -474,9 +462,6 @@ func TestExecuteAll_MissingDataField(t *testing.T) {
 		Endpoint:   "/v3/videos",
 		Method:     "GET",
 		Paginated:  true,
-		TokenField: "next_token",
-		TokenParam: "token",
-		DataField:  "data",
 	}
 	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
 
@@ -513,9 +498,6 @@ func TestExecuteAll_Truncated(t *testing.T) {
 		Endpoint:   "/v3/videos",
 		Method:     "GET",
 		Paginated:  true,
-		TokenField: "next_token",
-		TokenParam: "token",
-		DataField:  "data",
 	}
 	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
 
@@ -566,9 +548,6 @@ func TestExecuteAll_ExactlyAtLimit(t *testing.T) {
 		Endpoint:   "/v3/videos",
 		Method:     "GET",
 		Paginated:  true,
-		TokenField: "next_token",
-		TokenParam: "token",
-		DataField:  "data",
 	}
 	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
 

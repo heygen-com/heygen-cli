@@ -159,15 +159,6 @@ func TestGroupEndpoints_Pagination(t *testing.T) {
 		if !s.Paginated {
 			t.Error("Paginated = false, want true")
 		}
-		if s.TokenField != "token" {
-			t.Errorf("TokenField = %q, want 'token'", s.TokenField)
-		}
-		if s.TokenParam != "token" {
-			t.Errorf("TokenParam = %q, want 'token'", s.TokenParam)
-		}
-		if s.DataField != "data" {
-			t.Errorf("DataField = %q, want 'data'", s.DataField)
-		}
 		return
 	}
 	t.Error("video list not found")

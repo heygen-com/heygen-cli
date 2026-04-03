@@ -37,7 +37,7 @@ func (g Groups) SortedNames() []string {
 //	var VideoList = &command.Spec{
 //	    Group: "video", Name: "list", Summary: "List videos",
 //	    Endpoint: "/v3/videos", Method: "GET",
-//	    Paginated: true, TokenField: "next_token", TokenParam: "token", DataField: "data",
+//	    Paginated: true,
 //	    Flags: []command.FlagSpec{{Name: "limit", Type: "int", Source: "query", JSONName: "limit"}},
 //	}
 type Spec struct {
@@ -56,11 +56,8 @@ type Spec struct {
 	BodyEncoding string // "json", "multipart", or "" (no body). Builder adds -d/--data when "json".
 
 	// Execution behavior (used by executor)
-	Paginated   bool        // true → supports cursor pagination and the builder adds --all
-	TokenField  string      // response field with next cursor (e.g., "next_token")
-	TokenParam  string      // request query parameter carrying the cursor (e.g., "token")
-	DataField   string      // response field containing the result array (e.g., "data")
-	PollConfig  *PollConfig // non-nil → pollable; defines polling behavior for --wait (future)
+	Paginated  bool        // true → supports cursor pagination and the builder adds --all
+	PollConfig *PollConfig // non-nil → pollable; defines polling behavior for --wait (future)
 	Destructive bool        // triggers --force confirmation prompt (future)
 	Columns     []Column    // TUI table column definitions (future)
 }

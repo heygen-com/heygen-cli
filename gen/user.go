@@ -12,7 +12,6 @@ var UserMeGet = &command.Spec{
 	Endpoint:     "/v3/user/me",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen user me get",
 	},

@@ -12,7 +12,6 @@ var WebhookEndpointsCreate = &command.Spec{
 	Endpoint:     "/v3/webhooks/endpoints",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen webhook endpoints create --url https://example.com/hook",
 	},
@@ -40,7 +39,6 @@ var WebhookEndpointsDelete = &command.Spec{
 	Endpoint:     "/v3/webhooks/endpoints/{endpoint_id}",
 	Method:       "DELETE",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen webhook endpoints delete <endpoint-id>",
 	},
@@ -58,9 +56,6 @@ var WebhookEndpointsList = &command.Spec{
 	Method:       "GET",
 	BodyEncoding: "",
 	Paginated:    true,
-	TokenField:   "next_token",
-	TokenParam:   "token",
-	DataField:    "data",
 	Examples: []string{
 		"heygen webhook endpoints list",
 	},
@@ -100,7 +95,6 @@ var WebhookEndpointsRotateSecret = &command.Spec{
 	Endpoint:     "/v3/webhooks/endpoints/{endpoint_id}/rotate-secret",
 	Method:       "POST",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen webhook endpoints rotate-secret <endpoint-id>",
 	},
@@ -117,7 +111,6 @@ var WebhookEndpointsUpdate = &command.Spec{
 	Endpoint:     "/v3/webhooks/endpoints/{endpoint_id}",
 	Method:       "PATCH",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen webhook endpoints update <endpoint-id> --url https://new.example.com/hook",
 	},
@@ -134,8 +127,6 @@ var WebhookEventTypesList = &command.Spec{
 	Endpoint:     "/v3/webhooks/event-types",
 	Method:       "GET",
 	BodyEncoding: "",
-	TokenField:   "next_token",
-	DataField:    "data",
 	Examples: []string{
 		"heygen webhook event-types list",
 	},
@@ -150,9 +141,6 @@ var WebhookEventsList = &command.Spec{
 	Method:       "GET",
 	BodyEncoding: "",
 	Paginated:    true,
-	TokenField:   "next_token",
-	TokenParam:   "token",
-	DataField:    "data",
 	Examples: []string{
 		"heygen webhook events list --event-type avatar_video.success",
 	},

@@ -79,7 +79,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
-			return ctx.formatter.Data(result, spec.DataField, defaultColumnsForSpec(spec))
+			return ctx.formatter.Data(result, "data", defaultColumnsForSpec(spec))
 		},
 	}
 
@@ -125,7 +125,7 @@ func buildUseLine(spec *command.Spec) string {
 
 func cursorFlagForSpec(spec *command.Spec) string {
 	for _, flag := range spec.Flags {
-		if flag.JSONName == spec.TokenParam {
+		if flag.JSONName == "token" {
 			return flag.Name
 		}
 	}

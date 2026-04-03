@@ -157,8 +157,9 @@ func buildSpec(
 		spec.BodyEncoding = "multipart"
 	}
 
-	// Pagination
-	spec.Paginated, spec.TokenField, spec.TokenParam, spec.DataField = detectPagination(op, pathItem)
+	// Pagination — only sets Paginated bool. The cursor field names and data
+	// field are API conventions hardcoded in the client package.
+	spec.Paginated = detectPagination(op, pathItem)
 
 	// Flags from query params
 	for _, paramRef := range collectParams(pathItem, op) {
@@ -440,42 +441,38 @@ func isComplexField(s *openapi3.Schema) bool {
 
 // --- Response analysis ---
 
-func detectPagination(op *openapi3.Operation, pathItem *openapi3.PathItem) (paginated bool, tokenField, tokenParam, dataField string) {
+// detectPagination returns true if the endpoint supports cursor-based pagination.
+// An endpoint is paginated when both: (1) the response has a cursor field
+// (next_token, token, or cursor), and (2) the request has a cursor query param
+// (token, cursor, or page_token).
+func detectPagination(op *openapi3.Operation, pathItem *openapi3.PathItem) bool {
 	respSchema := successResponseSchema(op)
 	if respSchema == nil {
-		return
+		return false
 	}
-	if dataProp := respSchema.Properties["data"]; dataProp != nil && dataProp.Value != nil {
-		dataField = "data"
-	}
-	// Check for token at root level and inside data wrapper
+
+	// Check for cursor field in response (at root or inside data wrapper)
+	hasCursorField := false
 	schemasToCheck := []*openapi3.Schema{respSchema}
-	if dataField != "" {
-		schemasToCheck = append(schemasToCheck, respSchema.Properties["data"].Value)
+	if dataProp := respSchema.Properties["data"]; dataProp != nil && dataProp.Value != nil {
+		schemasToCheck = append(schemasToCheck, dataProp.Value)
 	}
 	for _, schema := range schemasToCheck {
 		for _, candidate := range []string{"next_token", "token", "cursor"} {
 			if _, ok := schema.Properties[candidate]; ok {
-				tokenField = candidate
+				hasCursorField = true
 				break
 			}
 		}
-		if tokenField != "" {
+		if hasCursorField {
 			break
 		}
 	}
-	if tokenField == "" {
-		return false, "", "", dataField
+	if !hasCursorField {
+		return false
 	}
 
-	tokenParam = detectCursorParam(pathItem, op)
-	if tokenParam == "" {
-		// Response has a token field but no cursor query param — not paginated.
-		// Clear tokenField to avoid inconsistency.
-		return false, "", "", dataField
-	}
-
-	return true, tokenField, tokenParam, dataField
+	return detectCursorParam(pathItem, op) != ""
 }
 
 func detectCursorParam(pathItem *openapi3.PathItem, op *openapi3.Operation) string {

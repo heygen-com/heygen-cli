@@ -16,7 +16,15 @@ import (
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
-const paginationHardLimit = 10000
+const (
+	paginationHardLimit = 10000
+
+	// HeyGen API conventions — consistent across all v3 endpoints.
+	// Hardcoded rather than per-Spec because no endpoint deviates.
+	apiDataField      = "data"       // response envelope field containing the payload
+	apiCursorField    = "next_token" // response field with the next page cursor
+	apiCursorParam    = "token"      // request query parameter for the cursor
+)
 
 // ErrPaginationTruncated is returned when ExecuteAll stops early at the hard
 // item limit. It carries the partial data so callers can still render it.
@@ -83,7 +91,7 @@ func (c *Client) Execute(spec *command.Spec, inv *command.Invocation) (json.RawM
 // ExecuteAll fetches all pages of a paginated endpoint and returns a flat JSON
 // array containing all accumulated items.
 func (c *Client) ExecuteAll(spec *command.Spec, inv *command.Invocation) (json.RawMessage, error) {
-	if !spec.Paginated || spec.TokenField == "" || spec.TokenParam == "" || spec.DataField == "" {
+	if !spec.Paginated {
 		return nil, clierrors.New("spec is not configured for pagination")
 	}
 
@@ -96,7 +104,7 @@ func (c *Client) ExecuteAll(spec *command.Spec, inv *command.Invocation) (json.R
 			return nil, err
 		}
 
-		items, nextToken, err := extractPage(page, spec.DataField, spec.TokenField)
+		items, nextToken, err := extractPage(page, apiDataField, apiCursorField)
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +134,7 @@ func (c *Client) ExecuteAll(spec *command.Spec, inv *command.Invocation) (json.R
 			return nil, &ErrPaginationTruncated{Data: data, Count: len(accumulated)}
 		}
 
-		workingInv.QueryParams.Set(spec.TokenParam, nextToken)
+		workingInv.QueryParams.Set(apiCursorParam, nextToken)
 	}
 }
 

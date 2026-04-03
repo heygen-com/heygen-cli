@@ -13,9 +13,6 @@ var VoiceList = &command.Spec{
 	Method:       "GET",
 	BodyEncoding: "",
 	Paginated:    true,
-	TokenField:   "next_token",
-	TokenParam:   "token",
-	DataField:    "data",
 	Examples: []string{
 		"heygen voice list --type public",
 	},
@@ -103,7 +100,6 @@ var VoiceSpeechCreate = &command.Spec{
 	Endpoint:     "/v3/voices/speech",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen voice speech create --text 'Hello world' --voice-id en_male",
 	},

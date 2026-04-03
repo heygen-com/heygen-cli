@@ -12,7 +12,6 @@ var AvatarConsentCreate = &command.Spec{
 	Endpoint:     "/v3/avatars/{group_id}/consent",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen avatar consent create <group-id>",
 	},
@@ -29,7 +28,6 @@ var AvatarCreate = &command.Spec{
 	Endpoint:     "/v3/avatars",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen avatar create",
 	},
@@ -43,7 +41,6 @@ var AvatarGet = &command.Spec{
 	Endpoint:     "/v3/avatars/{group_id}",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen avatar get <group-id>",
 	},
@@ -61,9 +58,6 @@ var AvatarList = &command.Spec{
 	Method:       "GET",
 	BodyEncoding: "",
 	Paginated:    true,
-	TokenField:   "next_token",
-	TokenParam:   "token",
-	DataField:    "data",
 	Examples: []string{
 		"heygen avatar list --limit 10",
 	},
@@ -115,7 +109,6 @@ var AvatarLooksGet = &command.Spec{
 	Endpoint:     "/v3/avatars/looks/{look_id}",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen avatar looks get <look-id>",
 	},
@@ -133,9 +126,6 @@ var AvatarLooksList = &command.Spec{
 	Method:       "GET",
 	BodyEncoding: "",
 	Paginated:    true,
-	TokenField:   "next_token",
-	TokenParam:   "token",
-	DataField:    "data",
 	Examples: []string{
 		"heygen avatar looks list --limit 10",
 	},

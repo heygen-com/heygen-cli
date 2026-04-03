@@ -12,7 +12,6 @@ var WidgetActivateCreate = &command.Spec{
 	Endpoint:     "/v3/widgets/{widget_id}/activate",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Args: []command.ArgSpec{
 		{Name: "widget-id", Param: "widget_id", Help: ""},
 	},
@@ -40,7 +39,6 @@ var WidgetCreate = &command.Spec{
 	Endpoint:     "/v3/widgets",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Flags: []command.FlagSpec{
 		{
 			Name:     "count",
@@ -89,7 +87,6 @@ var WidgetDelete = &command.Spec{
 	Endpoint:     "/v3/widgets/{widget_id}",
 	Method:       "DELETE",
 	BodyEncoding: "",
-	DataField:    "data",
 	Args: []command.ArgSpec{
 		{Name: "widget-id", Param: "widget_id", Help: ""},
 	},
@@ -103,7 +100,6 @@ var WidgetGet = &command.Spec{
 	Endpoint:     "/v3/widgets/{widget_id}",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Args: []command.ArgSpec{
 		{Name: "widget-id", Param: "widget_id", Help: ""},
 	},
@@ -118,9 +114,6 @@ var WidgetList = &command.Spec{
 	Method:       "GET",
 	BodyEncoding: "",
 	Paginated:    true,
-	TokenField:   "next_token",
-	TokenParam:   "token",
-	DataField:    "data",
 	Flags: []command.FlagSpec{
 		{
 			Name:     "limit",
