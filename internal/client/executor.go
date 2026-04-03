@@ -228,6 +228,8 @@ func cloneInvocation(inv *command.Invocation) *command.Invocation {
 		cloned.QueryParams[key] = copied
 	}
 	if inv.Body != nil {
+		// Shallow copy — nested maps/slices are shared. Safe because pagination
+		// only mutates QueryParams, never Body values.
 		cloned.Body = make(map[string]any, len(inv.Body))
 		for key, value := range inv.Body {
 			cloned.Body[key] = value

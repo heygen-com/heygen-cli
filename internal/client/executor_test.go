@@ -27,7 +27,7 @@ func TestExecute_GETWithQueryParams(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithNoRetry())
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
 
 	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
 	inv := &command.Invocation{
@@ -62,7 +62,7 @@ func TestExecute_RepeatedQueryParams(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithNoRetry())
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
 
 	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
 	inv := &command.Invocation{
@@ -442,7 +442,7 @@ func TestExecuteAll_ErrorOnSecondPage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithNoRetry())
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
 	spec := &command.Spec{
 		Endpoint:   "/v3/videos",
 		Method:     "GET",

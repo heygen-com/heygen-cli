@@ -53,12 +53,16 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				}
 
 				if allPages {
+					// --all returns a flat array (no envelope), so dataField is empty.
+					// Columns are still passed so --human renders a curated table.
+					cols := defaultColumnsForSpec(spec)
 					result, err := ctx.client.ExecuteAll(spec, inv)
 					if err != nil {
 						var truncErr *client.ErrPaginationTruncated
 						if errors.As(err, &truncErr) {
-							fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", truncErr.Error())
-							if fmtErr := ctx.formatter.Data(truncErr.Data, "", nil); fmtErr != nil {
+							// Output partial data, then signal truncation via CLIError.
+							// The error goes through formatter.Error() — no raw stderr writes.
+							if fmtErr := ctx.formatter.Data(truncErr.Data, "", cols); fmtErr != nil {
 								return fmtErr
 							}
 							return clierrors.New(truncErr.Error())
@@ -66,7 +70,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 						return err
 					}
 
-					return ctx.formatter.Data(result, "", nil)
+					return ctx.formatter.Data(result, "", cols)
 				}
 			}
 

@@ -249,8 +249,8 @@ func TestGenBuilder_VideoList_AllPages_Truncated(t *testing.T) {
 	if res.ExitCode != 1 {
 		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "Warning: pagination stopped at 10000 items") {
-		t.Fatalf("stderr = %s, want truncation warning", res.Stderr)
+	if !strings.Contains(res.Stderr, "pagination stopped at 10000 items") {
+		t.Fatalf("stderr = %s, want truncation message", res.Stderr)
 	}
 
 	var parsed []map[string]any

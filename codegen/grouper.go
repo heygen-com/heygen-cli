@@ -470,7 +470,9 @@ func detectPagination(op *openapi3.Operation, pathItem *openapi3.PathItem) (pagi
 
 	tokenParam = detectCursorParam(pathItem, op)
 	if tokenParam == "" {
-		return false, tokenField, "", dataField
+		// Response has a token field but no cursor query param — not paginated.
+		// Clear tokenField to avoid inconsistency.
+		return false, "", "", dataField
 	}
 
 	return true, tokenField, tokenParam, dataField
