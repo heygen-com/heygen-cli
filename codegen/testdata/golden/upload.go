@@ -12,7 +12,6 @@ var UploadCreate = &command.Spec{
 	Endpoint:     "/v3/uploads",
 	Method:       "POST",
 	BodyEncoding: "multipart",
-	DataField:    "data",
 	Flags: []command.FlagSpec{
 		{
 			Name:     "file",

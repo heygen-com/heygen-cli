@@ -12,7 +12,6 @@ var VideoCreate = &command.Spec{
 	Endpoint:     "/v3/videos",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video create --avatar-id josh_lite --script 'Hello world' --voice-id en_male",
 	},
@@ -26,7 +25,6 @@ var VideoDelete = &command.Spec{
 	Endpoint:     "/v3/videos/{video_id}",
 	Method:       "DELETE",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video delete <video-id>",
 	},
@@ -43,7 +41,6 @@ var VideoGet = &command.Spec{
 	Endpoint:     "/v3/videos/{video_id}",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video get <video-id>",
 	},
@@ -60,8 +57,7 @@ var VideoList = &command.Spec{
 	Endpoint:     "/v3/videos",
 	Method:       "GET",
 	BodyEncoding: "",
-	TokenField:   "next_token",
-	DataField:    "data",
+	Paginated:    true,
 	Examples: []string{
 		"heygen video list --limit 10",
 		"heygen video list --folder-id abc123",

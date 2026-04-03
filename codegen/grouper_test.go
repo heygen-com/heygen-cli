@@ -156,11 +156,8 @@ func TestGroupEndpoints_Pagination(t *testing.T) {
 		if s.Name != "list" {
 			continue
 		}
-		if s.TokenField != "token" {
-			t.Errorf("TokenField = %q, want 'token'", s.TokenField)
-		}
-		if s.DataField != "data" {
-			t.Errorf("DataField = %q, want 'data'", s.DataField)
+		if !s.Paginated {
+			t.Error("Paginated = false, want true")
 		}
 		return
 	}

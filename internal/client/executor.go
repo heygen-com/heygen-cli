@@ -16,6 +16,12 @@ import (
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
+const (
+	// APIDataField is the response envelope field containing the payload.
+	// Exported so the builder can pass it to the formatter for --human rendering.
+	APIDataField = "data"
+)
+
 // Execute sends an HTTP request described by the Spec (static metadata)
 // and Invocation (resolved user values). Returns the raw JSON response.
 //

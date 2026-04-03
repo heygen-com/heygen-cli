@@ -12,7 +12,6 @@ var VideoTranslateCaptionGet = &command.Spec{
 	Endpoint:     "/v3/video-translations/{video_translation_id}/caption",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-translate caption get <video-translation-id> --format srt",
 	},
@@ -43,7 +42,6 @@ var VideoTranslateCreate = &command.Spec{
 	Endpoint:     "/v3/video-translations",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"cat request.json | heygen video-translate create -d -",
 	},
@@ -155,7 +153,6 @@ var VideoTranslateDelete = &command.Spec{
 	Endpoint:     "/v3/video-translations/{video_translation_id}",
 	Method:       "DELETE",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-translate delete <video-translation-id>",
 	},
@@ -172,7 +169,6 @@ var VideoTranslateGet = &command.Spec{
 	Endpoint:     "/v3/video-translations/{video_translation_id}",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-translate get <video-translation-id>",
 	},
@@ -189,7 +185,6 @@ var VideoTranslateLanguagesList = &command.Spec{
 	Endpoint:     "/v3/video-translations/languages",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-translate languages list",
 	},
@@ -203,8 +198,7 @@ var VideoTranslateList = &command.Spec{
 	Endpoint:     "/v3/video-translations",
 	Method:       "GET",
 	BodyEncoding: "",
-	TokenField:   "next_token",
-	DataField:    "data",
+	Paginated:    true,
 	Examples: []string{
 		"heygen video-translate list --limit 10",
 	},
@@ -244,7 +238,6 @@ var VideoTranslateProofreadsCreate = &command.Spec{
 	Endpoint:     "/v3/video-translations/proofreads",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"cat request.json | heygen video-translate proofreads create -d -",
 	},
@@ -344,7 +337,6 @@ var VideoTranslateProofreadsGenerate = &command.Spec{
 	Endpoint:     "/v3/video-translations/proofreads/{proofread_id}/generate",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-translate proofreads generate <proofread-id>",
 	},
@@ -387,7 +379,6 @@ var VideoTranslateProofreadsGet = &command.Spec{
 	Endpoint:     "/v3/video-translations/proofreads/{proofread_id}",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-translate proofreads get <proofread-id>",
 	},
@@ -404,7 +395,6 @@ var VideoTranslateProofreadsSrtGet = &command.Spec{
 	Endpoint:     "/v3/video-translations/proofreads/{proofread_id}/srt",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-translate proofreads srt get <proofread-id>",
 	},
@@ -421,7 +411,6 @@ var VideoTranslateProofreadsSrtUpdate = &command.Spec{
 	Endpoint:     "/v3/video-translations/proofreads/{proofread_id}/srt",
 	Method:       "PUT",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-translate proofreads srt update <proofread-id>",
 	},
@@ -438,7 +427,6 @@ var VideoTranslateUpdate = &command.Spec{
 	Endpoint:     "/v3/video-translations/{video_translation_id}",
 	Method:       "PATCH",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen video-translate update <video-translation-id> --title 'New title'",
 	},

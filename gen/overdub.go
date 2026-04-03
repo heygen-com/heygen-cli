@@ -12,7 +12,6 @@ var OverdubCreate = &command.Spec{
 	Endpoint:     "/v3/overdubs",
 	Method:       "POST",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"cat request.json | heygen overdub create -d -",
 	},
@@ -100,7 +99,6 @@ var OverdubDelete = &command.Spec{
 	Endpoint:     "/v3/overdubs/{overdub_id}",
 	Method:       "DELETE",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen overdub delete <overdub-id>",
 	},
@@ -117,7 +115,6 @@ var OverdubGet = &command.Spec{
 	Endpoint:     "/v3/overdubs/{overdub_id}",
 	Method:       "GET",
 	BodyEncoding: "",
-	DataField:    "data",
 	Examples: []string{
 		"heygen overdub get <overdub-id>",
 	},
@@ -134,8 +131,7 @@ var OverdubList = &command.Spec{
 	Endpoint:     "/v3/overdubs",
 	Method:       "GET",
 	BodyEncoding: "",
-	TokenField:   "next_token",
-	DataField:    "data",
+	Paginated:    true,
 	Examples: []string{
 		"heygen overdub list --limit 10",
 	},
@@ -175,7 +171,6 @@ var OverdubUpdate = &command.Spec{
 	Endpoint:     "/v3/overdubs/{overdub_id}",
 	Method:       "PATCH",
 	BodyEncoding: "json",
-	DataField:    "data",
 	Examples: []string{
 		"heygen overdub update <overdub-id> --title 'Updated title'",
 	},
