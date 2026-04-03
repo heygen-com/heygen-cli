@@ -17,25 +17,15 @@ import (
 )
 
 const (
-	paginationHardLimit = 10000
+	// APIDataField is the response envelope field containing the payload.
+	// Exported so the builder can pass it to the formatter for --human rendering.
+	APIDataField = "data"
 
-	// HeyGen API conventions — consistent across all v3 endpoints.
-	// Hardcoded rather than per-Spec because no endpoint deviates.
-	apiDataField      = "data"       // response envelope field containing the payload
-	apiCursorField    = "next_token" // response field with the next page cursor
-	apiCursorParam    = "token"      // request query parameter for the cursor
+	// HeyGen API pagination conventions — consistent across all v3 endpoints.
+	apiCursorField = "next_token" // response field with the next page cursor
+	apiCursorParam = "token"      // request query parameter for the cursor
 )
 
-// ErrPaginationTruncated is returned when ExecuteAll stops early at the hard
-// item limit. It carries the partial data so callers can still render it.
-type ErrPaginationTruncated struct {
-	Data  json.RawMessage
-	Count int
-}
-
-func (e *ErrPaginationTruncated) Error() string {
-	return fmt.Sprintf("pagination stopped at %d items (hard limit); results may be incomplete", e.Count)
-}
 
 // Execute sends an HTTP request described by the Spec (static metadata)
 // and Invocation (resolved user values). Returns the raw JSON response.
@@ -104,34 +94,15 @@ func (c *Client) ExecuteAll(spec *command.Spec, inv *command.Invocation) (json.R
 			return nil, err
 		}
 
-		items, nextToken, err := extractPage(page, apiDataField, apiCursorField)
+		items, nextToken, err := extractPage(page, APIDataField, apiCursorField)
 		if err != nil {
 			return nil, err
 		}
 
-		remaining := paginationHardLimit - len(accumulated)
-		if remaining <= 0 {
-			data, err := marshalItems(accumulated)
-			if err != nil {
-				return nil, err
-			}
-			return nil, &ErrPaginationTruncated{Data: data, Count: len(accumulated)}
-		}
-
-		if len(items) > remaining {
-			items = items[:remaining]
-		}
 		accumulated = append(accumulated, items...)
 
 		if nextToken == "" {
 			return marshalItems(accumulated)
-		}
-		if len(accumulated) >= paginationHardLimit {
-			data, err := marshalItems(accumulated)
-			if err != nil {
-				return nil, err
-			}
-			return nil, &ErrPaginationTruncated{Data: data, Count: len(accumulated)}
 		}
 
 		workingInv.QueryParams.Set(apiCursorParam, nextToken)

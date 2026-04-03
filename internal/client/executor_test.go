@@ -3,7 +3,6 @@ package client
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -471,98 +470,6 @@ func TestExecuteAll_MissingDataField(t *testing.T) {
 	}
 }
 
-func TestExecuteAll_Truncated(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.URL.Query().Get("token")
-		switch token {
-		case "":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(paginationPageBody(0, 2500, "cursor_1")))
-		case "cursor_1":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(paginationPageBody(2500, 2500, "cursor_2")))
-		case "cursor_2":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(paginationPageBody(5000, 2500, "cursor_3")))
-		case "cursor_3":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(paginationPageBody(7500, 2500, "cursor_4")))
-		default:
-			t.Fatalf("unexpected token %q", token)
-		}
-	}))
-	defer srv.Close()
-
-	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
-	spec := &command.Spec{
-		Endpoint:   "/v3/videos",
-		Method:     "GET",
-		Paginated:  true,
-	}
-	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
-
-	_, err := c.ExecuteAll(spec, inv)
-	var truncErr *ErrPaginationTruncated
-	if !errors.As(err, &truncErr) {
-		t.Fatalf("err = %T, want *ErrPaginationTruncated", err)
-	}
-	if truncErr.Count != 10000 {
-		t.Fatalf("Count = %d, want 10000", truncErr.Count)
-	}
-	var parsed []map[string]any
-	if err := json.Unmarshal(truncErr.Data, &parsed); err != nil {
-		t.Fatalf("truncErr.Data is not valid JSON array: %v", err)
-	}
-	if len(parsed) != 10000 {
-		t.Fatalf("len(parsed) = %d, want 10000", len(parsed))
-	}
-}
-
-func TestExecuteAll_ExactlyAtLimit(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.URL.Query().Get("token")
-		switch token {
-		case "":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(paginationPageBody(0, 2000, "cursor_1")))
-		case "cursor_1":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(paginationPageBody(2000, 2000, "cursor_2")))
-		case "cursor_2":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(paginationPageBody(4000, 2000, "cursor_3")))
-		case "cursor_3":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(paginationPageBody(6000, 2000, "cursor_4")))
-		case "cursor_4":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(paginationPageBody(8000, 2000, "")))
-		default:
-			t.Fatalf("unexpected token %q", token)
-		}
-	}))
-	defer srv.Close()
-
-	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
-	spec := &command.Spec{
-		Endpoint:   "/v3/videos",
-		Method:     "GET",
-		Paginated:  true,
-	}
-	inv := &command.Invocation{PathParams: make(map[string]string), QueryParams: make(url.Values)}
-
-	result, err := c.ExecuteAll(spec, inv)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	var parsed []map[string]any
-	if err := json.Unmarshal(result, &parsed); err != nil {
-		t.Fatalf("result is not valid JSON array: %v", err)
-	}
-	if len(parsed) != 10000 {
-		t.Fatalf("len(parsed) = %d, want 10000", len(parsed))
-	}
-}
 
 func TestExecute_MultipartUpload(t *testing.T) {
 	var gotContentType string
@@ -629,24 +536,6 @@ func TestExecute_MultipartUpload(t *testing.T) {
 	if jsonErr := json.Unmarshal(result, &parsed); jsonErr != nil {
 		t.Errorf("response is not valid JSON: %v", jsonErr)
 	}
-}
-
-func paginationPageBody(start, count int, nextToken string) string {
-	items := make([]map[string]any, 0, count)
-	for i := 0; i < count; i++ {
-		items = append(items, map[string]any{"id": fmt.Sprintf("v%d", start+i)})
-	}
-
-	body := map[string]any{
-		"data": items,
-	}
-	if nextToken == "" {
-		body["next_token"] = nil
-	} else {
-		body["next_token"] = nextToken
-	}
-	raw, _ := json.Marshal(body)
-	return string(raw)
 }
 
 func TestExecute_MultipartMissingFilePath(t *testing.T) {

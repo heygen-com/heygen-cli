@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -58,15 +57,6 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 					cols := defaultColumnsForSpec(spec)
 					result, err := ctx.client.ExecuteAll(spec, inv)
 					if err != nil {
-						var truncErr *client.ErrPaginationTruncated
-						if errors.As(err, &truncErr) {
-							// Output partial data, then signal truncation via CLIError.
-							// The error goes through formatter.Error() — no raw stderr writes.
-							if fmtErr := ctx.formatter.Data(truncErr.Data, "", cols); fmtErr != nil {
-								return fmtErr
-							}
-							return clierrors.New(truncErr.Error())
-						}
 						return err
 					}
 
@@ -79,7 +69,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
-			return ctx.formatter.Data(result, "data", defaultColumnsForSpec(spec))
+			return ctx.formatter.Data(result, client.APIDataField, defaultColumnsForSpec(spec))
 		},
 	}
 
@@ -89,7 +79,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 	}
 
 	if spec.Paginated {
-		cmd.Flags().Bool("all", false, "Fetch all pages (returns flat JSON array instead of API envelope)")
+		cmd.Flags().Bool("all", false, "Fetch all pages into a single JSON array. For datasets over 10,000 items, consider paginating manually with --token.")
 	}
 
 	// Add -d/--data for commands with JSON request bodies
