@@ -2,7 +2,7 @@
 
 ## Install the CLI
 
-### Internal dev build
+### Install script
 
 Recommended for internal users who do not want to build from source.
 
@@ -23,8 +23,22 @@ curl -fsSL \
   | bash
 ```
 
-The installer downloads the latest internal dev build from the rolling `dev`
-prerelease and installs `heygen` into `~/.local/bin` by default.
+The installer downloads the latest stable release and installs `heygen` into
+`~/.local/bin` by default.
+
+Install the latest dev prerelease:
+
+```bash
+gh api repos/heygen-com/heygen-cli/contents/scripts/install.sh \
+  --jq '.content' | base64 -d | bash -s -- --dev
+```
+
+Install a specific version:
+
+```bash
+gh api repos/heygen-com/heygen-cli/contents/scripts/install.sh \
+  --jq '.content' | base64 -d | bash -s -- --version v0.1.0
+```
 
 ### Manual download
 
@@ -47,9 +61,8 @@ make install
 
 ### Dev builds
 
-- Rolling prerelease tagged `dev`
+- Immutable prereleases tagged `v{base}-dev.{YYYYMMDD}.{shorthash}`
 - Built from `main`
-- Version format: `dev-<sha>`
 - Intended for internal users and fast feedback
 
 ### Stable releases
@@ -68,8 +81,7 @@ gh workflow run dev-release.yml
 ```
 
 3. Wait for the workflow to finish.
-4. Verify the `Internal Dev Build` prerelease was updated with the latest commit
-   SHA.
+4. Verify a new prerelease was published for the computed dev tag.
 5. Share the installer command or release link with internal users as needed.
 
 ## How to Cut a Stable Release
@@ -86,6 +98,6 @@ gh workflow run release-stable.yml -f version=v0.1.0
 
 ## Version Scheme
 
-- `dev-<sha>` for rolling internal builds
+- `v{base}-dev.{YYYYMMDD}.{shorthash}` for dev prereleases
 - `v0.x.y` for pre-1.0 stable releases
 - `v1.x.y` and beyond once the CLI surface is considered stable
