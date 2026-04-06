@@ -83,6 +83,6 @@ var GroupDescriptions = map[string]string{
 	"video":           "Create, list, retrieve, and delete videos",
 	"video-agent":     "Create videos from text prompts using AI",
 	"video-translate": "Translate videos into other languages",
-	"voice":           "Text-to-speech and voice management",
-	"webhook":         "Manage webhook endpoints and events",
+	"voice":           "Create speech audio and manage voices",
+	"webhook":         "Create, list, and manage webhook endpoints and events",
 }

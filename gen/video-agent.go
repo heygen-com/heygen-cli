@@ -13,7 +13,8 @@ var VideoAgentCreate = &command.Spec{
 	Method:       "POST",
 	BodyEncoding: "json",
 	Examples: []string{
-		"heygen video-agent create --prompt 'Make a product demo' --style-id modern",
+		"heygen video-agent create --prompt 'Make a product demo'",
+		"heygen video-agent create -d '{\"prompt\":\"Make a product demo\"}'",
 	},
 	Flags: []command.FlagSpec{
 		{
@@ -161,7 +162,7 @@ var VideoAgentSessionsResourcesGet = &command.Spec{
 	Method:       "GET",
 	BodyEncoding: "",
 	Examples: []string{
-		"heygen video-agent sessions resources list <session-id>",
+		"heygen video-agent sessions resources get <session-id>",
 	},
 	Args: []command.ArgSpec{
 		{Name: "session-id", Param: "session_id", Help: ""},

@@ -44,6 +44,7 @@ var VideoTranslateCreate = &command.Spec{
 	BodyEncoding: "json",
 	Examples: []string{
 		"cat request.json | heygen video-translate create -d -",
+		"heygen video-translate create --output-languages es --mode precision",
 	},
 	Flags: []command.FlagSpec{
 		{

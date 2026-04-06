@@ -4,6 +4,7 @@
   - "heygen video-translate get <video-translation-id>"
 "POST /v3/video-translations":
   - "cat request.json | heygen video-translate create -d -"
+  - "heygen video-translate create --output-languages es --mode precision"
 "PATCH /v3/video-translations/{video_translation_id}":
   - "heygen video-translate update <video-translation-id> --title 'New title'"
 "DELETE /v3/video-translations/{video_translation_id}":

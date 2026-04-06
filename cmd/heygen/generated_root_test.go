@@ -130,6 +130,23 @@ func TestGeneratedRoot_IntermediateHelp(t *testing.T) {
 	}
 }
 
+func TestGeneratedRoot_Help_ShowsExitCodesAndHidesCompletion(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "--help")
+
+	if res.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "Exit Codes:") || !strings.Contains(res.Stdout, "3   Authentication error") {
+		t.Errorf("root help missing documented exit codes\nstdout: %s", res.Stdout)
+	}
+	if strings.Contains(res.Stdout, "completion") {
+		t.Errorf("root help should hide completion command\nstdout: %s", res.Stdout)
+	}
+}
+
 func TestGeneratedRoot_VideoAgentHelp_FlattensNestedLeaves(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{})
 	defer srv.Close()
