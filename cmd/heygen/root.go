@@ -35,7 +35,7 @@ Exit Codes:
   3   Authentication error (missing or invalid API key)
   4   Timeout (resource created but operation not yet complete)
 
-Use "heygen update check" to see if a newer version is available.`,
+Use "heygen update" to check for and install newer versions.`,
 		Version:       version,
 		SilenceUsage:  true, // we handle usage errors ourselves
 		SilenceErrors: true, // we handle error output ourselves

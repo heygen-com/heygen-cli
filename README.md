@@ -43,7 +43,6 @@ gh api repos/heygen-com/heygen-cli/contents/scripts/install.sh \
 Check for and apply updates after install:
 
 ```bash
-heygen update check
 heygen update
 ```
 
@@ -92,7 +91,7 @@ heygen video create --avatar-id josh_lite --script "Hello world" --voice-id en_m
 heygen avatar list
 heygen voice list --type public
 heygen video list --limit 10 --human
-heygen update check
+heygen update
 ```
 
 Every command supports `--help`:

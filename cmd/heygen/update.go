@@ -19,12 +19,6 @@ const (
 	updateRepoName  = "heygen-cli"
 )
 
-type updateCheckResponse struct {
-	Current         string `json:"current"`
-	Latest          string `json:"latest"`
-	UpdateAvailable bool   `json:"update_available"`
-}
-
 type updateResponse struct {
 	Previous string `json:"previous"`
 	Current  string `json:"current"`
@@ -98,7 +92,7 @@ var (
 func newUpdateCmd(ctx *cmdContext) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "update",
-		Short:       "Update heygen to the latest version",
+		Short:       "Check for and install newer versions of heygen",
 		Args:        cobra.NoArgs,
 		Annotations: map[string]string{"skipAuth": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -107,53 +101,7 @@ func newUpdateCmd(ctx *cmdContext) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("version", "", "Update to a specific version (e.g., v0.1.0)")
-	cmd.AddCommand(newUpdateCheckCmd(ctx))
 	return cmd
-}
-
-func newUpdateCheckCmd(ctx *cmdContext) *cobra.Command {
-	return &cobra.Command{
-		Use:         "check",
-		Short:       "Check if a newer version is available",
-		Args:        cobra.NoArgs,
-		Annotations: map[string]string{"skipAuth": "true"},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUpdateCheck(ctx)
-		},
-	}
-}
-
-func runUpdateCheck(ctx *cmdContext) error {
-	current, err := validateCurrentVersion(updateBuildVersion(ctx))
-	if err != nil {
-		return err
-	}
-
-	updater, err := newReleaseUpdater(false)
-	if err != nil {
-		return err
-	}
-
-	latest, found, err := updater.DetectLatest(context.Background())
-	if err != nil {
-		return clierrors.New(fmt.Sprintf("failed to check for updates: %v", err))
-	}
-
-	resp := updateCheckResponse{
-		Current:         current,
-		Latest:          current,
-		UpdateAvailable: false,
-	}
-	if found {
-		resp.Latest = latest.Version
-		resp.UpdateAvailable = isVersionGreater(latest.Version, current)
-	}
-
-	data, err := marshalData(resp)
-	if err != nil {
-		return err
-	}
-	return ctx.formatter.Data(data, "", nil)
 }
 
 func runUpdate(ctx *cmdContext, targetVersion string) error {
