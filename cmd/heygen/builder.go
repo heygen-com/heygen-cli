@@ -264,6 +264,9 @@ func restoreRequiredFlagAnnotations(cmd *cobra.Command) {
 // registerFlag adds a typed flag to the Cobra command based on the FlagSpec.
 func registerFlag(cmd *cobra.Command, flag command.FlagSpec) {
 	helpText := flag.Help
+	if flag.Required {
+		helpText += " (required)"
+	}
 	if len(flag.Enum) > 0 {
 		helpText += fmt.Sprintf(" (allowed: %s)", strings.Join(flag.Enum, ", "))
 	}

@@ -259,6 +259,38 @@ func TestGenBuilder_ArgsStillValidatedWithoutSchema(t *testing.T) {
 		t.Fatalf("stderr = %q, want positional arg error", res.Stderr)
 	}
 }
+
+func TestGenBuilder_HelpShowsRequiredAnnotation(t *testing.T) {
+	spec := &command.Spec{
+		Group:        "video-agent",
+		Name:         "create",
+		Summary:      "Create video with Video Agent",
+		Endpoint:     "/v3/video-agents",
+		Method:       "POST",
+		BodyEncoding: "json",
+		Flags: []command.FlagSpec{
+			{Name: "prompt", Type: "string", Source: "body", JSONName: "prompt", Help: "The message/prompt for video generation", Required: true},
+			{Name: "orientation", Type: "string", Source: "body", JSONName: "orientation", Help: "Video orientation", Enum: []string{"landscape", "portrait"}},
+		},
+		Examples: []string{"heygen video-agent create --prompt \"Hello\""},
+	}
+
+	res := runGenCommand(t, "http://example.test", "test-key", spec, "create", "--help")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "The message/prompt for video generation (required)") {
+		t.Fatalf("stdout = %s, want required annotation", res.Stdout)
+	}
+	if !strings.Contains(res.Stdout, "Video orientation (allowed: landscape, portrait)") {
+		t.Fatalf("stdout = %s, want allowed annotation", res.Stdout)
+	}
+	if strings.Contains(res.Stdout, "Video orientation (required)") {
+		t.Fatalf("stdout = %s, optional flag should not be marked required", res.Stdout)
+	}
+}
+
 func TestGenBuilder_VideoCreate_Wait_Success(t *testing.T) {
 	var statusCalls int
 	srv := setupTestServer(t, map[string]testHandler{

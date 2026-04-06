@@ -305,6 +305,22 @@
             "items": {"type": "string"},
             "description": "Widget tags"
           },
+          "categories": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["alpha", "beta"]
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Widget categories"
+          },
           "settings": {
             "type": "object",
             "description": "Complex settings object",
