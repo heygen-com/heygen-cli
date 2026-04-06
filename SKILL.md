@@ -41,7 +41,7 @@ Video creation is asynchronous. Two patterns:
 
 **Block until done (recommended):**
 ```bash
-heygen video-agent create --prompt "Demo video" --wait --timeout 5m
+heygen video-agent create --prompt "Demo video" --wait
 # stdout: final resource JSON with video_url when complete
 ```
 
@@ -92,7 +92,7 @@ Both output valid JSON Schema. Available on all create/update commands (`--reque
 
 ## Notes
 
-- `--wait` handles polling with exponential backoff (2s to 30s). Default timeout is 10 minutes.
+- `--wait` handles polling with exponential backoff (2s to 30s). Default timeout is 20 minutes.
 - The CLI retries transient errors (429, 5xx) automatically.
 - Video download writes to `{video-id}.mp4` by default. Override with `--output-path`.
 - For the full API reference (concepts, limits, pricing), see https://developers.heygen.com
