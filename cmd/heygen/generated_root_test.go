@@ -145,6 +145,9 @@ func TestGeneratedRoot_Help_ShowsExitCodesAndHidesCompletion(t *testing.T) {
 	if strings.Contains(res.Stdout, "completion") {
 		t.Errorf("root help should hide completion command\nstdout: %s", res.Stdout)
 	}
+	if !strings.Contains(res.Stdout, `Use "heygen update check" to see if a newer version is available.`) {
+		t.Errorf("root help missing update hint\nstdout: %s", res.Stdout)
+	}
 }
 
 func TestGeneratedRoot_VideoAgentHelp_FlattensNestedLeaves(t *testing.T) {

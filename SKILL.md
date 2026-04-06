@@ -26,6 +26,9 @@ heygen video get <video-id>
 # Download completed video
 heygen video download <video-id>
 
+# Check for and install a newer release
+heygen update
+
 # List resources
 heygen video list --limit 5
 heygen avatar list --limit 10
@@ -72,5 +75,6 @@ heygen video get --response-schema
 ## Notes
 
 - The CLI retries transient errors (429, 5xx) automatically.
-- Use `heygen update check` to see if a newer CLI release is available.
+- Use `heygen update` to check for and install a newer CLI release.
+- Video download writes to `{video-id}.mp4` by default. Override with `--output-path`.
 - For the full API reference (concepts, limits, pricing), see https://developers.heygen.com
