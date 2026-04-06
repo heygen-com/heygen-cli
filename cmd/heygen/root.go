@@ -26,7 +26,14 @@ Environment Variables:
   HEYGEN_API_KEY     API key for authentication (overrides stored credentials)
   HEYGEN_OUTPUT      Output format: json, human (default: json)
 
-Use "heygen config list" to see all configuration settings and their sources.`,
+Use "heygen config list" to see all configuration settings and their sources.
+
+Exit Codes:
+  0   Success
+  1   General error (API error, network failure)
+  2   Usage error (invalid flags, missing arguments)
+  3   Authentication error (missing or invalid API key)
+  4   Timeout (resource created but operation not yet complete)`,
 		Version:       version,
 		SilenceUsage:  true, // we handle usage errors ourselves
 		SilenceErrors: true, // we handle error output ourselves

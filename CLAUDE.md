@@ -22,7 +22,7 @@ internal/auth/     CredentialResolver interface + implementations
 internal/client/   HTTP client, Executor
 internal/command/  Spec, Invocation, Groups, Column types
 internal/config/   config.Provider interface + implementations
-internal/errors/   CLIError, APIError, exit codes (0/1/2/3)
+internal/errors/   CLIError, APIError, exit codes (0/1/2/3/4)
 internal/output/   Formatter interface (JSONFormatter, HumanFormatter)
 internal/paths/    Config/credential file path resolution
 gen/               GENERATED — do not hand-edit
@@ -77,4 +77,4 @@ Data(v json.RawMessage, dataField string, columns []command.Column) error
 - All automated tests use `httptest.Server`. No real API calls in tests or CI.
 - Command tests: use `runCommand()` in `cmd/heygen/testutil_test.go`. It creates a fresh Cobra tree, captures stdout/stderr/exit code, and renders errors through the formatter (same path as `main()`).
 - Use `t.Setenv()` for env vars (auto-restored).
-- Assert on exit codes (0/1/2/3) **and** stderr envelope shape, not just error presence.
+- Assert on exit codes (0/1/2/3/4) **and** stderr envelope shape, not just error presence.

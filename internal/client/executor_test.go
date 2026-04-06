@@ -574,12 +574,15 @@ func TestExecuteAndPoll_TimeoutWhileWaiting(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	var cliErr *clierrors.CLIError
-	if !errors.As(err, &cliErr) {
-		t.Fatalf("expected *CLIError, got %T", err)
+	var timeoutErr *ErrPollTimeout
+	if !errors.As(err, &timeoutErr) {
+		t.Fatalf("expected *ErrPollTimeout, got %T", err)
 	}
-	if cliErr.Code != "timeout" {
-		t.Fatalf("code = %q, want timeout", cliErr.Code)
+	if timeoutErr.ResourceID != "vid_123" {
+		t.Fatalf("ResourceID = %q, want %q", timeoutErr.ResourceID, "vid_123")
+	}
+	if !strings.Contains(string(timeoutErr.Data), `"status":"processing"`) {
+		t.Fatalf("Data = %s, want last processing response", timeoutErr.Data)
 	}
 }
 
@@ -610,12 +613,58 @@ func TestExecuteAndPoll_TimeoutDuringRequest(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
+	var timeoutErr *ErrPollTimeout
+	if !errors.As(err, &timeoutErr) {
+		t.Fatalf("expected *ErrPollTimeout, got %T", err)
+	}
+	if timeoutErr.ResourceID != "vid_123" {
+		t.Fatalf("ResourceID = %q, want %q", timeoutErr.ResourceID, "vid_123")
+	}
+	if timeoutErr.Data != nil {
+		t.Fatalf("Data = %s, want nil before first poll response", timeoutErr.Data)
+	}
+}
+
+func TestExecuteAndPoll_Cancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/videos":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123"}}`))
+		case "/v3/videos/vid_123":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"processing"}}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	_, err := c.ExecuteAndPoll(ctx, pollableVideoCreateSpec(), emptyInvocation(), PollOptions{
+		BaseDelay: time.Second,
+		MaxDelay:  time.Second,
+		OnStatus: func(status string, elapsed time.Duration) {
+			cancel()
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
 	var cliErr *clierrors.CLIError
 	if !errors.As(err, &cliErr) {
 		t.Fatalf("expected *CLIError, got %T", err)
 	}
-	if cliErr.Code != "timeout" {
-		t.Fatalf("code = %q, want timeout", cliErr.Code)
+	if cliErr.Code != "canceled" {
+		t.Fatalf("code = %q, want canceled", cliErr.Code)
+	}
+	if cliErr.ExitCode != clierrors.ExitGeneral {
+		t.Fatalf("ExitCode = %d, want %d", cliErr.ExitCode, clierrors.ExitGeneral)
 	}
 }
 

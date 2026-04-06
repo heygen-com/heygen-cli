@@ -210,6 +210,20 @@ func TestGeneratedRoot_VideoHelp_RemainsFlat(t *testing.T) {
 	}
 }
 
+func TestGeneratedRoot_RootHelp_ListsTimeoutExitCode(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "", "--help")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "4   Timeout (resource created but operation not yet complete)") {
+		t.Fatalf("root help missing exit code 4\nstdout: %s", res.Stdout)
+	}
+}
+
 func TestGeneratedRoot_UnknownFlagStillUsageError(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{})
 	defer srv.Close()
