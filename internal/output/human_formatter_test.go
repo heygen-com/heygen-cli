@@ -79,6 +79,56 @@ func TestHumanFormatter_Data_KeyValue(t *testing.T) {
 	}
 }
 
+func TestHumanFormatter_Data_TimestampFormatting(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	input := json.RawMessage(`{"data":[{"id":"vid_123","created_at":1774712936}]}`)
+	columns := []command.Column{
+		{Header: "ID", Field: "id"},
+		{Header: "Created", Field: "created_at"},
+	}
+
+	if err := f.Data(input, "data", columns); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "2026-03-28 15:48") {
+		t.Fatalf("timestamp was not formatted as UTC date/time:\n%s", got)
+	}
+}
+
+func TestHumanFormatter_Data_DurationFormatting(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	input := json.RawMessage(`{"data":{"duration":18.9649,"status":"completed"}}`)
+	if err := f.Data(input, "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "Duration:  18s") {
+		t.Fatalf("duration was not formatted as seconds:\n%s", got)
+	}
+}
+
+func TestHumanFormatter_Data_RegularFloatUnaffected(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	input := json.RawMessage(`{"data":{"score":3.14}}`)
+	if err := f.Data(input, "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "Score:  3.14") {
+		t.Fatalf("regular float should remain unchanged:\n%s", got)
+	}
+}
+
 func TestHumanFormatter_Data_PrimitiveArray(t *testing.T) {
 	var out bytes.Buffer
 	f := NewHumanFormatter(&out, &bytes.Buffer{})
