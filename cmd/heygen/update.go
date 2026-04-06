@@ -146,7 +146,7 @@ func runUpdateCheck(ctx *cmdContext) error {
 	}
 	if found {
 		resp.Latest = latest.Version
-		resp.UpdateAvailable = latest.Version != current
+		resp.UpdateAvailable = isVersionGreater(latest.Version, current)
 	}
 
 	data, err := marshalData(resp)
@@ -210,7 +210,7 @@ func runUpdate(ctx *cmdContext, targetVersion string) error {
 		if err != nil {
 			return clierrors.New(fmt.Sprintf("failed to check for updates: %v", err))
 		}
-		if !found {
+		if !found || !isVersionGreater(rel.Version, current) {
 			rel = updateRelease{Version: current}
 		}
 	}
@@ -257,6 +257,18 @@ func validateTargetVersion(raw string) error {
 		return clierrors.NewUsage(fmt.Sprintf("invalid version %q", raw))
 	}
 	return nil
+}
+
+func isVersionGreater(candidate, current string) bool {
+	candidateSemver, err := semver.NewVersion(strings.TrimPrefix(candidate, "v"))
+	if err != nil {
+		return false
+	}
+	currentSemver, err := semver.NewVersion(strings.TrimPrefix(current, "v"))
+	if err != nil {
+		return false
+	}
+	return candidateSemver.GreaterThan(currentSemver)
 }
 
 func canonicalVersion(v string) string {

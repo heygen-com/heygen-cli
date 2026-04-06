@@ -40,6 +40,8 @@ func runUpdateRoot(t *testing.T, version string, args ...string) cmdResult {
 
 	var stdout, stderr bytes.Buffer
 	formatter := formatterForArgs(args, &stdout, &stderr)
+	t.Setenv("HEYGEN_API_KEY", "")
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	cmd := newRootCmd(version, formatter)
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
@@ -107,6 +109,30 @@ func TestUpdateCheck_AlreadyCurrent(t *testing.T) {
 	}
 	if got.UpdateAvailable {
 		t.Fatalf("UpdateAvailable = true, want false")
+	}
+}
+
+func TestUpdateCheck_DoesNotOfferDowngradeFromNewerDevBuild(t *testing.T) {
+	origFactory := newReleaseUpdater
+	t.Cleanup(func() { newReleaseUpdater = origFactory })
+	newReleaseUpdater = func(bool) (releaseUpdater, error) {
+		return &mockReleaseUpdater{
+			detectLatestRelease: updateRelease{Version: "v0.1.0"},
+			detectLatestFound:   true,
+		}, nil
+	}
+
+	res := runUpdateRoot(t, "v0.1.1-dev.20260406.abc1234", "update", "check")
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	var got updateCheckResponse
+	if err := json.Unmarshal([]byte(res.Stdout), &got); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
+	}
+	if got.Current != "v0.1.1-dev.20260406.abc1234" || got.Latest != "v0.1.0" || got.UpdateAvailable {
+		t.Fatalf("unexpected response: %+v", got)
 	}
 }
 
@@ -191,6 +217,73 @@ func TestUpdate_JSONOutput(t *testing.T) {
 		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
 	}
 	if got.Previous != "v0.1.0" || got.Current != "v0.2.0" || mock.updatedTo != "v0.2.0" {
+		t.Fatalf("unexpected response: %+v updatedTo=%s", got, mock.updatedTo)
+	}
+}
+
+func TestUpdate_DoesNotDowngradeFromNewerDevBuildByDefault(t *testing.T) {
+	origFactory := newReleaseUpdater
+	origExe := updateExecutablePath
+	origEval := updateEvalSymlinks
+	t.Cleanup(func() {
+		newReleaseUpdater = origFactory
+		updateExecutablePath = origExe
+		updateEvalSymlinks = origEval
+	})
+
+	mock := &mockReleaseUpdater{
+		detectLatestRelease: updateRelease{Version: "v0.1.0"},
+		detectLatestFound:   true,
+	}
+	newReleaseUpdater = func(bool) (releaseUpdater, error) { return mock, nil }
+	updateExecutablePath = func() (string, error) { return "/usr/local/bin/heygen", nil }
+	updateEvalSymlinks = func(path string) (string, error) { return path, nil }
+
+	res := runUpdateRoot(t, "v0.1.1-dev.20260406.abc1234", "update")
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	var got updateResponse
+	if err := json.Unmarshal([]byte(res.Stdout), &got); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
+	}
+	if got.Previous != "v0.1.1-dev.20260406.abc1234" || got.Current != "v0.1.1-dev.20260406.abc1234" {
+		t.Fatalf("unexpected response: %+v", got)
+	}
+	if mock.updatedTo != "" {
+		t.Fatalf("unexpected downgrade attempt to %s", mock.updatedTo)
+	}
+}
+
+func TestUpdate_ExplicitVersionAllowsDowngrade(t *testing.T) {
+	origFactory := newReleaseUpdater
+	origExe := updateExecutablePath
+	origEval := updateEvalSymlinks
+	t.Cleanup(func() {
+		newReleaseUpdater = origFactory
+		updateExecutablePath = origExe
+		updateEvalSymlinks = origEval
+	})
+
+	mock := &mockReleaseUpdater{
+		detectVersionRelease: updateRelease{Version: "v0.1.0"},
+		detectVersionFound:   true,
+	}
+	newReleaseUpdater = func(bool) (releaseUpdater, error) { return mock, nil }
+	updateExecutablePath = func() (string, error) { return "/usr/local/bin/heygen", nil }
+	updateEvalSymlinks = func(path string) (string, error) { return path, nil }
+
+	res := runUpdateRoot(t, "v0.1.1-dev.20260406.abc1234", "update", "--version", "v0.1.0")
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	var got updateResponse
+	if err := json.Unmarshal([]byte(res.Stdout), &got); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
+	}
+	if got.Previous != "v0.1.1-dev.20260406.abc1234" || got.Current != "v0.1.0" || mock.updatedTo != "v0.1.0" {
 		t.Fatalf("unexpected response: %+v updatedTo=%s", got, mock.updatedTo)
 	}
 }
