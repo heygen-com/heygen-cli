@@ -8,11 +8,12 @@ import (
 )
 
 func TestClient_Do_InjectsHeaders(t *testing.T) {
-	var gotAPIKey, gotUserAgent string
+	var gotAPIKey, gotUserAgent, gotSource string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAPIKey = r.Header.Get("x-api-key")
 		gotUserAgent = r.Header.Get("User-Agent")
+		gotSource = r.Header.Get("X-HeyGen-Source")
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -35,6 +36,9 @@ func TestClient_Do_InjectsHeaders(t *testing.T) {
 	}
 	if gotUserAgent != "heygen-cli/test" {
 		t.Errorf("User-Agent = %q, want %q", gotUserAgent, "heygen-cli/test")
+	}
+	if gotSource != "cli" {
+		t.Errorf("X-HeyGen-Source = %q, want %q", gotSource, "cli")
 	}
 }
 

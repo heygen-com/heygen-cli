@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/heygen-com/heygen-cli/internal/analytics"
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
@@ -1022,11 +1023,12 @@ func runGeneratedRootCommand(t *testing.T, serverURL, apiKey string, groups map[
 
 	t.Setenv("HEYGEN_API_KEY", apiKey)
 	t.Setenv("HEYGEN_API_BASE", serverURL)
+	t.Setenv("HEYGEN_NO_ANALYTICS", "1")
 	if _, ok := os.LookupEnv("HEYGEN_CONFIG_DIR"); !ok {
 		t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	}
 
-	root := newRootCmdWithSpecs("test", formatter, groups)
+	root := newRootCmdWithSpecs("test", formatter, analytics.New("test", false), groups)
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs(args)

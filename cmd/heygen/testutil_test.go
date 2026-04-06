@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/heygen-com/heygen-cli/internal/analytics"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
@@ -83,8 +84,12 @@ func runCommandWithInput(t *testing.T, serverURL, apiKey string, stdin io.Reader
 		t.Setenv("HEYGEN_API_KEY", apiKey)
 	}
 	t.Setenv("HEYGEN_API_BASE", serverURL)
+	t.Setenv("HEYGEN_NO_ANALYTICS", "1")
+	if _, ok := os.LookupEnv("HEYGEN_CONFIG_DIR"); !ok {
+		t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	}
 
-	cmd := newRootCmd("test", formatter)
+	cmd := newRootCmd("test", formatter, analytics.New("test", false))
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 	cmd.SetArgs(args)
