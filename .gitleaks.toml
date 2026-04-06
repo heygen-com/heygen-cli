@@ -1,0 +1,5 @@
+[[allowlists]]
+description = "PostHog CLI analytics ingest token"
+paths = ['''internal/analytics/analytics.go''']
+regexTarget = "line"
+regexes = ['''const posthogAPIKey = "phc_[A-Za-z0-9]+"''']
