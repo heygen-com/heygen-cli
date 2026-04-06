@@ -9,7 +9,6 @@ Official CLI for the HeyGen video generation API. 30+ commands auto-generated fr
 
 - **API Docs**: https://developers.heygen.com
 - **Install**: `curl -fsSL https://heygen-cli.heygen.com/install.sh | bash`
-- **Install dev build**: `curl -fsSL https://heygen-cli.heygen.com/install.sh | bash -s -- --dev`
 - **Auth**: Requires `HEYGEN_API_KEY` environment variable. The key must be provisioned by a user from https://app.heygen.com/settings/api
 
 ## Key Commands
