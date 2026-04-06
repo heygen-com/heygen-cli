@@ -15,7 +15,8 @@ var VideoCreate = &command.Spec{
 	Method:         "POST",
 	BodyEncoding:   "json",
 	Examples: []string{
-		"heygen video create -d '{\"video_inputs\":[{\"character\":{\"type\":\"avatar\",\"avatar_id\":\"josh_lite\"},\"voice\":{\"type\":\"text\",\"voice_id\":\"en_male\",\"input_text\":\"Hello world\"}}]}'",
+		"heygen video create -d '{\"type\":\"avatar\",\"avatar_id\":\"josh_lite\",\"script\":\"Hello world\",\"voice_id\":\"en_male\"}'",
+		"heygen video create -d '{\"type\":\"image\",\"image\":{\"type\":\"url\",\"url\":\"https://example.com/photo.jpg\"},\"script\":\"Hello\",\"voice_id\":\"en_male\"}'",
 	},
 }
 

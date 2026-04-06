@@ -2,7 +2,8 @@
   - "heygen video list --limit 10"
   - "heygen video list --folder-id abc123"
 "POST /v3/videos":
-  - "heygen video create -d '{\"video_inputs\":[{\"character\":{\"type\":\"avatar\",\"avatar_id\":\"josh_lite\"},\"voice\":{\"type\":\"text\",\"voice_id\":\"en_male\",\"input_text\":\"Hello world\"}}]}'"
+  - "heygen video create -d '{\"type\":\"avatar\",\"avatar_id\":\"josh_lite\",\"script\":\"Hello world\",\"voice_id\":\"en_male\"}'"
+  - "heygen video create -d '{\"type\":\"image\",\"image\":{\"type\":\"url\",\"url\":\"https://example.com/photo.jpg\"},\"script\":\"Hello\",\"voice_id\":\"en_male\"}'"
 "GET /v3/videos/{video_id}":
   - "heygen video get <video-id>"
 "DELETE /v3/videos/{video_id}":
