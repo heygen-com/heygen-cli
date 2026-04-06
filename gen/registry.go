@@ -60,6 +60,7 @@ var Groups = map[string][]*command.Spec{
 		VideoTranslateUpdate,
 	},
 	"voice": {
+		VoiceCreate,
 		VoiceList,
 		VoiceSpeechCreate,
 	},

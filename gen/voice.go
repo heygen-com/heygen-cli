@@ -4,6 +4,72 @@ package gen
 
 import "github.com/heygen-com/heygen-cli/internal/command"
 
+var VoiceCreate = &command.Spec{
+	Group:          "voice",
+	Name:           "create",
+	Summary:        "Design a voice",
+	Description:    "Create a custom voice from a natural language description. Describe the voice you want — tone, gender, accent, personality — and receive up to 3 voice options to choose from. Use the seed parameter to generate different variations. The returned voice_id can be used directly in video creation endpoints.",
+	RequestSchema:  "{\n  \"description\": \"Request body for POST /v3/voices — design a voice via semantic search.\",\n  \"properties\": {\n    \"gender\": {\n      \"description\": \"Filter by gender: 'male' or 'female'.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"locale\": {\n      \"description\": \"BCP-47 locale tag to filter by (e.g., 'en-US', 'pt-BR').\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"prompt\": {\n      \"description\": \"Natural language description of the desired voice (e.g., 'warm, confident female narrator').\",\n      \"type\": \"string\"\n    },\n    \"seed\": {\n      \"default\": 0,\n      \"description\": \"Controls which batch of results to return. seed=0 returns the top matches, seed=1 the next batch, etc. Same prompt + seed always returns the same voices.\",\n      \"type\": \"integer\"\n    }\n  },\n  \"required\": [\n    \"prompt\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response payload for POST /v3/voices.\",\n      \"properties\": {\n        \"seed\": {\n          \"description\": \"The seed used for this request. Increment to get different voices.\",\n          \"type\": \"integer\"\n        },\n        \"voices\": {\n          \"description\": \"Matching voices for the given prompt, ordered by relevance.\",\n          \"items\": {\n            \"description\": \"A single voice in the listing response.\",\n            \"properties\": {\n              \"gender\": {\n                \"description\": \"Gender of the voice.\",\n                \"type\": \"string\"\n              },\n              \"language\": {\n                \"description\": \"Primary language of the voice.\",\n                \"type\": \"string\"\n              },\n              \"name\": {\n                \"description\": \"Display name of the voice.\",\n                \"type\": \"string\"\n              },\n              \"preview_audio_url\": {\n                \"description\": \"URL to a short audio preview of the voice.\",\n                \"nullable\": true,\n                \"type\": \"string\"\n              },\n              \"support_locale\": {\n                \"description\": \"Whether the voice supports locale variants.\",\n                \"type\": \"boolean\"\n              },\n              \"support_pause\": {\n                \"description\": \"Whether the voice supports SSML pause/break tags.\",\n                \"type\": \"boolean\"\n              },\n              \"type\": {\n                \"enum\": [\n                  \"public\",\n                  \"private\"\n                ],\n                \"type\": \"string\"\n              },\n              \"voice_id\": {\n                \"description\": \"Unique voice identifier.\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"voice_id\",\n              \"name\",\n              \"language\",\n              \"gender\",\n              \"support_pause\",\n              \"support_locale\",\n              \"type\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        }\n      },\n      \"required\": [\n        \"voices\",\n        \"seed\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/voices",
+	Method:         "POST",
+	BodyEncoding:   "json",
+	Examples: []string{
+		"heygen voice create --prompt 'warm, confident female narrator'",
+		"heygen voice create --prompt 'deep male voice with British accent' --gender male",
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "gender",
+			Type:     "string",
+			Default:  "",
+			Help:     "Filter by gender: 'male' or 'female'.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "gender",
+		},
+		{
+			Name:     "locale",
+			Type:     "string",
+			Default:  "",
+			Help:     "BCP-47 locale tag to filter by (e.g., 'en-US', 'pt-BR').",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "locale",
+		},
+		{
+			Name:     "prompt",
+			Type:     "string",
+			Default:  "",
+			Help:     "Natural language description of the desired voice (e.g., 'warm, confident female narrator').",
+			Required: true,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "prompt",
+		},
+		{
+			Name:     "seed",
+			Type:     "int",
+			Default:  "0",
+			Help:     "Controls which batch of results to return. seed=0 returns the top matches, seed=1 the next batch, etc. Same prompt + seed always returns the same voices.",
+			Required: false,
+			Enum:     nil,
+			Min:      intPtr(0),
+			Max:      nil,
+			Source:   "body",
+			JSONName: "seed",
+		},
+	},
+}
+
 var VoiceList = &command.Spec{
 	Group:          "voice",
 	Name:           "list",

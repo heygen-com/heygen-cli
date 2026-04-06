@@ -1,4 +1,7 @@
 "GET /v3/voices":
   - "heygen voice list --type public"
+"POST /v3/voices":
+  - "heygen voice create --prompt 'warm, confident female narrator'"
+  - "heygen voice create --prompt 'deep male voice with British accent' --gender male"
 "POST /v3/voices/speech":
   - "heygen voice speech create --text 'Hello world' --voice-id en_male"
