@@ -12,7 +12,7 @@ import (
 	"github.com/posthog/posthog-go"
 )
 
-const posthogAPIKey = "<project-token-from-posthog>"
+const posthogAPIKey = "phc_Bvsz7U8BvVxZtguuTGiBcbRUCkX46MwqdZ9t8LQ7cBGr"
 const posthogEndpoint = "https://us.i.posthog.com"
 
 type captureClient interface {
