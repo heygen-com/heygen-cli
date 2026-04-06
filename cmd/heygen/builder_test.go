@@ -43,7 +43,6 @@ var videoCreateWaitSpec = &command.Spec{
 	Examples:     []string{"heygen video create --wait"},
 }
 
-<<<<<<< HEAD
 var videoCreateSchemaSpec = &command.Spec{
 	Group:          "video",
 	Name:           "create",
