@@ -5,7 +5,7 @@ binary, JSON-first output.
 
 ## Install
 
-### Internal dev build (recommended for internal users)
+### Install script
 
 If `gh` is installed and authenticated:
 
@@ -24,8 +24,21 @@ curl -fsSL \
   | bash
 ```
 
-This installs the latest internal dev build from the rolling `dev` prerelease
-into `~/.local/bin` by default.
+This installs the latest stable release into `~/.local/bin` by default.
+
+Install the latest dev prerelease instead:
+
+```bash
+gh api repos/heygen-com/heygen-cli/contents/scripts/install.sh \
+  --jq '.content' | base64 -d | bash -s -- --dev
+```
+
+Install a specific version:
+
+```bash
+gh api repos/heygen-com/heygen-cli/contents/scripts/install.sh \
+  --jq '.content' | base64 -d | bash -s -- --version v0.1.0
+```
 
 ### From source (contributors)
 
@@ -47,7 +60,7 @@ your `PATH`.
 
 For this internal repository, users still need GitHub read access to download
 release assets. See [RELEASE.md](./RELEASE.md) for the maintainer release
-process and internal dev-release workflow.
+process and release workflows.
 
 ## Setup
 

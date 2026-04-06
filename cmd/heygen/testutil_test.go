@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
@@ -69,7 +70,15 @@ func runCommandWithInput(t *testing.T, serverURL, apiKey string, stdin io.Reader
 	var stdout, stderr bytes.Buffer
 	formatter := formatterForArgs(args, &stdout, &stderr)
 
-	// Set env vars for this test
+	// Set env vars for this test.
+	// Set HEYGEN_CONFIG_DIR to an empty temp dir so the
+	// FileCredentialResolver doesn't pick up real credentials
+	// from ~/.heygen/credentials on dev machines — but only if
+	// the test hasn't already set it (e.g., config tests that
+	// write a config file to a specific dir).
+	if os.Getenv("HEYGEN_CONFIG_DIR") == "" {
+		t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	}
 	if apiKey != "" {
 		t.Setenv("HEYGEN_API_KEY", apiKey)
 	}

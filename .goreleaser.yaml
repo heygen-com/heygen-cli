@@ -24,7 +24,7 @@ archives:
       - goos: windows
         formats:
           - zip
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 snapshot:
   version_template: "{{ .Tag }}-next"
 checksum:
