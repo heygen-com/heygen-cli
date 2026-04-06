@@ -166,6 +166,52 @@ func TestGenBuilder_VideoCreate_Wait_Success(t *testing.T) {
 	}
 }
 
+func TestGenBuilder_VideoCreate_Wait_Human_NonTTYFallback(t *testing.T) {
+	var statusCalls int
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/videos": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123"}}`,
+		},
+		"GET /v3/videos/vid_123": {
+			StatusCode: 200,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				statusCalls++
+			},
+			Body: `{"data":{"video_id":"vid_123","status":"processing"}}`,
+		},
+	})
+	defer srv.Close()
+
+	originalHandler := srv.Config.Handler
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/v3/videos/vid_123" {
+			statusCalls++
+			w.WriteHeader(http.StatusOK)
+			if statusCalls < 2 {
+				_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"processing"}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"data":{"video_id":"vid_123","status":"completed","video_url":"https://cdn.test/video.mp4"}}`))
+			return
+		}
+		originalHandler.ServeHTTP(w, r)
+	})
+
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--human")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "Polling: status=processing") {
+		t.Fatalf("stderr = %s, want plain-text non-TTY progress", res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "Status:") {
+		t.Fatalf("stdout = %s, want human-formatted output", res.Stdout)
+	}
+}
+
 func TestGenBuilder_VideoCreate_Wait_Failure(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"POST /v3/videos": {

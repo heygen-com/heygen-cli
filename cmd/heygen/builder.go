@@ -15,6 +15,7 @@ import (
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/heygen-com/heygen-cli/internal/output"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // buildCobraCommand creates a Cobra command from a command.Spec.
@@ -65,18 +66,29 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 					}
 					// Only emit progress in human mode. JSON mode keeps stderr
 					// clean for machine consumption (structured errors only).
+					var spinner *output.PollSpinner
 					if _, ok := ctx.formatter.(*output.HumanFormatter); ok {
-						var lastStatus string
-						opts.OnStatus = func(status string, elapsed time.Duration) {
-							if status == lastStatus {
-								return
+						if isTerminal(cmd.ErrOrStderr()) {
+							spinner = output.StartPollSpinner(cmd.ErrOrStderr())
+							opts.OnStatus = func(status string, elapsed time.Duration) {
+								spinner.UpdateStatus(status, elapsed)
 							}
-							fmt.Fprintf(cmd.ErrOrStderr(), "Polling: status=%s (elapsed %s)\n", status, elapsed.Round(time.Second))
-							lastStatus = status
+						} else {
+							var lastStatus string
+							opts.OnStatus = func(status string, elapsed time.Duration) {
+								if status == lastStatus {
+									return
+								}
+								fmt.Fprintf(cmd.ErrOrStderr(), "Polling: status=%s (elapsed %s)\n", status, elapsed.Round(time.Second))
+								lastStatus = status
+							}
 						}
 					}
 
 					result, err := ctx.client.ExecuteAndPoll(cmd.Context(), &pollSpec, inv, opts)
+					if spinner != nil {
+						spinner.Stop()
+					}
 					if err != nil {
 						var timeoutErr *client.ErrPollTimeout
 						if errors.As(err, &timeoutErr) {
@@ -161,6 +173,14 @@ func buildUseLine(spec *command.Spec) string {
 		parts = append(parts, "<"+arg.Name+">")
 	}
 	return strings.Join(parts, " ")
+}
+
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(f.Fd()))
 }
 
 // registerFlag adds a typed flag to the Cobra command based on the FlagSpec.
