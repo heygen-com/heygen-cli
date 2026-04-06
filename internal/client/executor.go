@@ -156,7 +156,6 @@ func (c *Client) ExecuteAndPoll(
 		}
 	}
 }
-
 // Execute sends an HTTP request described by the Spec (static metadata)
 // and Invocation (resolved user values). Returns the raw JSON response.
 //
