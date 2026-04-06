@@ -1,0 +1,63 @@
+name: Stable Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g., v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Validate version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ github.event.inputs.version }}"
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "invalid version: $version" >&2
+            exit 1
+          fi
+
+          if git rev-parse "$version" >/dev/null 2>&1; then
+            echo "tag already exists: $version" >&2
+            exit 1
+          fi
+
+      - name: Run tests
+        run: make test
+
+      - name: Create git tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${{ github.event.inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$version"
+          git push origin "$version"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean --skip=validate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

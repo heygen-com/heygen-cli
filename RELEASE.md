@@ -75,14 +75,14 @@ gh workflow run dev-release.yml
 ## How to Cut a Stable Release
 
 1. Make sure `main` is ready for a stable cut.
-2. Tag and push:
+2. Trigger the GitHub Actions workflow:
 
 ```bash
-git tag v0.1.0
-git push --tags
+gh workflow run release-stable.yml -f version=v0.1.0
 ```
 
-3. The tag-based release workflow publishes the stable release artifacts.
+3. The workflow validates the version, creates the tag on `main`, and
+   publishes the stable release artifacts via GoReleaser.
 
 ## Version Scheme
 
