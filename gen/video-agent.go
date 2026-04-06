@@ -5,13 +5,15 @@ package gen
 import "github.com/heygen-com/heygen-cli/internal/command"
 
 var VideoAgentCreate = &command.Spec{
-	Group:        "video-agent",
-	Name:         "create",
-	Summary:      "Create video with Video Agent",
-	Description:  "Create a video from a text prompt using Video Agent. Returns a session resource with session_id for tracking and video_id for polling status via GET /v3/videos/{video_id}. Files can be provided as asset_id (from POST /v3/assets), HTTPS URL, or base64-encoded content. Supported types: image (png, jpeg), video (mp4, webm), audio (mp3, wav), and pdf.",
-	Endpoint:     "/v3/video-agents",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "video-agent",
+	Name:           "create",
+	Summary:        "Create video with Video Agent",
+	Description:    "Create a video from a text prompt using Video Agent. Returns a session resource with session_id for tracking and video_id for polling status via GET /v3/videos/{video_id}. Files can be provided as asset_id (from POST /v3/assets), HTTPS URL, or base64-encoded content. Supported types: image (png, jpeg), video (mp4, webm), audio (mp3, wav), and pdf.",
+	RequestSchema:  "{\n  \"description\": \"Request body for creating a video from a prompt using Video Agent v3.\\n\\nAll configuration is flat (no nested config object). Files use the\\ntype-discriminated AssetInput union for flexible asset inputs.\",\n  \"properties\": {\n    \"avatar_id\": {\n      \"description\": \"Specific avatar ID to use\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_id\": {\n      \"description\": \"Optional callback ID included in webhook payload\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_url\": {\n      \"description\": \"Webhook URL for completion/failure notifications\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"files\": {\n      \"description\": \"Optional file attachments (max 20 files)\",\n      \"items\": {\n        \"discriminator\": {\n          \"mapping\": {\n            \"asset_id\": \"#/components/schemas/AssetId\",\n            \"base64\": \"#/components/schemas/AssetBase64\",\n            \"url\": \"#/components/schemas/AssetUrl\"\n          },\n          \"propertyName\": \"type\"\n        },\n        \"oneOf\": [\n          {\n            \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n            \"properties\": {\n              \"type\": {\n                \"description\": \"Input type discriminator\",\n                \"type\": \"string\"\n              },\n              \"url\": {\n                \"description\": \"Publicly accessible HTTPS URL for the asset\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"type\",\n              \"url\"\n            ],\n            \"type\": \"object\"\n          },\n          {\n            \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n            \"properties\": {\n              \"asset_id\": {\n                \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n                \"type\": \"string\"\n              },\n              \"type\": {\n                \"description\": \"Input type discriminator\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"type\",\n              \"asset_id\"\n            ],\n            \"type\": \"object\"\n          },\n          {\n            \"description\": \"Asset input via base64-encoded content.\",\n            \"properties\": {\n              \"data\": {\n                \"description\": \"Base64-encoded file content\",\n                \"type\": \"string\"\n              },\n              \"media_type\": {\n                \"description\": \"MIME type of the encoded content (e.g. \\\"image/png\\\")\",\n                \"type\": \"string\"\n              },\n              \"type\": {\n                \"description\": \"Input type discriminator\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"type\",\n              \"media_type\",\n              \"data\"\n            ],\n            \"type\": \"object\"\n          }\n        ]\n      },\n      \"nullable\": true,\n      \"type\": \"array\"\n    },\n    \"incognito_mode\": {\n      \"default\": false,\n      \"description\": \"When enabled, disables memory injection and extraction for this session\",\n      \"type\": \"boolean\"\n    },\n    \"orientation\": {\n      \"description\": \"Video orientation. If not provided, auto-detected from content.\",\n      \"enum\": [\n        \"landscape\",\n        \"portrait\"\n      ],\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"prompt\": {\n      \"description\": \"The message/prompt for video generation (1-10000 characters)\",\n      \"type\": \"string\"\n    },\n    \"style_id\": {\n      \"description\": \"Style ID from GET /v3/video-agents/styles. Applies a curated visual template to the generated video.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"voice_id\": {\n      \"description\": \"Specific voice ID to use for narration\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"prompt\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response from creating a video agent session.\\n\\nDesigned as a session resource for future extensibility — GET /v3/video-agents/{session_id}\\ncan return the same shape enriched with more fields (messages, video URL, etc.).\",\n      \"properties\": {\n        \"created_at\": {\n          \"description\": \"Unix timestamp of session creation\",\n          \"type\": \"integer\"\n        },\n        \"session_id\": {\n          \"description\": \"Session ID — primary identifier for this video agent session\",\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"description\": \"Session status\",\n          \"enum\": [\n            \"generating\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"video_id\": {\n          \"description\": \"Video ID for polling via GET /v3/videos/{video_id}. Nullable in future multi-turn flows.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"session_id\",\n        \"status\",\n        \"created_at\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-agents",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"heygen video-agent create --prompt 'Make a product demo'",
 		"heygen video-agent create -d '{\"prompt\":\"Make a product demo\"}'",
@@ -45,13 +47,15 @@ var VideoAgentCreate = &command.Spec{
 }
 
 var VideoAgentSessionsCreate = &command.Spec{
-	Group:        "video-agent",
-	Name:         "sessions create",
-	Summary:      "Create interactive Video Agent session",
-	Description:  "Create a new interactive Video Agent session and send the initial prompt. Poll GET /v3/video-agents/sessions/{session_id} for status.",
-	Endpoint:     "/v3/video-agents/sessions",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "video-agent",
+	Name:           "sessions create",
+	Summary:        "Create interactive Video Agent session",
+	Description:    "Create a new interactive Video Agent session and send the initial prompt. Poll GET /v3/video-agents/sessions/{session_id} for status.",
+	RequestSchema:  "{\n  \"description\": \"Request body for creating an interactive Video Agent session.\",\n  \"properties\": {\n    \"auto_proceed\": {\n      \"default\": false,\n      \"description\": \"If true, skip interactive review and go straight to video generation (no storyboard approval step)\",\n      \"type\": \"boolean\"\n    },\n    \"avatar_id\": {\n      \"description\": \"Specific avatar ID to use\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_id\": {\n      \"description\": \"Persisted alongside callback_url for future use\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_url\": {\n      \"description\": \"Persisted for future webhook delivery — not active in v1\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"files\": {\n      \"description\": \"Optional file attachments (max 20 files)\",\n      \"items\": {\n        \"discriminator\": {\n          \"mapping\": {\n            \"asset_id\": \"#/components/schemas/AssetId\",\n            \"base64\": \"#/components/schemas/AssetBase64\",\n            \"url\": \"#/components/schemas/AssetUrl\"\n          },\n          \"propertyName\": \"type\"\n        },\n        \"oneOf\": [\n          {\n            \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n            \"properties\": {\n              \"type\": {\n                \"description\": \"Input type discriminator\",\n                \"type\": \"string\"\n              },\n              \"url\": {\n                \"description\": \"Publicly accessible HTTPS URL for the asset\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"type\",\n              \"url\"\n            ],\n            \"type\": \"object\"\n          },\n          {\n            \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n            \"properties\": {\n              \"asset_id\": {\n                \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n                \"type\": \"string\"\n              },\n              \"type\": {\n                \"description\": \"Input type discriminator\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"type\",\n              \"asset_id\"\n            ],\n            \"type\": \"object\"\n          },\n          {\n            \"description\": \"Asset input via base64-encoded content.\",\n            \"properties\": {\n              \"data\": {\n                \"description\": \"Base64-encoded file content\",\n                \"type\": \"string\"\n              },\n              \"media_type\": {\n                \"description\": \"MIME type of the encoded content (e.g. \\\"image/png\\\")\",\n                \"type\": \"string\"\n              },\n              \"type\": {\n                \"description\": \"Input type discriminator\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"type\",\n              \"media_type\",\n              \"data\"\n            ],\n            \"type\": \"object\"\n          }\n        ]\n      },\n      \"nullable\": true,\n      \"type\": \"array\"\n    },\n    \"incognito_mode\": {\n      \"default\": false,\n      \"description\": \"When enabled, disables memory injection and extraction for this session\",\n      \"type\": \"boolean\"\n    },\n    \"orientation\": {\n      \"description\": \"Video orientation. If not provided, auto-detected from content.\",\n      \"enum\": [\n        \"landscape\",\n        \"portrait\"\n      ],\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"prompt\": {\n      \"description\": \"Initial message to the Video Agent (1-10000 characters)\",\n      \"type\": \"string\"\n    },\n    \"style_id\": {\n      \"description\": \"Style ID from GET /v3/video-agents/styles. Applies a curated visual template to the generated video.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"voice_id\": {\n      \"description\": \"Specific voice ID to use for narration\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"prompt\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response from creating an interactive video agent session.\",\n      \"properties\": {\n        \"created_at\": {\n          \"description\": \"Unix timestamp of session creation\",\n          \"type\": \"integer\"\n        },\n        \"session_id\": {\n          \"description\": \"Session ID — primary identifier for this session\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"session_id\",\n        \"created_at\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-agents/sessions",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"heygen video-agent sessions create --prompt 'Interview video'",
 	},
@@ -96,13 +100,14 @@ var VideoAgentSessionsCreate = &command.Spec{
 }
 
 var VideoAgentSessionsGet = &command.Spec{
-	Group:        "video-agent",
-	Name:         "sessions get",
-	Summary:      "Get Video Agent session",
-	Description:  "Get session status, progress, and paginated chat messages. Poll after creating a session or sending a message.",
-	Endpoint:     "/v3/video-agents/sessions/{session_id}",
-	Method:       "GET",
-	BodyEncoding: "",
+	Group:          "video-agent",
+	Name:           "sessions get",
+	Summary:        "Get Video Agent session",
+	Description:    "Get session status, progress, and paginated chat messages. Poll after creating a session or sending a message.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response from getting a video agent session.\",\n      \"properties\": {\n        \"created_at\": {\n          \"description\": \"Unix timestamp of session creation\",\n          \"type\": \"integer\"\n        },\n        \"messages\": {\n          \"description\": \"Most recent visible messages (max 40, newest-first)\",\n          \"items\": {\n            \"description\": \"Simplified chat message for external consumers.\",\n            \"properties\": {\n              \"content\": {\n                \"description\": \"Message text content\",\n                \"type\": \"string\"\n              },\n              \"created_at\": {\n                \"description\": \"Unix timestamp of message creation\",\n                \"nullable\": true,\n                \"type\": \"integer\"\n              },\n              \"resource_ids\": {\n                \"description\": \"Resource IDs resolvable via GET .../resources\",\n                \"items\": {\n                  \"type\": \"string\"\n                },\n                \"nullable\": true,\n                \"type\": \"array\"\n              },\n              \"role\": {\n                \"description\": \"Message author: 'user' or 'model'\",\n                \"type\": \"string\"\n              },\n              \"type\": {\n                \"description\": \"Public message types exposed to external consumers.\",\n                \"enum\": [\n                  \"text\",\n                  \"resource\",\n                  \"error\"\n                ],\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"role\",\n              \"content\",\n              \"type\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        },\n        \"progress\": {\n          \"default\": 0,\n          \"description\": \"Progress 0-100\",\n          \"type\": \"integer\"\n        },\n        \"session_id\": {\n          \"description\": \"Session ID\",\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"description\": \"Session status\",\n          \"enum\": [\n            \"processing\",\n            \"reviewing\",\n            \"generating\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"title\": {\n          \"description\": \"LLM-generated session title\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"video_id\": {\n          \"description\": \"Video ID once generation starts\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"session_id\",\n        \"status\",\n        \"created_at\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-agents/sessions/{session_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen video-agent sessions get <session-id>",
 	},
@@ -112,13 +117,15 @@ var VideoAgentSessionsGet = &command.Spec{
 }
 
 var VideoAgentSessionsMessagesCreate = &command.Spec{
-	Group:        "video-agent",
-	Name:         "sessions messages create",
-	Summary:      "Send message to Video Agent session",
-	Description:  "Send a follow-up message. Set auto_proceed to true to skip checkpoints and generate the video.",
-	Endpoint:     "/v3/video-agents/sessions/{session_id}/messages",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "video-agent",
+	Name:           "sessions messages create",
+	Summary:        "Send message to Video Agent session",
+	Description:    "Send a follow-up message. Set auto_proceed to true to skip checkpoints and generate the video.",
+	RequestSchema:  "{\n  \"description\": \"Request body for sending a follow-up message to a session.\",\n  \"properties\": {\n    \"auto_proceed\": {\n      \"default\": false,\n      \"description\": \"If true, skip interactive review and go straight to video generation (no storyboard approval step)\",\n      \"type\": \"boolean\"\n    },\n    \"avatar_id\": {\n      \"description\": \"Override avatar for this message\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"files\": {\n      \"description\": \"Optional file attachments (max 20 files)\",\n      \"items\": {\n        \"discriminator\": {\n          \"mapping\": {\n            \"asset_id\": \"#/components/schemas/AssetId\",\n            \"base64\": \"#/components/schemas/AssetBase64\",\n            \"url\": \"#/components/schemas/AssetUrl\"\n          },\n          \"propertyName\": \"type\"\n        },\n        \"oneOf\": [\n          {\n            \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n            \"properties\": {\n              \"type\": {\n                \"description\": \"Input type discriminator\",\n                \"type\": \"string\"\n              },\n              \"url\": {\n                \"description\": \"Publicly accessible HTTPS URL for the asset\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"type\",\n              \"url\"\n            ],\n            \"type\": \"object\"\n          },\n          {\n            \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n            \"properties\": {\n              \"asset_id\": {\n                \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n                \"type\": \"string\"\n              },\n              \"type\": {\n                \"description\": \"Input type discriminator\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"type\",\n              \"asset_id\"\n            ],\n            \"type\": \"object\"\n          },\n          {\n            \"description\": \"Asset input via base64-encoded content.\",\n            \"properties\": {\n              \"data\": {\n                \"description\": \"Base64-encoded file content\",\n                \"type\": \"string\"\n              },\n              \"media_type\": {\n                \"description\": \"MIME type of the encoded content (e.g. \\\"image/png\\\")\",\n                \"type\": \"string\"\n              },\n              \"type\": {\n                \"description\": \"Input type discriminator\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"type\",\n              \"media_type\",\n              \"data\"\n            ],\n            \"type\": \"object\"\n          }\n        ]\n      },\n      \"nullable\": true,\n      \"type\": \"array\"\n    },\n    \"message\": {\n      \"description\": \"Text message to the agent\",\n      \"type\": \"string\"\n    },\n    \"voice_id\": {\n      \"description\": \"Override voice for this message\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"message\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response from sending a message to a session.\",\n      \"properties\": {\n        \"run_id\": {\n          \"description\": \"Run ID for this message processing\",\n          \"type\": \"string\"\n        },\n        \"session_id\": {\n          \"description\": \"Session ID\",\n          \"type\": \"string\"\n        },\n        \"title\": {\n          \"description\": \"LLM-generated session title\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"session_id\",\n        \"run_id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-agents/sessions/{session_id}/messages",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"heygen video-agent sessions messages create <session-id> --message 'Add intro'",
 	},
@@ -154,13 +161,14 @@ var VideoAgentSessionsMessagesCreate = &command.Spec{
 }
 
 var VideoAgentSessionsResourcesGet = &command.Spec{
-	Group:        "video-agent",
-	Name:         "sessions resources get",
-	Summary:      "Get Video Agent session resources",
-	Description:  "Get session resources — storyboards, images, drafts. Use resource_ids to resolve specific resources from chat messages.",
-	Endpoint:     "/v3/video-agents/sessions/{session_id}/resources",
-	Method:       "GET",
-	BodyEncoding: "",
+	Group:          "video-agent",
+	Name:           "sessions resources get",
+	Summary:        "Get Video Agent session resources",
+	Description:    "Get session resources — storyboards, images, drafts. Use resource_ids to resolve specific resources from chat messages.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response from getting session resources.\",\n      \"properties\": {\n        \"next_cursor\": {\n          \"description\": \"Pagination cursor\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"resources\": {\n          \"description\": \"Session resources\",\n          \"items\": {\n            \"description\": \"Simplified session resource for external consumers.\",\n            \"properties\": {\n              \"created_at\": {\n                \"description\": \"Unix timestamp of resource creation\",\n                \"nullable\": true,\n                \"type\": \"integer\"\n              },\n              \"metadata\": {\n                \"description\": \"Type-specific metadata\",\n                \"nullable\": true,\n                \"properties\": {},\n                \"required\": [],\n                \"type\": \"object\"\n              },\n              \"preview_url\": {\n                \"description\": \"Preview URL\",\n                \"nullable\": true,\n                \"type\": \"string\"\n              },\n              \"resource_id\": {\n                \"description\": \"Resource identifier\",\n                \"type\": \"string\"\n              },\n              \"resource_type\": {\n                \"description\": \"Resource type: image, video, draft, avatar, voice, etc.\",\n                \"type\": \"string\"\n              },\n              \"source_type\": {\n                \"description\": \"Source: generated or user_uploaded\",\n                \"nullable\": true,\n                \"type\": \"string\"\n              },\n              \"thumbnail_url\": {\n                \"description\": \"Thumbnail URL\",\n                \"nullable\": true,\n                \"type\": \"string\"\n              },\n              \"url\": {\n                \"description\": \"Primary media URL\",\n                \"nullable\": true,\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"resource_id\",\n              \"resource_type\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        }\n      },\n      \"required\": [],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-agents/sessions/{session_id}/resources",
+	Method:         "GET",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen video-agent sessions resources get <session-id>",
 	},
@@ -232,13 +240,15 @@ var VideoAgentSessionsResourcesGet = &command.Spec{
 }
 
 var VideoAgentSessionsStop = &command.Spec{
-	Group:        "video-agent",
-	Name:         "sessions stop",
-	Summary:      "Stop Video Agent session",
-	Description:  "Stop an in-progress agent run. The agent stops at the next checkpoint and partial results are preserved.",
-	Endpoint:     "/v3/video-agents/sessions/{session_id}/stop",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "video-agent",
+	Name:           "sessions stop",
+	Summary:        "Stop Video Agent session",
+	Description:    "Stop an in-progress agent run. The agent stops at the next checkpoint and partial results are preserved.",
+	RequestSchema:  "{\n  \"description\": \"Request body for stopping a session (empty — no fields required).\",\n  \"properties\": {},\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response from stopping a session.\",\n      \"properties\": {\n        \"session_id\": {\n          \"description\": \"Session ID\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"session_id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-agents/sessions/{session_id}/stop",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"heygen video-agent sessions stop <session-id>",
 	},
@@ -248,14 +258,15 @@ var VideoAgentSessionsStop = &command.Spec{
 }
 
 var VideoAgentStylesList = &command.Spec{
-	Group:        "video-agent",
-	Name:         "styles list",
-	Summary:      "List Video Agent styles",
-	Description:  "List curated video styles available for Video Agent. Each style defines a visual template (scenes, script structure, pacing) that guides video generation. Pass the returned style_id to POST /v3/video-agents to apply a style. Supports cursor-based pagination and tag filtering.",
-	Endpoint:     "/v3/video-agents/styles",
-	Method:       "GET",
-	BodyEncoding: "",
-	Paginated:    true,
+	Group:          "video-agent",
+	Name:           "styles list",
+	Summary:        "List Video Agent styles",
+	Description:    "List curated video styles available for Video Agent. Each style defines a visual template (scenes, script structure, pacing) that guides video generation. Pass the returned style_id to POST /v3/video-agents to apply a style. Supports cursor-based pagination and tag filtering.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"description\": \"A single style in the listing response.\",\n        \"properties\": {\n          \"aspect_ratio\": {\n            \"description\": \"Aspect ratio (e.g., '16:9', '9:16', '1:1').\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"name\": {\n            \"description\": \"Display name of the style.\",\n            \"type\": \"string\"\n          },\n          \"preview_video_url\": {\n            \"description\": \"Preview video URL (public CDN, mp4).\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"style_id\": {\n            \"description\": \"Unique style identifier. Pass to POST /v3/video-agents as style_id.\",\n            \"type\": \"string\"\n          },\n          \"tags\": {\n            \"description\": \"Tags (e.g., cinematic, retro-tech, iconic-artist).\",\n            \"items\": {\n              \"type\": \"string\"\n            },\n            \"nullable\": true,\n            \"type\": \"array\"\n          },\n          \"thumbnail_url\": {\n            \"description\": \"Thumbnail image URL (public CDN).\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"style_id\",\n          \"name\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"type\": \"string|null\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-agents/styles",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Paginated:      true,
 	Examples: []string{
 		"heygen video-agent styles list",
 	},

@@ -11,6 +11,12 @@ var {{pascalCase .Group}}{{pascalCase .Name}} = &command.Spec{
 	Name:        {{quote .Name}},
 	Summary:     {{quote .Summary}},
 	Description: {{quote .Description}},
+{{- if .RequestSchema}}
+	RequestSchema: {{quote .RequestSchema}},
+{{- end}}
+{{- if .ResponseSchema}}
+	ResponseSchema: {{quote .ResponseSchema}},
+{{- end}}
 	Endpoint:    {{quote .Endpoint}},
 	Method:      {{quote .Method}},
 	BodyEncoding: {{quote .BodyEncoding}},

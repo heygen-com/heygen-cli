@@ -42,13 +42,15 @@ func (g Groups) SortedNames() []string {
 //	}
 type Spec struct {
 	// CLI presentation (used by builder, ignored by executor)
-	Group       string     // parent command group ("video")
-	Name        string     // subcommand name ("list")
-	Summary     string     // cobra.Command.Short
-	Description string     // cobra.Command.Long
-	Args        []ArgSpec  // positional arguments
-	Flags       []FlagSpec // CLI flags (from query params + body fields)
-	Examples    []string   // usage examples shown in --help; mandatory for every command
+	Group          string     // parent command group ("video")
+	Name           string     // subcommand name ("list")
+	Summary        string     // cobra.Command.Short
+	Description    string     // cobra.Command.Long
+	Args           []ArgSpec  // positional arguments
+	Flags          []FlagSpec // CLI flags (from query params + body fields)
+	Examples       []string   // usage examples shown in --help; mandatory for every command
+	RequestSchema  string     // underlying API request body JSON schema for --request-schema
+	ResponseSchema string     // underlying API response JSON schema for --response-schema
 
 	// HTTP identity (used by executor)
 	Endpoint     string // "/v3/videos/{video_id}" — template with placeholders

@@ -5,26 +5,29 @@ package gen
 import "github.com/heygen-com/heygen-cli/internal/command"
 
 var VideoCreate = &command.Spec{
-	Group:        "video",
-	Name:         "create",
-	Summary:      "Create an avatar video",
-	Description:  "Create a video from a specific avatar or image with full control over avatar, voice, and script. Supports photo avatars, video avatars (digital twins), and direct image input. The video is generated asynchronously — poll status via GET /v3/videos/{video_id}.",
-	Endpoint:     "/v3/videos",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "video",
+	Name:           "create",
+	Summary:        "Create an avatar video",
+	Description:    "Create a video from a specific avatar or image with full control over avatar, voice, and script. Supports photo avatars, video avatars (digital twins), and direct image input. The video is generated asynchronously — poll status via GET /v3/videos/{video_id}.",
+	RequestSchema:  "{\n  \"description\": \"Request body for POST /v2/videos — unified video creation.\",\n  \"properties\": {\n    \"aspect_ratio\": {\n      \"description\": \"Output video aspect ratio.\",\n      \"enum\": [\n        \"16:9\",\n        \"9:16\"\n      ],\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"audio_asset_id\": {\n      \"description\": \"HeyGen asset ID of an uploaded audio file. Mutually exclusive with script.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"audio_url\": {\n      \"description\": \"Public URL of an audio file to lip-sync. Mutually exclusive with script.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"avatar_id\": {\n      \"description\": \"HeyGen avatar ID (photo avatar or video avatar). Mutually exclusive with image_url and image_asset_id.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"background\": {\n      \"description\": \"Background settings for the video.\",\n      \"nullable\": true,\n      \"properties\": {\n        \"asset_id\": {\n          \"description\": \"HeyGen asset ID of the background image. Used when type is 'image'. Mutually exclusive with url.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"type\": {\n          \"description\": \"Background type. 'color' uses a solid hex color; 'image' uses an image from url or asset_id.\",\n          \"enum\": [\n            \"color\",\n            \"image\"\n          ],\n          \"type\": \"string\"\n        },\n        \"url\": {\n          \"description\": \"URL of the background image. Used when type is 'image'. Mutually exclusive with asset_id.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"value\": {\n          \"description\": \"Hex color code (e.g. '#ff0000'). Required when type is 'color'.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"type\"\n      ],\n      \"type\": \"object\"\n    },\n    \"callback_id\": {\n      \"description\": \"Caller-defined identifier echoed back in the webhook payload.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_url\": {\n      \"description\": \"Webhook URL to receive a POST notification when the video is ready.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"expressiveness\": {\n      \"description\": \"Avatar expressiveness level: 'high', 'medium', or 'low'. Photo avatars only. Defaults to 'low' when omitted.\",\n      \"enum\": [\n        \"high\",\n        \"medium\",\n        \"low\"\n      ],\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"image_asset_id\": {\n      \"description\": \"HeyGen asset ID of an uploaded image. Mutually exclusive with avatar_id and image_url.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"image_url\": {\n      \"description\": \"Public URL of an image to animate. Mutually exclusive with avatar_id and image_asset_id.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"motion_prompt\": {\n      \"description\": \"Natural-language prompt controlling avatar body motion. Photo avatars only.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"remove_background\": {\n      \"description\": \"Remove the avatar background. Video avatars must be trained with matting enabled.\",\n      \"nullable\": true,\n      \"type\": \"boolean\"\n    },\n    \"resolution\": {\n      \"description\": \"Output video resolution.\",\n      \"enum\": [\n        \"1080p\",\n        \"720p\"\n      ],\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"script\": {\n      \"description\": \"Text script for the avatar to speak. Requires voice_id.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"title\": {\n      \"description\": \"Display title for the video in the HeyGen dashboard.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"voice_id\": {\n      \"description\": \"Voice ID for text-to-speech or speech-to-speech. Required when script is provided.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"voice_settings\": {\n      \"description\": \"Voice tuning parameters (speed, pitch, locale).\",\n      \"nullable\": true,\n      \"properties\": {\n        \"locale\": {\n          \"description\": \"Locale/accent hint for multi-lingual voices (e.g. 'en-US').\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"pitch\": {\n          \"default\": 0,\n          \"description\": \"Pitch adjustment in semitones. -50 to +50.\",\n          \"type\": \"number\"\n        },\n        \"speed\": {\n          \"default\": 1,\n          \"description\": \"Playback speed multiplier. 0.5 (half speed) to 1.5 (1.5x speed).\",\n          \"type\": \"number\"\n        }\n      },\n      \"required\": [],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"properties\": {\n        \"status\": {\n          \"description\": \"Initial video status (e.g. 'waiting').\",\n          \"type\": \"string\"\n        },\n        \"video_id\": {\n          \"description\": \"Unique identifier for the created video.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"video_id\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/videos",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"heygen video create -d '{\"video_inputs\":[{\"character\":{\"type\":\"avatar\",\"avatar_id\":\"josh_lite\"},\"voice\":{\"type\":\"text\",\"voice_id\":\"en_male\",\"input_text\":\"Hello world\"}}]}'",
 	},
 }
 
 var VideoDelete = &command.Spec{
-	Group:        "video",
-	Name:         "delete",
-	Summary:      "Delete a video",
-	Description:  "Permanently delete a video. Supports both generated and translated videos.",
-	Endpoint:     "/v3/videos/{video_id}",
-	Method:       "DELETE",
-	BodyEncoding: "",
+	Group:          "video",
+	Name:           "delete",
+	Summary:        "Delete a video",
+	Description:    "Permanently delete a video. Supports both generated and translated videos.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"properties\": {\n        \"deleted\": {\n          \"default\": true,\n          \"description\": \"Always true on success\",\n          \"type\": \"boolean\"\n        },\n        \"id\": {\n          \"description\": \"ID of the deleted video\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/videos/{video_id}",
+	Method:         "DELETE",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen video delete <video-id>",
 	},
@@ -34,13 +37,14 @@ var VideoDelete = &command.Spec{
 }
 
 var VideoGet = &command.Spec{
-	Group:        "video",
-	Name:         "get",
-	Summary:      "Get video details",
-	Description:  "Get detailed information about a video including status, URLs, and metadata. Supports both generated and translated videos.",
-	Endpoint:     "/v3/videos/{video_id}",
-	Method:       "GET",
-	BodyEncoding: "",
+	Group:          "video",
+	Name:           "get",
+	Summary:        "Get video details",
+	Description:    "Get detailed information about a video including status, URLs, and metadata. Supports both generated and translated videos.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Video resource returned by list and detail endpoints.\\n\\nIf ``output_language`` is present the video is a translated video;\\notherwise it is a generated video.\",\n      \"properties\": {\n        \"captioned_video_url\": {\n          \"description\": \"Presigned URL to download the video file with captions burned in\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"completed_at\": {\n          \"description\": \"Unix timestamp when video generation finished\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"created_at\": {\n          \"description\": \"Unix timestamp of creation\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"duration\": {\n          \"description\": \"Video duration in seconds\",\n          \"nullable\": true,\n          \"type\": \"number\"\n        },\n        \"failure_code\": {\n          \"description\": \"Machine-readable failure reason. Only present when status is failed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"failure_message\": {\n          \"description\": \"Human-readable failure description. Only present when status is failed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"folder_id\": {\n          \"description\": \"ID of containing folder\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"gif_url\": {\n          \"description\": \"URL to animated GIF preview\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"id\": {\n          \"description\": \"Unique video identifier\",\n          \"type\": \"string\"\n        },\n        \"output_language\": {\n          \"description\": \"BCP-47 output language code. Present only for translated videos.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"enum\": [\n            \"pending\",\n            \"processing\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"subtitle_url\": {\n          \"description\": \"Presigned URL to download the SRT subtitle file\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"thumbnail_url\": {\n          \"description\": \"URL to video thumbnail image\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"title\": {\n          \"description\": \"Video title\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"video_page_url\": {\n          \"description\": \"URL to the video page in the HeyGen app\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"video_url\": {\n          \"description\": \"Presigned URL to download the video file\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/videos/{video_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen video get <video-id>",
 	},
@@ -50,14 +54,15 @@ var VideoGet = &command.Spec{
 }
 
 var VideoList = &command.Spec{
-	Group:        "video",
-	Name:         "list",
-	Summary:      "List videos",
-	Description:  "List videos in the account with pagination and optional filtering.",
-	Endpoint:     "/v3/videos",
-	Method:       "GET",
-	BodyEncoding: "",
-	Paginated:    true,
+	Group:          "video",
+	Name:           "list",
+	Summary:        "List videos",
+	Description:    "List videos in the account with pagination and optional filtering.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"description\": \"Video resource returned by list and detail endpoints.\\n\\nIf ``output_language`` is present the video is a translated video;\\notherwise it is a generated video.\",\n        \"properties\": {\n          \"captioned_video_url\": {\n            \"description\": \"Presigned URL to download the video file with captions burned in\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"completed_at\": {\n            \"description\": \"Unix timestamp when video generation finished\",\n            \"nullable\": true,\n            \"type\": \"integer\"\n          },\n          \"created_at\": {\n            \"description\": \"Unix timestamp of creation\",\n            \"nullable\": true,\n            \"type\": \"integer\"\n          },\n          \"duration\": {\n            \"description\": \"Video duration in seconds\",\n            \"nullable\": true,\n            \"type\": \"number\"\n          },\n          \"failure_code\": {\n            \"description\": \"Machine-readable failure reason. Only present when status is failed.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"failure_message\": {\n            \"description\": \"Human-readable failure description. Only present when status is failed.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"folder_id\": {\n            \"description\": \"ID of containing folder\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"gif_url\": {\n            \"description\": \"URL to animated GIF preview\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"id\": {\n            \"description\": \"Unique video identifier\",\n            \"type\": \"string\"\n          },\n          \"output_language\": {\n            \"description\": \"BCP-47 output language code. Present only for translated videos.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"status\": {\n            \"enum\": [\n              \"pending\",\n              \"processing\",\n              \"completed\",\n              \"failed\"\n            ],\n            \"type\": \"string\"\n          },\n          \"subtitle_url\": {\n            \"description\": \"Presigned URL to download the SRT subtitle file\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"thumbnail_url\": {\n            \"description\": \"URL to video thumbnail image\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"title\": {\n            \"description\": \"Video title\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"video_page_url\": {\n            \"description\": \"URL to the video page in the HeyGen app\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"video_url\": {\n            \"description\": \"Presigned URL to download the video file\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"status\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"type\": \"string|null\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/videos",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Paginated:      true,
 	Examples: []string{
 		"heygen video list --limit 10",
 		"heygen video list --folder-id abc123",

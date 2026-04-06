@@ -5,14 +5,15 @@ package gen
 import "github.com/heygen-com/heygen-cli/internal/command"
 
 var VoiceList = &command.Spec{
-	Group:        "voice",
-	Name:         "list",
-	Summary:      "List voices",
-	Description:  "List available voices with cursor-based pagination. Filter by type (public/private), engine, language, and gender. Use engine=starfish to get voices compatible with the text-to-speech endpoint.",
-	Endpoint:     "/v3/voices",
-	Method:       "GET",
-	BodyEncoding: "",
-	Paginated:    true,
+	Group:          "voice",
+	Name:           "list",
+	Summary:        "List voices",
+	Description:    "List available voices with cursor-based pagination. Filter by type (public/private), engine, language, and gender. Use engine=starfish to get voices compatible with the text-to-speech endpoint.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"description\": \"A single voice in the listing response.\",\n        \"properties\": {\n          \"gender\": {\n            \"description\": \"Gender of the voice.\",\n            \"type\": \"string\"\n          },\n          \"language\": {\n            \"description\": \"Primary language of the voice.\",\n            \"type\": \"string\"\n          },\n          \"name\": {\n            \"description\": \"Display name of the voice.\",\n            \"type\": \"string\"\n          },\n          \"preview_audio_url\": {\n            \"description\": \"URL to a short audio preview of the voice.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"support_locale\": {\n            \"description\": \"Whether the voice supports locale variants.\",\n            \"type\": \"boolean\"\n          },\n          \"support_pause\": {\n            \"description\": \"Whether the voice supports SSML pause/break tags.\",\n            \"type\": \"boolean\"\n          },\n          \"type\": {\n            \"enum\": [\n              \"public\",\n              \"private\"\n            ],\n            \"type\": \"string\"\n          },\n          \"voice_id\": {\n            \"description\": \"Unique voice identifier.\",\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"voice_id\",\n          \"name\",\n          \"language\",\n          \"gender\",\n          \"support_pause\",\n          \"support_locale\",\n          \"type\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"type\": \"string|null\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/voices",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Paginated:      true,
 	Examples: []string{
 		"heygen voice list --type public",
 	},
@@ -93,13 +94,15 @@ var VoiceList = &command.Spec{
 }
 
 var VoiceSpeechCreate = &command.Spec{
-	Group:        "voice",
-	Name:         "speech create",
-	Summary:      "Create speech audio from text",
-	Description:  "Synthesize speech audio from text using a specified voice. Returns a URL to the generated audio file along with duration and optional word-level timestamps.",
-	Endpoint:     "/v3/voices/speech",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "voice",
+	Name:           "speech create",
+	Summary:        "Create speech audio from text",
+	Description:    "Synthesize speech audio from text using a specified voice. Returns a URL to the generated audio file along with duration and optional word-level timestamps.",
+	RequestSchema:  "{\n  \"description\": \"Request body for POST /v1/audio/text_to_speech.\",\n  \"properties\": {\n    \"input_type\": {\n      \"default\": \"text\",\n      \"description\": \"Type of the input: 'text' for plain text, 'ssml' for SSML markup. Defaults to 'text'.\",\n      \"type\": \"string\"\n    },\n    \"language\": {\n      \"description\": \"Base language code (e.g. 'en', 'pt', 'zh'). Optional — auto-detected from text when omitted.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"locale\": {\n      \"description\": \"BCP-47 locale tag (e.g. 'en-US', 'pt-BR'). When set, language is inferred from locale.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"speed\": {\n      \"default\": 1,\n      \"description\": \"Speed multiplier (0.5-2.0).\",\n      \"type\": \"number\"\n    },\n    \"text\": {\n      \"description\": \"Text to synthesize (1-5000 characters).\",\n      \"type\": \"string\"\n    },\n    \"voice_id\": {\n      \"description\": \"Voice ID to use. Discover available voices via GET /v1/audio/voices.\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"text\",\n    \"voice_id\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response payload for POST /v1/audio/text_to_speech.\",\n      \"properties\": {\n        \"audio_url\": {\n          \"description\": \"URL of the generated audio file.\",\n          \"type\": \"string\"\n        },\n        \"duration\": {\n          \"description\": \"Duration of the audio in seconds.\",\n          \"type\": \"number\"\n        },\n        \"request_id\": {\n          \"description\": \"Unique identifier for this generation request.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"word_timestamps\": {\n          \"description\": \"Word-level timing data.\",\n          \"items\": {\n            \"description\": \"Word-level timing data from TTS generation.\",\n            \"properties\": {\n              \"end\": {\n                \"description\": \"End time in seconds.\",\n                \"type\": \"number\"\n              },\n              \"start\": {\n                \"description\": \"Start time in seconds.\",\n                \"type\": \"number\"\n              },\n              \"word\": {\n                \"description\": \"The word.\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"word\",\n              \"start\",\n              \"end\"\n            ],\n            \"type\": \"object\"\n          },\n          \"nullable\": true,\n          \"type\": \"array\"\n        }\n      },\n      \"required\": [\n        \"audio_url\",\n        \"duration\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/voices/speech",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"heygen voice speech create --text 'Hello world' --voice-id en_male",
 	},

@@ -5,13 +5,14 @@ package gen
 import "github.com/heygen-com/heygen-cli/internal/command"
 
 var VideoTranslateCaptionGet = &command.Spec{
-	Group:        "video-translate",
-	Name:         "caption get",
-	Summary:      "Get video translation caption",
-	Description:  "Get the caption file (SRT or VTT format) for a completed video translation. Requires enable_caption=true when creating the translation.",
-	Endpoint:     "/v3/video-translations/{video_translation_id}/caption",
-	Method:       "GET",
-	BodyEncoding: "",
+	Group:          "video-translate",
+	Name:           "caption get",
+	Summary:        "Get video translation caption",
+	Description:    "Get the caption file (SRT or VTT format) for a completed video translation. Requires enable_caption=true when creating the translation.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for GET /v3/video-translations/{id}/caption.\",\n      \"properties\": {\n        \"caption_url\": {\n          \"description\": \"Presigned URL to download the caption file\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"caption_url\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/{video_translation_id}/caption",
+	Method:         "GET",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen video-translate caption get <video-translation-id> --format srt",
 	},
@@ -35,13 +36,15 @@ var VideoTranslateCaptionGet = &command.Spec{
 }
 
 var VideoTranslateCreate = &command.Spec{
-	Group:        "video-translate",
-	Name:         "create",
-	Summary:      "Create video translation",
-	Description:  "Translate a video into one or more target languages. The translation runs asynchronously — the response contains an id (or ids for batch) which can be used to poll status.\n\nUse GET /v3/video-translations/languages to discover supported language codes.",
-	Endpoint:     "/v3/video-translations",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "video-translate",
+	Name:           "create",
+	Summary:        "Create video translation",
+	Description:    "Translate a video into one or more target languages. The translation runs asynchronously — the response contains an id (or ids for batch) which can be used to poll status.\n\nUse GET /v3/video-translations/languages to discover supported language codes.",
+	RequestSchema:  "{\n  \"description\": \"Request body for POST /v3/video-translations.\",\n  \"properties\": {\n    \"audio\": {\n      \"description\": \"Custom audio for dubbing — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}\",\n      \"discriminator\": {\n        \"mapping\": {\n          \"asset_id\": \"#/components/schemas/AssetId\",\n          \"url\": \"#/components/schemas/AssetUrl\"\n        },\n        \"propertyName\": \"type\"\n      },\n      \"nullable\": true,\n      \"oneOf\": [\n        {\n          \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n          \"properties\": {\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            },\n            \"url\": {\n              \"description\": \"Publicly accessible HTTPS URL for the asset\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"url\"\n          ],\n          \"type\": \"object\"\n        },\n        {\n          \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n          \"properties\": {\n            \"asset_id\": {\n              \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n              \"type\": \"string\"\n            },\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"asset_id\"\n          ],\n          \"type\": \"object\"\n        }\n      ]\n    },\n    \"brand_voice_id\": {\n      \"description\": \"Custom brand voice ID. Requires brand voice setup.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_id\": {\n      \"description\": \"ID included in webhook payload\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_url\": {\n      \"description\": \"Webhook URL for completion notifications\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"disable_music_track\": {\n      \"default\": false,\n      \"description\": \"Remove background music\",\n      \"type\": \"boolean\"\n    },\n    \"enable_caption\": {\n      \"default\": false,\n      \"description\": \"Generate captions for translated video\",\n      \"type\": \"boolean\"\n    },\n    \"enable_dynamic_duration\": {\n      \"default\": true,\n      \"description\": \"Allow dynamic duration adjustment\",\n      \"type\": \"boolean\"\n    },\n    \"enable_speech_enhancement\": {\n      \"default\": false,\n      \"description\": \"Enhance speech quality\",\n      \"type\": \"boolean\"\n    },\n    \"enable_watermark\": {\n      \"default\": false,\n      \"description\": \"Add watermark to output\",\n      \"type\": \"boolean\"\n    },\n    \"end_time\": {\n      \"description\": \"End time in seconds for partial translation\",\n      \"nullable\": true,\n      \"type\": \"number\"\n    },\n    \"folder_id\": {\n      \"description\": \"Project/folder ID to organize translation into\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"fps_mode\": {\n      \"description\": \"Frame rate mode: 'vfr', 'cfr', or 'passthrough'. Only valid with audio.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"input_language\": {\n      \"description\": \"Source language code (auto-detected if omitted)\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"keep_the_same_format\": {\n      \"description\": \"Preserve the source video's encoding specs (resolution, bitrate).\",\n      \"nullable\": true,\n      \"type\": \"boolean\"\n    },\n    \"mode\": {\n      \"enum\": [\n        \"speed\",\n        \"precision\"\n      ],\n      \"type\": \"string\"\n    },\n    \"output_languages\": {\n      \"description\": \"Target language codes. Use one for single translation, multiple for batch.\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"type\": \"array\"\n    },\n    \"speaker_num\": {\n      \"description\": \"Number of speakers (improves speaker separation)\",\n      \"nullable\": true,\n      \"type\": \"integer\"\n    },\n    \"srt\": {\n      \"description\": \"Custom subtitle file — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}. Enterprise plan only.\",\n      \"discriminator\": {\n        \"mapping\": {\n          \"asset_id\": \"#/components/schemas/AssetId\",\n          \"url\": \"#/components/schemas/AssetUrl\"\n        },\n        \"propertyName\": \"type\"\n      },\n      \"nullable\": true,\n      \"oneOf\": [\n        {\n          \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n          \"properties\": {\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            },\n            \"url\": {\n              \"description\": \"Publicly accessible HTTPS URL for the asset\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"url\"\n          ],\n          \"type\": \"object\"\n        },\n        {\n          \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n          \"properties\": {\n            \"asset_id\": {\n              \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n              \"type\": \"string\"\n            },\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"asset_id\"\n          ],\n          \"type\": \"object\"\n        }\n      ]\n    },\n    \"srt_role\": {\n      \"description\": \"Which video the subtitle applies to: 'input' (source) or 'output' (translated). Enterprise plan only.\",\n      \"enum\": [\n        \"input\",\n        \"output\"\n      ],\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"start_time\": {\n      \"description\": \"Start time in seconds for partial translation\",\n      \"nullable\": true,\n      \"type\": \"number\"\n    },\n    \"title\": {\n      \"description\": \"Title for the translation job\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"translate_audio_only\": {\n      \"default\": false,\n      \"description\": \"Only translate audio, keep original video\",\n      \"type\": \"boolean\"\n    },\n    \"video\": {\n      \"description\": \"Source video — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}\",\n      \"discriminator\": {\n        \"mapping\": {\n          \"asset_id\": \"#/components/schemas/AssetId\",\n          \"url\": \"#/components/schemas/AssetUrl\"\n        },\n        \"propertyName\": \"type\"\n      },\n      \"oneOf\": [\n        {\n          \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n          \"properties\": {\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            },\n            \"url\": {\n              \"description\": \"Publicly accessible HTTPS URL for the asset\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"url\"\n          ],\n          \"type\": \"object\"\n        },\n        {\n          \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n          \"properties\": {\n            \"asset_id\": {\n              \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n              \"type\": \"string\"\n            },\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"asset_id\"\n          ],\n          \"type\": \"object\"\n        }\n      ]\n    }\n  },\n  \"required\": [\n    \"video\",\n    \"output_languages\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for POST /v3/video-translations.\",\n      \"properties\": {\n        \"video_translation_ids\": {\n          \"description\": \"Video translation IDs, one per target language\",\n          \"items\": {\n            \"type\": \"string\"\n          },\n          \"type\": \"array\"\n        }\n      },\n      \"required\": [\n        \"video_translation_ids\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"cat request.json | heygen video-translate create -d -",
 		"heygen video-translate create --output-languages es --mode precision",
@@ -147,13 +150,14 @@ var VideoTranslateCreate = &command.Spec{
 }
 
 var VideoTranslateDelete = &command.Spec{
-	Group:        "video-translate",
-	Name:         "delete",
-	Summary:      "Delete video translation",
-	Description:  "Permanently delete a video translation.",
-	Endpoint:     "/v3/video-translations/{video_translation_id}",
-	Method:       "DELETE",
-	BodyEncoding: "",
+	Group:          "video-translate",
+	Name:           "delete",
+	Summary:        "Delete video translation",
+	Description:    "Permanently delete a video translation.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for DELETE /v3/video-translations/{id}.\",\n      \"properties\": {\n        \"id\": {\n          \"description\": \"ID of the deleted video translation\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/{video_translation_id}",
+	Method:         "DELETE",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen video-translate delete <video-translation-id>",
 	},
@@ -163,13 +167,14 @@ var VideoTranslateDelete = &command.Spec{
 }
 
 var VideoTranslateGet = &command.Spec{
-	Group:        "video-translate",
-	Name:         "get",
-	Summary:      "Get video translation details",
-	Description:  "Get detailed information about a video translation including status, URLs, and metadata.",
-	Endpoint:     "/v3/video-translations/{video_translation_id}",
-	Method:       "GET",
-	BodyEncoding: "",
+	Group:          "video-translate",
+	Name:           "get",
+	Summary:        "Get video translation details",
+	Description:    "Get detailed information about a video translation including status, URLs, and metadata.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Detailed video translation resource.\",\n      \"properties\": {\n        \"audio_url\": {\n          \"description\": \"Presigned download URL for the translated audio. Only present when status is completed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"callback_id\": {\n          \"description\": \"Client-provided callback ID\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"created_at\": {\n          \"description\": \"Unix timestamp when the translation was created\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"duration\": {\n          \"description\": \"Video duration in seconds\",\n          \"nullable\": true,\n          \"type\": \"number\"\n        },\n        \"failure_message\": {\n          \"description\": \"Error description. Only present when status is failed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"id\": {\n          \"description\": \"Unique video translation identifier\",\n          \"type\": \"string\"\n        },\n        \"input_language\": {\n          \"description\": \"Detected or specified source language code\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"output_language\": {\n          \"description\": \"Target language code\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"enum\": [\n            \"pending\",\n            \"running\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"title\": {\n          \"description\": \"Title of the translation job\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"translate_audio_only\": {\n          \"description\": \"Whether only the audio was translated, keeping the original video\",\n          \"nullable\": true,\n          \"type\": \"boolean\"\n        },\n        \"video_url\": {\n          \"description\": \"Presigned download URL for the translated video. Only present when status is completed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/{video_translation_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen video-translate get <video-translation-id>",
 	},
@@ -179,27 +184,29 @@ var VideoTranslateGet = &command.Spec{
 }
 
 var VideoTranslateLanguagesList = &command.Spec{
-	Group:        "video-translate",
-	Name:         "languages list",
-	Summary:      "List supported languages",
-	Description:  "List all supported target language codes for video translation.",
-	Endpoint:     "/v3/video-translations/languages",
-	Method:       "GET",
-	BodyEncoding: "",
+	Group:          "video-translate",
+	Name:           "languages list",
+	Summary:        "List supported languages",
+	Description:    "List all supported target language codes for video translation.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for GET /v3/video-translations/languages.\",\n      \"properties\": {\n        \"languages\": {\n          \"description\": \"List of supported target language codes\",\n          \"items\": {\n            \"type\": \"string\"\n          },\n          \"type\": \"array\"\n        }\n      },\n      \"required\": [\n        \"languages\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/languages",
+	Method:         "GET",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen video-translate languages list",
 	},
 }
 
 var VideoTranslateList = &command.Spec{
-	Group:        "video-translate",
-	Name:         "list",
-	Summary:      "List video translations",
-	Description:  "List video translations with cursor-based pagination.",
-	Endpoint:     "/v3/video-translations",
-	Method:       "GET",
-	BodyEncoding: "",
-	Paginated:    true,
+	Group:          "video-translate",
+	Name:           "list",
+	Summary:        "List video translations",
+	Description:    "List video translations with cursor-based pagination.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"description\": \"Detailed video translation resource.\",\n        \"properties\": {\n          \"audio_url\": {\n            \"description\": \"Presigned download URL for the translated audio. Only present when status is completed.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"callback_id\": {\n            \"description\": \"Client-provided callback ID\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"created_at\": {\n            \"description\": \"Unix timestamp when the translation was created\",\n            \"nullable\": true,\n            \"type\": \"integer\"\n          },\n          \"duration\": {\n            \"description\": \"Video duration in seconds\",\n            \"nullable\": true,\n            \"type\": \"number\"\n          },\n          \"failure_message\": {\n            \"description\": \"Error description. Only present when status is failed.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"id\": {\n            \"description\": \"Unique video translation identifier\",\n            \"type\": \"string\"\n          },\n          \"input_language\": {\n            \"description\": \"Detected or specified source language code\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"output_language\": {\n            \"description\": \"Target language code\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"status\": {\n            \"enum\": [\n              \"pending\",\n              \"running\",\n              \"completed\",\n              \"failed\"\n            ],\n            \"type\": \"string\"\n          },\n          \"title\": {\n            \"description\": \"Title of the translation job\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"translate_audio_only\": {\n            \"description\": \"Whether only the audio was translated, keeping the original video\",\n            \"nullable\": true,\n            \"type\": \"boolean\"\n          },\n          \"video_url\": {\n            \"description\": \"Presigned download URL for the translated video. Only present when status is completed.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"status\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"type\": \"string|null\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Paginated:      true,
 	Examples: []string{
 		"heygen video-translate list --limit 10",
 	},
@@ -232,13 +239,15 @@ var VideoTranslateList = &command.Spec{
 }
 
 var VideoTranslateProofreadsCreate = &command.Spec{
-	Group:        "video-translate",
-	Name:         "proofreads create",
-	Summary:      "Create proofread",
-	Description:  "Create a proofread session from a video. Processes the video and extracts editable subtitles.",
-	Endpoint:     "/v3/video-translations/proofreads",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "video-translate",
+	Name:           "proofreads create",
+	Summary:        "Create proofread",
+	Description:    "Create a proofread session from a video. Processes the video and extracts editable subtitles.",
+	RequestSchema:  "{\n  \"description\": \"Request body for POST /v3/video-translations/proofreads.\",\n  \"properties\": {\n    \"brand_voice_id\": {\n      \"description\": \"Custom brand voice ID. Requires brand voice setup.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"disable_music_track\": {\n      \"default\": false,\n      \"description\": \"Remove background music\",\n      \"type\": \"boolean\"\n    },\n    \"enable_speech_enhancement\": {\n      \"default\": false,\n      \"description\": \"Enhance speech quality\",\n      \"type\": \"boolean\"\n    },\n    \"enable_video_stretching\": {\n      \"default\": false,\n      \"description\": \"Allow dynamic duration adjustment\",\n      \"type\": \"boolean\"\n    },\n    \"folder_id\": {\n      \"description\": \"Project/folder ID to organize proofread into\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"keep_the_same_format\": {\n      \"default\": false,\n      \"description\": \"Preserve the source video's encoding specs (resolution, bitrate)\",\n      \"type\": \"boolean\"\n    },\n    \"mode\": {\n      \"enum\": [\n        \"speed\",\n        \"precision\"\n      ],\n      \"type\": \"string\"\n    },\n    \"output_languages\": {\n      \"description\": \"Target language codes. Use one for single proofread, multiple for batch.\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"type\": \"array\"\n    },\n    \"speaker_num\": {\n      \"description\": \"Number of speakers (improves speaker separation)\",\n      \"nullable\": true,\n      \"type\": \"integer\"\n    },\n    \"srt\": {\n      \"description\": \"Initial SRT file — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}\",\n      \"discriminator\": {\n        \"mapping\": {\n          \"asset_id\": \"#/components/schemas/AssetId\",\n          \"url\": \"#/components/schemas/AssetUrl\"\n        },\n        \"propertyName\": \"type\"\n      },\n      \"nullable\": true,\n      \"oneOf\": [\n        {\n          \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n          \"properties\": {\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            },\n            \"url\": {\n              \"description\": \"Publicly accessible HTTPS URL for the asset\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"url\"\n          ],\n          \"type\": \"object\"\n        },\n        {\n          \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n          \"properties\": {\n            \"asset_id\": {\n              \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n              \"type\": \"string\"\n            },\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"asset_id\"\n          ],\n          \"type\": \"object\"\n        }\n      ]\n    },\n    \"title\": {\n      \"description\": \"Title for the proofread job\",\n      \"type\": \"string\"\n    },\n    \"video\": {\n      \"description\": \"Source video — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}\",\n      \"discriminator\": {\n        \"mapping\": {\n          \"asset_id\": \"#/components/schemas/AssetId\",\n          \"url\": \"#/components/schemas/AssetUrl\"\n        },\n        \"propertyName\": \"type\"\n      },\n      \"oneOf\": [\n        {\n          \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n          \"properties\": {\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            },\n            \"url\": {\n              \"description\": \"Publicly accessible HTTPS URL for the asset\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"url\"\n          ],\n          \"type\": \"object\"\n        },\n        {\n          \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n          \"properties\": {\n            \"asset_id\": {\n              \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n              \"type\": \"string\"\n            },\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"asset_id\"\n          ],\n          \"type\": \"object\"\n        }\n      ]\n    }\n  },\n  \"required\": [\n    \"video\",\n    \"output_languages\",\n    \"title\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for POST /v3/video-translations/proofreads.\",\n      \"properties\": {\n        \"proofread_ids\": {\n          \"description\": \"Proofread IDs, one per target language\",\n          \"items\": {\n            \"type\": \"string\"\n          },\n          \"type\": \"array\"\n        },\n        \"status\": {\n          \"enum\": [\n            \"processing\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"proofread_ids\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/proofreads",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"cat request.json | heygen video-translate proofreads create -d -",
 	},
@@ -331,13 +340,15 @@ var VideoTranslateProofreadsCreate = &command.Spec{
 }
 
 var VideoTranslateProofreadsGenerate = &command.Spec{
-	Group:        "video-translate",
-	Name:         "proofreads generate",
-	Summary:      "Generate video from proofread",
-	Description:  "Generate a translated video from a completed proofread session.",
-	Endpoint:     "/v3/video-translations/proofreads/{proofread_id}/generate",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "video-translate",
+	Name:           "proofreads generate",
+	Summary:        "Generate video from proofread",
+	Description:    "Generate a translated video from a completed proofread session.",
+	RequestSchema:  "{\n  \"description\": \"Request body for POST /v3/video-translations/proofreads/{id}/generate.\",\n  \"properties\": {\n    \"callback_id\": {\n      \"description\": \"ID included in webhook payload\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_url\": {\n      \"description\": \"Webhook URL for completion notifications\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"captions\": {\n      \"default\": false,\n      \"description\": \"Generate captions for the translated video\",\n      \"type\": \"boolean\"\n    },\n    \"translate_audio_only\": {\n      \"default\": false,\n      \"description\": \"Only translate audio, keep original video\",\n      \"type\": \"boolean\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for POST /v3/video-translations/proofreads/{id}/generate.\",\n      \"properties\": {\n        \"status\": {\n          \"enum\": [\n            \"processing\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"video_translation_id\": {\n          \"description\": \"Video translation ID — use GET /v3/video-translations/{id} to poll status\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"video_translation_id\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/proofreads/{proofread_id}/generate",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"heygen video-translate proofreads generate <proofread-id>",
 	},
@@ -373,13 +384,14 @@ var VideoTranslateProofreadsGenerate = &command.Spec{
 }
 
 var VideoTranslateProofreadsGet = &command.Spec{
-	Group:        "video-translate",
-	Name:         "proofreads get",
-	Summary:      "Get proofread details",
-	Description:  "Get status and details of a proofread session.",
-	Endpoint:     "/v3/video-translations/proofreads/{proofread_id}",
-	Method:       "GET",
-	BodyEncoding: "",
+	Group:          "video-translate",
+	Name:           "proofreads get",
+	Summary:        "Get proofread details",
+	Description:    "Get status and details of a proofread session.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Detailed proofread resource.\",\n      \"properties\": {\n        \"created_at\": {\n          \"description\": \"Unix timestamp when the proofread was created\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"failure_message\": {\n          \"description\": \"Error description. Only present when status is failed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"id\": {\n          \"description\": \"Unique proofread identifier\",\n          \"type\": \"string\"\n        },\n        \"input_language\": {\n          \"description\": \"Detected or specified source language code\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"output_language\": {\n          \"description\": \"Target language code\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"enum\": [\n            \"processing\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"submitted_for_review\": {\n          \"description\": \"Whether the proofread has been submitted for review\",\n          \"nullable\": true,\n          \"type\": \"boolean\"\n        },\n        \"title\": {\n          \"description\": \"Title of the proofread job\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/proofreads/{proofread_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen video-translate proofreads get <proofread-id>",
 	},
@@ -389,13 +401,14 @@ var VideoTranslateProofreadsGet = &command.Spec{
 }
 
 var VideoTranslateProofreadsSrtGet = &command.Spec{
-	Group:        "video-translate",
-	Name:         "proofreads srt get",
-	Summary:      "Download proofread SRT",
-	Description:  "Download the edited and original SRT files for a completed proofread.",
-	Endpoint:     "/v3/video-translations/proofreads/{proofread_id}/srt",
-	Method:       "GET",
-	BodyEncoding: "",
+	Group:          "video-translate",
+	Name:           "proofreads srt get",
+	Summary:        "Download proofread SRT",
+	Description:    "Download the edited and original SRT files for a completed proofread.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for GET /v3/video-translations/proofreads/{id}/srt.\",\n      \"properties\": {\n        \"original_srt_url\": {\n          \"description\": \"Presigned URL for the original SRT file (if provided at creation)\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"srt_url\": {\n          \"description\": \"Presigned URL to download the edited SRT file\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"srt_url\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/proofreads/{proofread_id}/srt",
+	Method:         "GET",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen video-translate proofreads srt get <proofread-id>",
 	},
@@ -405,13 +418,15 @@ var VideoTranslateProofreadsSrtGet = &command.Spec{
 }
 
 var VideoTranslateProofreadsSrtUpdate = &command.Spec{
-	Group:        "video-translate",
-	Name:         "proofreads srt update",
-	Summary:      "Upload proofread SRT",
-	Description:  "Upload an edited SRT file to update the proofread subtitles. Returns the updated proofread detail.",
-	Endpoint:     "/v3/video-translations/proofreads/{proofread_id}/srt",
-	Method:       "PUT",
-	BodyEncoding: "json",
+	Group:          "video-translate",
+	Name:           "proofreads srt update",
+	Summary:        "Upload proofread SRT",
+	Description:    "Upload an edited SRT file to update the proofread subtitles. Returns the updated proofread detail.",
+	RequestSchema:  "{\n  \"description\": \"Request body for PUT /v3/video-translations/proofreads/{id}/srt.\",\n  \"properties\": {\n    \"srt\": {\n      \"description\": \"SRT file — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}\",\n      \"discriminator\": {\n        \"mapping\": {\n          \"asset_id\": \"#/components/schemas/AssetId\",\n          \"url\": \"#/components/schemas/AssetUrl\"\n        },\n        \"propertyName\": \"type\"\n      },\n      \"oneOf\": [\n        {\n          \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n          \"properties\": {\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            },\n            \"url\": {\n              \"description\": \"Publicly accessible HTTPS URL for the asset\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"url\"\n          ],\n          \"type\": \"object\"\n        },\n        {\n          \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n          \"properties\": {\n            \"asset_id\": {\n              \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n              \"type\": \"string\"\n            },\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"asset_id\"\n          ],\n          \"type\": \"object\"\n        }\n      ]\n    }\n  },\n  \"required\": [\n    \"srt\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Detailed proofread resource.\",\n      \"properties\": {\n        \"created_at\": {\n          \"description\": \"Unix timestamp when the proofread was created\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"failure_message\": {\n          \"description\": \"Error description. Only present when status is failed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"id\": {\n          \"description\": \"Unique proofread identifier\",\n          \"type\": \"string\"\n        },\n        \"input_language\": {\n          \"description\": \"Detected or specified source language code\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"output_language\": {\n          \"description\": \"Target language code\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"enum\": [\n            \"processing\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"submitted_for_review\": {\n          \"description\": \"Whether the proofread has been submitted for review\",\n          \"nullable\": true,\n          \"type\": \"boolean\"\n        },\n        \"title\": {\n          \"description\": \"Title of the proofread job\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/proofreads/{proofread_id}/srt",
+	Method:         "PUT",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"heygen video-translate proofreads srt update <proofread-id>",
 	},
@@ -421,13 +436,15 @@ var VideoTranslateProofreadsSrtUpdate = &command.Spec{
 }
 
 var VideoTranslateUpdate = &command.Spec{
-	Group:        "video-translate",
-	Name:         "update",
-	Summary:      "Update video translation",
-	Description:  "Update a video translation's title.",
-	Endpoint:     "/v3/video-translations/{video_translation_id}",
-	Method:       "PATCH",
-	BodyEncoding: "json",
+	Group:          "video-translate",
+	Name:           "update",
+	Summary:        "Update video translation",
+	Description:    "Update a video translation's title.",
+	RequestSchema:  "{\n  \"description\": \"Request body for PATCH /v3/video-translations/{id}.\",\n  \"properties\": {\n    \"title\": {\n      \"description\": \"New title for the video translation\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"title\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Detailed video translation resource.\",\n      \"properties\": {\n        \"audio_url\": {\n          \"description\": \"Presigned download URL for the translated audio. Only present when status is completed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"callback_id\": {\n          \"description\": \"Client-provided callback ID\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"created_at\": {\n          \"description\": \"Unix timestamp when the translation was created\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"duration\": {\n          \"description\": \"Video duration in seconds\",\n          \"nullable\": true,\n          \"type\": \"number\"\n        },\n        \"failure_message\": {\n          \"description\": \"Error description. Only present when status is failed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"id\": {\n          \"description\": \"Unique video translation identifier\",\n          \"type\": \"string\"\n        },\n        \"input_language\": {\n          \"description\": \"Detected or specified source language code\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"output_language\": {\n          \"description\": \"Target language code\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"enum\": [\n            \"pending\",\n            \"running\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"title\": {\n          \"description\": \"Title of the translation job\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"translate_audio_only\": {\n          \"description\": \"Whether only the audio was translated, keeping the original video\",\n          \"nullable\": true,\n          \"type\": \"boolean\"\n        },\n        \"video_url\": {\n          \"description\": \"Presigned download URL for the translated video. Only present when status is completed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/{video_translation_id}",
+	Method:         "PATCH",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"heygen video-translate update <video-translation-id> --title 'New title'",
 	},

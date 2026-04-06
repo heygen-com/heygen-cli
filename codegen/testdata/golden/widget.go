@@ -5,13 +5,15 @@ package gen
 import "github.com/heygen-com/heygen-cli/internal/command"
 
 var WidgetActivateCreate = &command.Spec{
-	Group:        "widget",
-	Name:         "activate create",
-	Summary:      "Activate a widget",
-	Description:  "",
-	Endpoint:     "/v3/widgets/{widget_id}/activate",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "widget",
+	Name:           "activate create",
+	Summary:        "Activate a widget",
+	Description:    "",
+	RequestSchema:  "{\n  \"properties\": {\n    \"force\": {\n      \"default\": false,\n      \"description\": \"Force activation\",\n      \"type\": \"boolean\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"properties\": {},\n      \"required\": [],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/widgets/{widget_id}/activate",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Args: []command.ArgSpec{
 		{Name: "widget-id", Param: "widget_id", Help: ""},
 	},
@@ -32,13 +34,15 @@ var WidgetActivateCreate = &command.Spec{
 }
 
 var WidgetCreate = &command.Spec{
-	Group:        "widget",
-	Name:         "create",
-	Summary:      "Create a widget",
-	Description:  "",
-	Endpoint:     "/v3/widgets",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "widget",
+	Name:           "create",
+	Summary:        "Create a widget",
+	Description:    "",
+	RequestSchema:  "{\n  \"properties\": {\n    \"color\": {\n      \"description\": \"Widget color\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"count\": {\n      \"description\": \"Widget count\",\n      \"type\": \"integer\"\n    },\n    \"name\": {\n      \"description\": \"Widget name\",\n      \"type\": \"string\"\n    },\n    \"settings\": {\n      \"description\": \"Complex settings object\",\n      \"properties\": {\n        \"nested\": {\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [],\n      \"type\": \"object\"\n    },\n    \"tags\": {\n      \"description\": \"Widget tags\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"type\": \"array\"\n    }\n  },\n  \"required\": [\n    \"name\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"properties\": {\n        \"id\": {\n          \"type\": \"string\"\n        },\n        \"name\": {\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/widgets",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Flags: []command.FlagSpec{
 		{
 			Name:     "count",
@@ -80,40 +84,43 @@ var WidgetCreate = &command.Spec{
 }
 
 var WidgetDelete = &command.Spec{
-	Group:        "widget",
-	Name:         "delete",
-	Summary:      "Delete a widget",
-	Description:  "",
-	Endpoint:     "/v3/widgets/{widget_id}",
-	Method:       "DELETE",
-	BodyEncoding: "",
+	Group:          "widget",
+	Name:           "delete",
+	Summary:        "Delete a widget",
+	Description:    "",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"properties\": {},\n      \"required\": [],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/widgets/{widget_id}",
+	Method:         "DELETE",
+	BodyEncoding:   "",
 	Args: []command.ArgSpec{
 		{Name: "widget-id", Param: "widget_id", Help: ""},
 	},
 }
 
 var WidgetGet = &command.Spec{
-	Group:        "widget",
-	Name:         "get",
-	Summary:      "Get widget details",
-	Description:  "",
-	Endpoint:     "/v3/widgets/{widget_id}",
-	Method:       "GET",
-	BodyEncoding: "",
+	Group:          "widget",
+	Name:           "get",
+	Summary:        "Get widget details",
+	Description:    "",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"properties\": {\n        \"id\": {\n          \"type\": \"string\"\n        },\n        \"name\": {\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/widgets/{widget_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
 	Args: []command.ArgSpec{
 		{Name: "widget-id", Param: "widget_id", Help: ""},
 	},
 }
 
 var WidgetList = &command.Spec{
-	Group:        "widget",
-	Name:         "list",
-	Summary:      "List widgets",
-	Description:  "",
-	Endpoint:     "/v3/widgets",
-	Method:       "GET",
-	BodyEncoding: "",
-	Paginated:    true,
+	Group:          "widget",
+	Name:           "list",
+	Summary:        "List widgets",
+	Description:    "",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"properties\": {},\n        \"required\": [],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"type\": \"string|null\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/widgets",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Paginated:      true,
 	Flags: []command.FlagSpec{
 		{
 			Name:     "limit",

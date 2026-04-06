@@ -5,13 +5,15 @@ package gen
 import "github.com/heygen-com/heygen-cli/internal/command"
 
 var OverdubCreate = &command.Spec{
-	Group:        "overdub",
-	Name:         "create",
-	Summary:      "Create overdub",
-	Description:  "Dub or replace audio on a video using a provided audio file. Runs asynchronously — poll status via GET /v3/overdubs/{id}.",
-	Endpoint:     "/v3/overdubs",
-	Method:       "POST",
-	BodyEncoding: "json",
+	Group:          "overdub",
+	Name:           "create",
+	Summary:        "Create overdub",
+	Description:    "Dub or replace audio on a video using a provided audio file. Runs asynchronously — poll status via GET /v3/overdubs/{id}.",
+	RequestSchema:  "{\n  \"description\": \"Request body for POST /v3/overdubs.\",\n  \"properties\": {\n    \"audio\": {\n      \"description\": \"Replacement audio — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}\",\n      \"discriminator\": {\n        \"mapping\": {\n          \"asset_id\": \"#/components/schemas/AssetId\",\n          \"url\": \"#/components/schemas/AssetUrl\"\n        },\n        \"propertyName\": \"type\"\n      },\n      \"oneOf\": [\n        {\n          \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n          \"properties\": {\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            },\n            \"url\": {\n              \"description\": \"Publicly accessible HTTPS URL for the asset\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"url\"\n          ],\n          \"type\": \"object\"\n        },\n        {\n          \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n          \"properties\": {\n            \"asset_id\": {\n              \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n              \"type\": \"string\"\n            },\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"asset_id\"\n          ],\n          \"type\": \"object\"\n        }\n      ]\n    },\n    \"callback_id\": {\n      \"description\": \"ID included in webhook payload\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_url\": {\n      \"description\": \"Webhook URL for completion notifications\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"disable_music_track\": {\n      \"default\": false,\n      \"description\": \"Remove background music\",\n      \"type\": \"boolean\"\n    },\n    \"enable_caption\": {\n      \"default\": false,\n      \"description\": \"Generate captions for the output video\",\n      \"type\": \"boolean\"\n    },\n    \"enable_dynamic_duration\": {\n      \"default\": true,\n      \"description\": \"Allow dynamic duration adjustment\",\n      \"type\": \"boolean\"\n    },\n    \"enable_speech_enhancement\": {\n      \"default\": false,\n      \"description\": \"Enhance speech quality\",\n      \"type\": \"boolean\"\n    },\n    \"enable_watermark\": {\n      \"default\": false,\n      \"description\": \"Add watermark to output\",\n      \"type\": \"boolean\"\n    },\n    \"end_time\": {\n      \"description\": \"End time in seconds for partial overdub\",\n      \"nullable\": true,\n      \"type\": \"number\"\n    },\n    \"folder_id\": {\n      \"description\": \"Project/folder ID to organize overdub into\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"fps_mode\": {\n      \"description\": \"Frame rate mode: 'vfr', 'cfr', or 'passthrough'.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"keep_the_same_format\": {\n      \"description\": \"Preserve the source video's encoding specs (resolution, bitrate).\",\n      \"nullable\": true,\n      \"type\": \"boolean\"\n    },\n    \"mode\": {\n      \"enum\": [\n        \"speed\",\n        \"precision\"\n      ],\n      \"type\": \"string\"\n    },\n    \"start_time\": {\n      \"description\": \"Start time in seconds for partial overdub\",\n      \"nullable\": true,\n      \"type\": \"number\"\n    },\n    \"title\": {\n      \"description\": \"Title for the overdub job\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"video\": {\n      \"description\": \"Source video — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}\",\n      \"discriminator\": {\n        \"mapping\": {\n          \"asset_id\": \"#/components/schemas/AssetId\",\n          \"url\": \"#/components/schemas/AssetUrl\"\n        },\n        \"propertyName\": \"type\"\n      },\n      \"oneOf\": [\n        {\n          \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n          \"properties\": {\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            },\n            \"url\": {\n              \"description\": \"Publicly accessible HTTPS URL for the asset\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"url\"\n          ],\n          \"type\": \"object\"\n        },\n        {\n          \"description\": \"Asset input via HeyGen asset ID (from POST /v1/asset).\",\n          \"properties\": {\n            \"asset_id\": {\n              \"description\": \"HeyGen asset ID from POST /v1/asset upload endpoint\",\n              \"type\": \"string\"\n            },\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"asset_id\"\n          ],\n          \"type\": \"object\"\n        }\n      ]\n    }\n  },\n  \"required\": [\n    \"video\",\n    \"audio\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for POST /v3/overdubs.\",\n      \"properties\": {\n        \"overdub_id\": {\n          \"description\": \"Overdub ID — use GET /v3/overdubs/{id} to poll status\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"overdub_id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/overdubs",
+	Method:         "POST",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"cat request.json | heygen overdub create -d -",
 	},
@@ -92,13 +94,14 @@ var OverdubCreate = &command.Spec{
 }
 
 var OverdubDelete = &command.Spec{
-	Group:        "overdub",
-	Name:         "delete",
-	Summary:      "Delete overdub",
-	Description:  "Permanently delete an overdub.",
-	Endpoint:     "/v3/overdubs/{overdub_id}",
-	Method:       "DELETE",
-	BodyEncoding: "",
+	Group:          "overdub",
+	Name:           "delete",
+	Summary:        "Delete overdub",
+	Description:    "Permanently delete an overdub.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for DELETE /v3/overdubs/{id}.\",\n      \"properties\": {\n        \"id\": {\n          \"description\": \"ID of the deleted overdub\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/overdubs/{overdub_id}",
+	Method:         "DELETE",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen overdub delete <overdub-id>",
 	},
@@ -108,13 +111,14 @@ var OverdubDelete = &command.Spec{
 }
 
 var OverdubGet = &command.Spec{
-	Group:        "overdub",
-	Name:         "get",
-	Summary:      "Get overdub details",
-	Description:  "Get detailed information about an overdub including status, URLs, and metadata.",
-	Endpoint:     "/v3/overdubs/{overdub_id}",
-	Method:       "GET",
-	BodyEncoding: "",
+	Group:          "overdub",
+	Name:           "get",
+	Summary:        "Get overdub details",
+	Description:    "Get detailed information about an overdub including status, URLs, and metadata.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Detailed overdub resource.\",\n      \"properties\": {\n        \"callback_id\": {\n          \"description\": \"Client-provided callback ID\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"created_at\": {\n          \"description\": \"Unix timestamp when the overdub was created\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"duration\": {\n          \"description\": \"Video duration in seconds\",\n          \"nullable\": true,\n          \"type\": \"number\"\n        },\n        \"failure_message\": {\n          \"description\": \"Error description. Only present when status is failed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"id\": {\n          \"description\": \"Unique overdub identifier\",\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"enum\": [\n            \"pending\",\n            \"running\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"title\": {\n          \"description\": \"Title of the overdub job\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"video_url\": {\n          \"description\": \"Presigned download URL for the output video. Only present when status is completed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/overdubs/{overdub_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
 	Examples: []string{
 		"heygen overdub get <overdub-id>",
 	},
@@ -124,14 +128,15 @@ var OverdubGet = &command.Spec{
 }
 
 var OverdubList = &command.Spec{
-	Group:        "overdub",
-	Name:         "list",
-	Summary:      "List overdubs",
-	Description:  "List overdubs with cursor-based pagination.",
-	Endpoint:     "/v3/overdubs",
-	Method:       "GET",
-	BodyEncoding: "",
-	Paginated:    true,
+	Group:          "overdub",
+	Name:           "list",
+	Summary:        "List overdubs",
+	Description:    "List overdubs with cursor-based pagination.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"description\": \"Detailed overdub resource.\",\n        \"properties\": {\n          \"callback_id\": {\n            \"description\": \"Client-provided callback ID\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"created_at\": {\n            \"description\": \"Unix timestamp when the overdub was created\",\n            \"nullable\": true,\n            \"type\": \"integer\"\n          },\n          \"duration\": {\n            \"description\": \"Video duration in seconds\",\n            \"nullable\": true,\n            \"type\": \"number\"\n          },\n          \"failure_message\": {\n            \"description\": \"Error description. Only present when status is failed.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"id\": {\n            \"description\": \"Unique overdub identifier\",\n            \"type\": \"string\"\n          },\n          \"status\": {\n            \"enum\": [\n              \"pending\",\n              \"running\",\n              \"completed\",\n              \"failed\"\n            ],\n            \"type\": \"string\"\n          },\n          \"title\": {\n            \"description\": \"Title of the overdub job\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"video_url\": {\n            \"description\": \"Presigned download URL for the output video. Only present when status is completed.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"status\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"type\": \"string|null\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/overdubs",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Paginated:      true,
 	Examples: []string{
 		"heygen overdub list --limit 10",
 	},
@@ -164,13 +169,15 @@ var OverdubList = &command.Spec{
 }
 
 var OverdubUpdate = &command.Spec{
-	Group:        "overdub",
-	Name:         "update",
-	Summary:      "Update overdub",
-	Description:  "Update an overdub's title.",
-	Endpoint:     "/v3/overdubs/{overdub_id}",
-	Method:       "PATCH",
-	BodyEncoding: "json",
+	Group:          "overdub",
+	Name:           "update",
+	Summary:        "Update overdub",
+	Description:    "Update an overdub's title.",
+	RequestSchema:  "{\n  \"description\": \"Request body for PATCH /v3/overdubs/{id}.\",\n  \"properties\": {\n    \"title\": {\n      \"description\": \"New title for the overdub\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"title\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Detailed overdub resource.\",\n      \"properties\": {\n        \"callback_id\": {\n          \"description\": \"Client-provided callback ID\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"created_at\": {\n          \"description\": \"Unix timestamp when the overdub was created\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"duration\": {\n          \"description\": \"Video duration in seconds\",\n          \"nullable\": true,\n          \"type\": \"number\"\n        },\n        \"failure_message\": {\n          \"description\": \"Error description. Only present when status is failed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"id\": {\n          \"description\": \"Unique overdub identifier\",\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"enum\": [\n            \"pending\",\n            \"running\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"title\": {\n          \"description\": \"Title of the overdub job\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"video_url\": {\n          \"description\": \"Presigned download URL for the output video. Only present when status is completed.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/overdubs/{overdub_id}",
+	Method:         "PATCH",
+	BodyEncoding:   "json",
 	Examples: []string{
 		"heygen overdub update <overdub-id> --title 'Updated title'",
 	},

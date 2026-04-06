@@ -5,13 +5,15 @@ package gen
 import "github.com/heygen-com/heygen-cli/internal/command"
 
 var UploadCreate = &command.Spec{
-	Group:        "upload",
-	Name:         "create",
-	Summary:      "Upload a file",
-	Description:  "",
-	Endpoint:     "/v3/uploads",
-	Method:       "POST",
-	BodyEncoding: "multipart",
+	Group:          "upload",
+	Name:           "create",
+	Summary:        "Upload a file",
+	Description:    "",
+	RequestSchema:  "{\n  \"properties\": {\n    \"file\": {\n      \"description\": \"File to upload\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"file\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"properties\": {},\n      \"required\": [],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/uploads",
+	Method:         "POST",
+	BodyEncoding:   "multipart",
 	Flags: []command.FlagSpec{
 		{
 			Name:     "file",
