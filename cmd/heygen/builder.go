@@ -168,7 +168,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 	}
 	if pollConfigs[spec.Group+"/"+spec.Name] != nil {
 		cmd.Flags().Bool("wait", false, "Poll until the operation completes or fails")
-		cmd.Flags().Duration("timeout", 10*time.Minute, "Max time to wait when using --wait")
+		cmd.Flags().Duration("timeout", 20*time.Minute, "Max time to wait when using --wait")
 	}
 	// Add -d/--data for commands with JSON request bodies
 	if spec.BodyEncoding == "json" {
