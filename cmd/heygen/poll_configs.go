@@ -11,6 +11,7 @@ var pollConfigs = map[string]*command.PollConfig{
 		TerminalOK:     []string{"completed"},
 		TerminalFail:   []string{"failed"},
 		IDField:        "data.video_id",
+		HintCommand:    "video get",
 	},
 	// The create response returns video_translation_ids (plural, always a list
 	// even for single-language requests). We extract the first element with ".0".
@@ -21,6 +22,7 @@ var pollConfigs = map[string]*command.PollConfig{
 		TerminalOK:     []string{"completed"},
 		TerminalFail:   []string{"failed"},
 		IDField:        "data.video_translation_ids.0",
+		HintCommand:    "video-translate get",
 	},
 	// video-agent returns session_id + video_id. We poll the video status.
 	// video_id can be null in future multi-turn flows — extractJSONPath
@@ -31,5 +33,6 @@ var pollConfigs = map[string]*command.PollConfig{
 		TerminalOK:     []string{"completed"},
 		TerminalFail:   []string{"failed"},
 		IDField:        "data.video_id",
+		HintCommand:    "video get",
 	},
 }

@@ -102,6 +102,7 @@ type PollConfig struct {
 	TerminalOK     []string // success states: ["completed"]
 	TerminalFail   []string // failure states: ["failed", "error"]
 	IDField        string   // field in create response containing the resource ID
+	HintCommand    string   // CLI get command for manual follow-up (e.g. "video get")
 }
 
 // Column defines a TUI table column for --human output (future).

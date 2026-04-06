@@ -47,6 +47,17 @@ func (e *ErrPollFailed) Error() string {
 	return fmt.Sprintf("operation reached terminal failure state: %s", e.Status)
 }
 
+// ErrPollTimeout is returned when polling times out after the resource has
+// been created but before a terminal status is reached.
+type ErrPollTimeout struct {
+	Data       json.RawMessage
+	ResourceID string
+}
+
+func (e *ErrPollTimeout) Error() string {
+	return fmt.Sprintf("polling timed out (resource %s still in progress)", e.ResourceID)
+}
+
 // ExecuteAndPoll executes a create request, then polls a status endpoint until
 // the resource reaches a terminal state or the context is canceled.
 func (c *Client) ExecuteAndPoll(
@@ -65,7 +76,7 @@ func (c *Client) ExecuteAndPoll(
 
 	createResp, err := c.executeWithContext(pollCtx, spec, inv)
 	if err != nil {
-		return nil, translatePollContextError(pollCtx, err)
+		return nil, translateCreateContextError(pollCtx, err)
 	}
 
 	resourceID, err := extractJSONPath(createResp, spec.PollConfig.IDField)
@@ -102,16 +113,21 @@ func (c *Client) ExecuteAndPoll(
 		MaxDelay:  opts.MaxDelay,
 	}
 	start := time.Now()
+	var lastStatusResp json.RawMessage
 
 	for attempt := 0; ; attempt++ {
 		if err := pollCtx.Err(); err != nil {
-			return nil, newPollContextError(err)
+			return nil, classifyPollContextError(err, resourceID, lastStatusResp)
 		}
 
 		statusResp, err := c.executeWithContext(pollCtx, statusSpec, statusInv)
 		if err != nil {
-			return nil, translatePollContextError(pollCtx, err)
+			if ctxErr := pollCtx.Err(); ctxErr != nil {
+				return nil, classifyPollContextError(ctxErr, resourceID, lastStatusResp)
+			}
+			return nil, err
 		}
+		lastStatusResp = statusResp
 
 		status, err := extractJSONPath(statusResp, spec.PollConfig.StatusField)
 		if err != nil {
@@ -133,7 +149,10 @@ func (c *Client) ExecuteAndPoll(
 
 		delay := backoffDelay(attempt, pollBackoff)
 		if err := waitForRetry(pollCtx, delay); err != nil {
-			return nil, newPollContextError(err)
+			if ctxErr := pollCtx.Err(); ctxErr != nil {
+				return nil, classifyPollContextError(ctxErr, resourceID, lastStatusResp)
+			}
+			return nil, err
 		}
 	}
 }
@@ -402,18 +421,15 @@ func extractJSONPath(raw json.RawMessage, path string) (string, error) {
 	return value, nil
 }
 
-// translatePollContextError converts context deadline/cancellation errors into
-// user-friendly CLIErrors. This includes unwrapping context errors that were
-// stringified into CLIError.Message by executeWithContext — CLIError doesn't
-// preserve the error chain, so string matching is the fallback. If the message
-// format in executeWithContext changes, this degrades to returning the original
-// error (generic network failure), which is safe but less user-friendly.
-func translatePollContextError(ctx context.Context, err error) error {
+// translateCreateContextError converts timeout/cancel errors before a resource
+// ID is known into user-friendly CLIErrors. At this stage the client cannot
+// confirm whether creation succeeded, so exit code stays general.
+func translateCreateContextError(ctx context.Context, err error) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return newPollContextError(ctxErr)
+		return newCreateContextError(ctxErr)
 	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return newPollContextError(err)
+		return newCreateContextError(err)
 	}
 
 	var cliErr *clierrors.CLIError
@@ -421,16 +437,16 @@ func translatePollContextError(ctx context.Context, err error) error {
 		msg := strings.ToLower(cliErr.Message)
 		switch {
 		case strings.Contains(msg, "context deadline exceeded"):
-			return newPollContextError(context.DeadlineExceeded)
+			return newCreateContextError(context.DeadlineExceeded)
 		case strings.Contains(msg, "context canceled"), strings.Contains(msg, "context cancelled"):
-			return newPollContextError(context.Canceled)
+			return newCreateContextError(context.Canceled)
 		}
 	}
 
 	return err
 }
 
-func newPollContextError(err error) error {
+func newCreateContextError(err error) error {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return &clierrors.CLIError{
@@ -448,6 +464,24 @@ func newPollContextError(err error) error {
 		}
 	default:
 		return clierrors.New(err.Error())
+	}
+}
+
+func classifyPollContextError(err error, resourceID string, lastResp json.RawMessage) error {
+	if err == nil {
+		return clierrors.New("unexpected nil context error during polling")
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return &ErrPollTimeout{
+			Data:       lastResp,
+			ResourceID: resourceID,
+		}
+	}
+	return &clierrors.CLIError{
+		Code:     "canceled",
+		Message:  "polling was canceled before the operation completed",
+		Hint:     "Re-run the corresponding get command to check the current status manually",
+		ExitCode: clierrors.ExitGeneral,
 	}
 }
 

@@ -9,6 +9,7 @@ const (
 	ExitGeneral = 1
 	ExitUsage   = 2
 	ExitAuth    = 3
+	ExitTimeout = 4
 )
 
 // CLIError is the canonical error type for all CLI operations.
@@ -17,7 +18,7 @@ type CLIError struct {
 	Message   string // human-readable description
 	Hint      string // actionable fix: "Run heygen auth login"
 	RequestID string // from API X-Request-Id header (if applicable)
-	ExitCode  int    // process exit code (0/1/2/3)
+	ExitCode  int    // process exit code (0/1/2/3/4)
 }
 
 // Error implements the error interface.

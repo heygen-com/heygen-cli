@@ -43,6 +43,16 @@ var videoCreateWaitSpec = &command.Spec{
 	Examples:     []string{"heygen video create --wait"},
 }
 
+var videoAgentWaitSpec = &command.Spec{
+	Group:        "video-agent",
+	Name:         "create",
+	Summary:      "Create video with Video Agent",
+	Endpoint:     "/v3/video-agents",
+	Method:       "POST",
+	BodyEncoding: "json",
+	Examples:     []string{"heygen video-agent create --wait"},
+}
+
 func TestGenBuilder_VideoList_Success(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/videos": {
@@ -203,11 +213,111 @@ func TestGenBuilder_VideoCreate_Wait_Timeout(t *testing.T) {
 
 	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--timeout", "20ms")
 
-	if res.ExitCode != 1 {
-		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
+	if res.ExitCode != clierrors.ExitTimeout {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitTimeout, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "polling timed out before the operation completed") {
+	if !strings.Contains(res.Stderr, "polling timed out after 20ms") {
 		t.Fatalf("stderr = %s, want timeout message", res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "heygen video get vid_123") {
+		t.Fatalf("stderr = %s, want follow-up hint", res.Stderr)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
+		t.Fatalf("stdout should contain partial response: %v\nstdout: %s", err, res.Stdout)
+	}
+	data := parsed["data"].(map[string]any)
+	if data["status"] != "processing" {
+		t.Fatalf("status = %v, want processing", data["status"])
+	}
+}
+
+func TestGenBuilder_VideoCreate_Wait_TimeoutBeforeFirstPoll(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/videos": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123"}}`,
+		},
+		"GET /v3/videos/vid_123": {
+			StatusCode: 200,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				<-r.Context().Done()
+			},
+			Body: `{"data":{"video_id":"vid_123","status":"processing"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--timeout", "20ms")
+
+	if res.ExitCode != clierrors.ExitTimeout {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitTimeout, res.Stderr)
+	}
+	if strings.TrimSpace(res.Stdout) != "" {
+		t.Fatalf("stdout = %q, want empty when no status response was received", res.Stdout)
+	}
+}
+
+func TestGenBuilder_VideoCreate_Wait_Timeout_Human(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/videos": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123"}}`,
+		},
+		"GET /v3/videos/vid_123": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123","status":"processing","created_at":1774712936}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--timeout", "20ms", "--human")
+
+	if res.ExitCode != clierrors.ExitTimeout {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitTimeout, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "Polling: status=processing") {
+		t.Fatalf("stderr = %s, want progress output", res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "Error: polling timed out after 20ms") {
+		t.Fatalf("stderr = %s, want human timeout error", res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "Hint: heygen video get vid_123") {
+		t.Fatalf("stderr = %s, want human hint", res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "Video Id") && !strings.Contains(res.Stdout, "Video ID") && !strings.Contains(res.Stdout, "video_id") {
+		t.Fatalf("stdout = %s, want rendered partial result", res.Stdout)
+	}
+	if !strings.Contains(res.Stdout, "processing") {
+		t.Fatalf("stdout = %s, want processing status", res.Stdout)
+	}
+}
+
+func TestGenBuilder_VideoAgentCreate_Wait_Timeout_UsesVideoGetHint(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/video-agents": {
+			StatusCode: 200,
+			Body:       `{"data":{"session_id":"sess_123","video_id":"vid_123"}}`,
+		},
+		"GET /v3/videos/vid_123": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_id":"vid_123","status":"processing"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", videoAgentWaitSpec, "create", "--wait", "--timeout", "20ms")
+
+	if res.ExitCode != clierrors.ExitTimeout {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitTimeout, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "heygen video get vid_123") {
+		t.Fatalf("stderr = %s, want video get hint", res.Stderr)
+	}
+	if strings.Contains(res.Stderr, "video-agent get") {
+		t.Fatalf("stderr = %s, should not suggest video-agent get", res.Stderr)
 	}
 }
 

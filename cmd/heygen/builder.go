@@ -78,6 +78,24 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 
 					result, err := ctx.client.ExecuteAndPoll(cmd.Context(), &pollSpec, inv, opts)
 					if err != nil {
+						var timeoutErr *client.ErrPollTimeout
+						if errors.As(err, &timeoutErr) {
+							if timeoutErr.Data != nil {
+								if fmtErr := ctx.formatter.Data(timeoutErr.Data, "data", nil); fmtErr != nil {
+									return fmtErr
+								}
+							}
+							hint := "Re-run the corresponding get command to check the current status manually"
+							if pc.HintCommand != "" {
+								hint = fmt.Sprintf("heygen %s %s", pc.HintCommand, timeoutErr.ResourceID)
+							}
+							return &clierrors.CLIError{
+								Code:     "timeout",
+								Message:  fmt.Sprintf("polling timed out after %s", timeout),
+								Hint:     hint,
+								ExitCode: clierrors.ExitTimeout,
+							}
+						}
 						var failErr *client.ErrPollFailed
 						if errors.As(err, &failErr) {
 							// Output the failure response (contains error details),
