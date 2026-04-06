@@ -4,7 +4,17 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/heygen-com/heygen-cli/internal/command"
 )
+
+func nullableRef(schema *openapi3.Schema) *openapi3.Schema {
+	return &openapi3.Schema{
+		AnyOf: openapi3.SchemaRefs{
+			openapi3.NewSchemaRef("", schema),
+			openapi3.NewSchemaRef("", &openapi3.Schema{Type: &openapi3.Types{"null"}}),
+		},
+	}
+}
 
 func loadGroupTestSpec(t *testing.T) *openapi3.T {
 	t.Helper()
@@ -279,4 +289,144 @@ func TestGroupEndpoints_SingletonGetUsesGetVerb(t *testing.T) {
 		}
 	}
 	t.Error("user 'me get' not found")
+}
+
+func TestUnwrapNullableType_String(t *testing.T) {
+	unwrapped := unwrapNullableType(nullableRef(openapi3.NewStringSchema()))
+	if unwrapped == nil {
+		t.Fatal("unwrapNullableType returned nil")
+	}
+	if got := mapSchemaType(unwrapped); got != "string" {
+		t.Fatalf("mapSchemaType = %q, want string", got)
+	}
+}
+
+func TestUnwrapNullableType_Bool(t *testing.T) {
+	unwrapped := unwrapNullableType(nullableRef(openapi3.NewBoolSchema()))
+	if unwrapped == nil {
+		t.Fatal("unwrapNullableType returned nil")
+	}
+	if got := mapSchemaType(unwrapped); got != "bool" {
+		t.Fatalf("mapSchemaType = %q, want bool", got)
+	}
+}
+
+func TestUnwrapNullableType_PrimitiveArray(t *testing.T) {
+	schema := openapi3.NewArraySchema().WithItems(openapi3.NewStringSchema())
+	unwrapped := unwrapNullableType(nullableRef(schema))
+	if unwrapped == nil {
+		t.Fatal("unwrapNullableType returned nil")
+	}
+	if got := mapSchemaType(unwrapped); got != "string-slice" {
+		t.Fatalf("mapSchemaType = %q, want string-slice", got)
+	}
+}
+
+func TestUnwrapNullableType_PrimitiveArrayWithEnum(t *testing.T) {
+	item := openapi3.NewStringSchema().WithEnum("alpha", "beta")
+	schema := openapi3.NewArraySchema().WithItems(item)
+	unwrapped := unwrapNullableType(nullableRef(schema))
+	if unwrapped == nil {
+		t.Fatal("unwrapNullableType returned nil")
+	}
+	if got := schemaEnum(nullableRef(schema)); len(got) != 2 || got[0] != "alpha" || got[1] != "beta" {
+		t.Fatalf("schemaEnum = %v, want [alpha beta]", got)
+	}
+}
+
+func TestUnwrapNullableType_ArrayOfObjects(t *testing.T) {
+	schema := openapi3.NewArraySchema().WithItems(openapi3.NewObjectSchema())
+	if got := unwrapNullableType(nullableRef(schema)); got != nil {
+		t.Fatalf("unwrapNullableType = %v, want nil", got)
+	}
+}
+
+func TestUnwrapNullableType_Object(t *testing.T) {
+	if got := unwrapNullableType(nullableRef(openapi3.NewObjectSchema())); got != nil {
+		t.Fatalf("unwrapNullableType = %v, want nil", got)
+	}
+}
+
+func TestUnwrapNullableType_PolymorphicUnion(t *testing.T) {
+	schema := &openapi3.Schema{
+		AnyOf: openapi3.SchemaRefs{
+			openapi3.NewSchemaRef("", openapi3.NewObjectSchema()),
+			openapi3.NewSchemaRef("", openapi3.NewObjectSchema()),
+		},
+	}
+	if got := unwrapNullableType(schema); got != nil {
+		t.Fatalf("unwrapNullableType = %v, want nil", got)
+	}
+}
+
+func TestUnwrapNullableType_MixedPrimitives(t *testing.T) {
+	schema := &openapi3.Schema{
+		AnyOf: openapi3.SchemaRefs{
+			openapi3.NewSchemaRef("", openapi3.NewStringSchema()),
+			openapi3.NewSchemaRef("", openapi3.NewIntegerSchema()),
+			openapi3.NewSchemaRef("", &openapi3.Schema{Type: &openapi3.Types{"null"}}),
+		},
+	}
+	if got := unwrapNullableType(schema); got != nil {
+		t.Fatalf("unwrapNullableType = %v, want nil", got)
+	}
+}
+
+func TestSchemaEnum_NullableEnum(t *testing.T) {
+	schema := nullableRef(openapi3.NewStringSchema().WithEnum("landscape", "portrait"))
+	got := schemaEnum(schema)
+	if len(got) != 2 || got[0] != "landscape" || got[1] != "portrait" {
+		t.Fatalf("schemaEnum = %v, want [landscape portrait]", got)
+	}
+}
+
+func TestSchemaEnum_NullableArrayEnum(t *testing.T) {
+	item := openapi3.NewStringSchema().WithEnum("alpha", "beta")
+	schema := nullableRef(openapi3.NewArraySchema().WithItems(item))
+	got := schemaEnum(schema)
+	if len(got) != 2 || got[0] != "alpha" || got[1] != "beta" {
+		t.Fatalf("schemaEnum = %v, want [alpha beta]", got)
+	}
+}
+
+func TestGroupEndpoints_NullableFieldsPromoted(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	examples := loadTestExamples(t)
+	groups, _, err := GroupEndpoints(doc, examples)
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+
+	for _, s := range groups["video"] {
+		if s.Name != "create" {
+			continue
+		}
+
+		flags := make(map[string]command.FlagSpec)
+		for _, flag := range s.Flags {
+			flags[flag.Name] = flag
+		}
+
+		title, ok := flags["title"]
+		if !ok {
+			t.Fatal("missing nullable string flag title")
+		}
+		if title.Type != "string" || title.Source != "body" {
+			t.Fatalf("title = %+v, want string body flag", title)
+		}
+
+		categories, ok := flags["categories"]
+		if !ok {
+			t.Fatal("missing nullable primitive array flag categories")
+		}
+		if categories.Type != "string-slice" || categories.Source != "body" {
+			t.Fatalf("categories = %+v, want string-slice body flag", categories)
+		}
+		if len(categories.Enum) != 2 || categories.Enum[0] != "marketing" || categories.Enum[1] != "social" {
+			t.Fatalf("categories enum = %v, want [marketing social]", categories.Enum)
+		}
+		return
+	}
+
+	t.Fatal("video create not found")
 }

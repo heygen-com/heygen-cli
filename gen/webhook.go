@@ -19,6 +19,30 @@ var WebhookEndpointsCreate = &command.Spec{
 	},
 	Flags: []command.FlagSpec{
 		{
+			Name:     "entity-id",
+			Type:     "string",
+			Default:  "",
+			Help:     "Optional entity ID to scope this endpoint to a specific resource (e.g. a personalized video project).",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "entity_id",
+		},
+		{
+			Name:     "events",
+			Type:     "string-slice",
+			Default:  "",
+			Help:     "Event types to subscribe to. Omit or set to null to receive all events.",
+			Required: false,
+			Enum:     []string{"avatar_video.success", "avatar_video.fail", "avatar_video_gif.success", "avatar_video_gif.fail", "video_translate.success", "video_translate.fail", "personalized_video", "instant_avatar.success", "instant_avatar.fail", "photo_avatar_generation.success", "photo_avatar_generation.fail", "photo_avatar_train.success", "photo_avatar_train.fail", "photo_avatar_add_motion.success", "photo_avatar_add_motion.fail", "proofread_creation.success", "proofread_creation.fail", "live_avatar.success", "live_avatar.fail", "avatar_video_caption.success", "avatar_video_caption.fail", "video_agent.success", "video_agent.fail"},
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "events",
+		},
+		{
 			Name:     "url",
 			Type:     "string",
 			Default:  "",
@@ -123,6 +147,32 @@ var WebhookEndpointsUpdate = &command.Spec{
 	},
 	Args: []command.ArgSpec{
 		{Name: "endpoint-id", Param: "endpoint_id", Help: ""},
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "events",
+			Type:     "string-slice",
+			Default:  "",
+			Help:     "New list of event types to subscribe to. Replaces the existing list.",
+			Required: false,
+			Enum:     []string{"avatar_video.success", "avatar_video.fail", "avatar_video_gif.success", "avatar_video_gif.fail", "video_translate.success", "video_translate.fail", "personalized_video", "instant_avatar.success", "instant_avatar.fail", "photo_avatar_generation.success", "photo_avatar_generation.fail", "photo_avatar_train.success", "photo_avatar_train.fail", "photo_avatar_add_motion.success", "photo_avatar_add_motion.fail", "proofread_creation.success", "proofread_creation.fail", "live_avatar.success", "live_avatar.fail", "avatar_video_caption.success", "avatar_video_caption.fail", "video_agent.success", "video_agent.fail"},
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "events",
+		},
+		{
+			Name:     "url",
+			Type:     "string",
+			Default:  "",
+			Help:     "New URL for the endpoint. Must be publicly accessible HTTPS.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "url",
+		},
 	},
 }
 

@@ -55,10 +55,23 @@ paths:
                 script:
                   type: string
                   description: Video script text
+                title:
+                  anyOf:
+                    - type: string
+                    - type: "null"
+                  description: Optional video title
                 avatar-id:
                   type: string
                   description: Avatar to use
                   enum: [josh, anna, lisa]
+                categories:
+                  anyOf:
+                    - type: array
+                      items:
+                        type: string
+                        enum: [marketing, social]
+                    - type: "null"
+                  description: Optional video categories
                 quality:
                   type: integer
                   description: Video quality (1-100)

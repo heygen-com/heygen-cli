@@ -397,7 +397,14 @@ func schemaToFlagType(ref *openapi3.SchemaRef) string {
 		return "string"
 	}
 	s := ref.Value
-	// Handle anyOf (Pydantic nullable pattern)
+	// Handle nullable anyOf by unwrapping to the concrete promoted type.
+	if unwrapped := unwrapNullableType(s); unwrapped != nil {
+		if t := mapSchemaType(unwrapped); t != "" {
+			return t
+		}
+		return "string"
+	}
+	// Handle other anyOf patterns by picking the first mappable branch.
 	if len(s.AnyOf) > 0 {
 		for _, a := range s.AnyOf {
 			if a.Value != nil {
@@ -427,32 +434,97 @@ func mapSchemaType(s *openapi3.Schema) string {
 }
 
 func schemaEnum(s *openapi3.Schema) []string {
-	if len(s.Enum) == 0 {
-		return nil
+	if len(s.Enum) > 0 {
+		return formatEnum(s.Enum)
 	}
-	result := make([]string, 0, len(s.Enum))
-	for _, v := range s.Enum {
+	if s.Items != nil && s.Items.Value != nil && len(s.Items.Value.Enum) > 0 {
+		return formatEnum(s.Items.Value.Enum)
+	}
+	if unwrapped := unwrapNullableType(s); unwrapped != nil {
+		if len(unwrapped.Enum) > 0 {
+			return formatEnum(unwrapped.Enum)
+		}
+		if unwrapped.Items != nil && unwrapped.Items.Value != nil && len(unwrapped.Items.Value.Enum) > 0 {
+			return formatEnum(unwrapped.Items.Value.Enum)
+		}
+	}
+	return nil
+}
+
+func isComplexField(s *openapi3.Schema) bool {
+	if s.Type == nil {
+		if unwrapNullableType(s) != nil {
+			return false
+		}
+		return len(s.AnyOf) > 0 || len(s.OneOf) > 0 || len(s.AllOf) > 0
+	}
+	return isComplexType(s)
+}
+
+func formatEnum(vals []any) []string {
+	result := make([]string, 0, len(vals))
+	for _, v := range vals {
 		result = append(result, fmt.Sprintf("%v", v))
 	}
 	return result
 }
 
-func isComplexField(s *openapi3.Schema) bool {
+func unwrapNullableType(s *openapi3.Schema) *openapi3.Schema {
+	if len(s.AnyOf) != 2 {
+		return nil
+	}
+	var nullCount int
+	var candidate *openapi3.Schema
+	for _, branch := range s.AnyOf {
+		if branch == nil || branch.Value == nil {
+			return nil
+		}
+		if isNullType(branch.Value) {
+			nullCount++
+			continue
+		}
+		candidate = branch.Value
+	}
+	if nullCount != 1 || candidate == nil {
+		return nil
+	}
+	if isComplexType(candidate) {
+		return nil
+	}
+	return candidate
+}
+
+func isNullType(s *openapi3.Schema) bool {
 	if s.Type == nil {
-		return len(s.AnyOf) > 0 || len(s.OneOf) > 0 || len(s.AllOf) > 0
+		return false
+	}
+	for _, t := range s.Type.Slice() {
+		if t == "null" {
+			return true
+		}
+	}
+	return false
+}
+
+func isComplexType(s *openapi3.Schema) bool {
+	if s.Type == nil {
+		return true
 	}
 	for _, t := range s.Type.Slice() {
 		if t == "object" {
 			return true
 		}
 		if t == "array" && s.Items != nil && s.Items.Value != nil {
-			if s.Items.Value.Type != nil {
-				for _, it := range s.Items.Value.Type.Slice() {
-					if it == "object" {
-						return true
-					}
+			if s.Items.Value.Type == nil {
+				return true
+			}
+			for _, it := range s.Items.Value.Type.Slice() {
+				if it == "object" {
+					return true
 				}
 			}
+		} else if t == "array" {
+			return true
 		}
 	}
 	return false

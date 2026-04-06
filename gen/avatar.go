@@ -20,6 +20,20 @@ var AvatarConsentCreate = &command.Spec{
 	Args: []command.ArgSpec{
 		{Name: "group-id", Param: "group_id", Help: ""},
 	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "reroute-url",
+			Type:     "string",
+			Default:  "",
+			Help:     "Callback URL where the user is redirected after completing consent. Defaults to HeyGen's consent completion page.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "reroute_url",
+		},
+	},
 }
 
 var AvatarCreate = &command.Spec{
