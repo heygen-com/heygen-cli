@@ -184,10 +184,20 @@ func (s *Spec) BuildInvocation(cmd *cobra.Command, args []string, data map[strin
 // validateFlag checks enum membership and min/max bounds.
 func validateFlag(cmd *cobra.Command, flag FlagSpec) error {
 	if len(flag.Enum) > 0 {
-		val, _ := cmd.Flags().GetString(flag.Name)
-		if !slices.Contains(flag.Enum, val) {
-			return clierrors.NewUsage(
-				fmt.Sprintf("--%s must be one of %v, got %q", flag.Name, flag.Enum, val))
+		if flag.Type == "string-slice" {
+			vals, _ := cmd.Flags().GetStringSlice(flag.Name)
+			for _, val := range vals {
+				if !slices.Contains(flag.Enum, val) {
+					return clierrors.NewUsage(
+						fmt.Sprintf("--%s value %q must be one of %v", flag.Name, val, flag.Enum))
+				}
+			}
+		} else {
+			val, _ := cmd.Flags().GetString(flag.Name)
+			if !slices.Contains(flag.Enum, val) {
+				return clierrors.NewUsage(
+					fmt.Sprintf("--%s must be one of %v, got %q", flag.Name, flag.Enum, val))
+			}
 		}
 	}
 

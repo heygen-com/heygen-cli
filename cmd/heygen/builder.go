@@ -44,7 +44,9 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if isSchemaRequest(cmd) {
-				clearRequiredFlagAnnotations(cmd)
+				clearRequiredFlagAnnotations(cmd, nil)
+			} else if cmd.Flags().Changed("data") {
+				clearRequiredFlagAnnotations(cmd, bodyFlagNames(spec))
 			}
 			return nil
 		},
@@ -239,14 +241,23 @@ func requestedSchema(cmd *cobra.Command, spec *command.Spec) (bool, string) {
 
 type requiredFlagAnnotationsKey struct{}
 
-func clearRequiredFlagAnnotations(cmd *cobra.Command) {
-	saved := make(map[string][]string)
+func clearRequiredFlagAnnotations(cmd *cobra.Command, filter map[string]bool) {
+	existing, _ := cmd.Context().Value(requiredFlagAnnotationsKey{}).(map[string][]string)
+	saved := make(map[string][]string, len(existing))
+	for name, annotations := range existing {
+		saved[name] = append([]string(nil), annotations...)
+	}
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if filter != nil && !filter[f.Name] {
+			return
+		}
 		annotations, ok := f.Annotations[cobra.BashCompOneRequiredFlag]
 		if !ok {
 			return
 		}
-		saved[f.Name] = append([]string(nil), annotations...)
+		if _, alreadySaved := saved[f.Name]; !alreadySaved {
+			saved[f.Name] = append([]string(nil), annotations...)
+		}
 		delete(f.Annotations, cobra.BashCompOneRequiredFlag)
 		if len(f.Annotations) == 0 {
 			f.Annotations = nil
@@ -256,6 +267,16 @@ func clearRequiredFlagAnnotations(cmd *cobra.Command) {
 		return
 	}
 	cmd.SetContext(context.WithValue(cmd.Context(), requiredFlagAnnotationsKey{}, saved))
+}
+
+func bodyFlagNames(spec *command.Spec) map[string]bool {
+	names := make(map[string]bool)
+	for _, flag := range spec.Flags {
+		if flag.Source == "body" {
+			names[flag.Name] = true
+		}
+	}
+	return names
 }
 
 func restoreRequiredFlagAnnotations(cmd *cobra.Command) {

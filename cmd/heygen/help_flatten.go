@@ -174,5 +174,5 @@ func visibleChildren(cmd *cobra.Command) []*cobra.Command {
 }
 
 func isLeafCommand(cmd *cobra.Command) bool {
-	return cmd.RunE != nil || cmd.Run != nil
+	return len(visibleChildren(cmd)) == 0
 }

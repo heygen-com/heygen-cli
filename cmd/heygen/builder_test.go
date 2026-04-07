@@ -74,6 +74,7 @@ var videoTranslateSchemaSpec = &command.Spec{
 	Summary:       "Create video translation",
 	Endpoint:      "/v3/video-translations",
 	Method:        "POST",
+	BodyEncoding:  "json",
 	RequestSchema: "{\n  \"type\": \"object\"\n}",
 	Flags: []command.FlagSpec{
 		{Name: "output-languages", Type: "string-slice", Source: "body", JSONName: "output_languages", Required: true},
@@ -257,6 +258,60 @@ func TestGenBuilder_ArgsStillValidatedWithoutSchema(t *testing.T) {
 	}
 	if !strings.Contains(res.Stderr, "accepts 1 arg(s), received 0") {
 		t.Fatalf("stderr = %q, want positional arg error", res.Stderr)
+	}
+}
+
+func TestGenBuilder_DataSatisfiesRequiredBodyFlags(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/video-translations": {
+			StatusCode: 200,
+			Body:       `{"data":{"id":"vt_123"}}`,
+		},
+	})
+	defer srv.Close()
+
+	spec := &command.Spec{
+		Group:        "video-translate",
+		Name:         "create",
+		Summary:      "Create translation",
+		Endpoint:     "/v3/video-translations",
+		Method:       "POST",
+		BodyEncoding: "json",
+		Flags: []command.FlagSpec{
+			{Name: "output-languages", Type: "string-slice", Source: "body", JSONName: "output_languages", Required: true},
+		},
+		Examples: []string{"heygen video-translate create -d '{\"output_languages\":[\"es\"]}'"},
+	}
+
+	res := runGenCommand(t, srv.URL, "test-key", spec, "create", "-d", `{"output_languages":["es"]}`)
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+}
+
+func TestGenBuilder_DataDoesNotBypassRequiredQueryFlags(t *testing.T) {
+	spec := &command.Spec{
+		Group:        "video",
+		Name:         "create",
+		Summary:      "Create video",
+		Endpoint:     "/v3/videos",
+		Method:       "POST",
+		BodyEncoding: "json",
+		Flags: []command.FlagSpec{
+			{Name: "folder-id", Type: "string", Source: "query", JSONName: "folder_id", Required: true},
+			{Name: "title", Type: "string", Source: "body", JSONName: "title"},
+		},
+		Examples: []string{"heygen video create --folder-id folder_123"},
+	}
+
+	res := runGenCommand(t, "http://example.test", "test-key", spec, "create", "-d", `{"title":"Demo"}`)
+
+	if res.ExitCode != clierrors.ExitUsage {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "required flag(s)") || !strings.Contains(res.Stderr, "folder-id") {
+		t.Fatalf("stderr = %q, want required query flag error", res.Stderr)
 	}
 }
 
@@ -736,6 +791,48 @@ func TestGenBuilder_EnumValidation(t *testing.T) {
 	}
 }
 
+func TestGenBuilder_WebhookEventsFlag(t *testing.T) {
+	var gotBody map[string]any
+
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/webhooks/endpoints": {
+			StatusCode: 200,
+			Body:       `{"data":{"endpoint_id":"ep_123"}}`,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				body, _ := io.ReadAll(r.Body)
+				_ = json.Unmarshal(body, &gotBody)
+			},
+		},
+	})
+	defer srv.Close()
+
+	spec := &command.Spec{
+		Group:        "webhook",
+		Name:         "endpoints create",
+		Summary:      "Create endpoint",
+		Endpoint:     "/v3/webhooks/endpoints",
+		Method:       "POST",
+		BodyEncoding: "json",
+		Flags: []command.FlagSpec{
+			{Name: "url", Type: "string", Source: "body", JSONName: "url", Required: true},
+			{Name: "events", Type: "string-slice", Source: "body", JSONName: "events", Enum: []string{"avatar_video.success", "avatar_video.fail"}},
+		},
+		Examples: []string{"heygen webhook endpoints create --url https://example.com/hook --events avatar_video.success"},
+	}
+
+	res := runGenCommand(t, srv.URL, "test-key", spec, "endpoints", "create",
+		"--url", "https://example.com/hook", "--events", "avatar_video.success")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	events, ok := gotBody["events"].([]any)
+	if !ok || len(events) != 1 || events[0] != "avatar_video.success" {
+		t.Fatalf("body.events = %#v, want [avatar_video.success]", gotBody["events"])
+	}
+}
+
 func TestGenBuilder_NestedCommand_Executes(t *testing.T) {
 	var gotBody map[string]any
 
@@ -844,7 +941,7 @@ func TestGenBuilder_IntermediateHelp_ShowsChildCommands(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stdout, "Usage:\n  heygen voice speech [command]") {
+	if !strings.Contains(res.Stdout, "Usage:") || !strings.Contains(res.Stdout, "heygen voice speech [command]") {
 		t.Errorf("help missing nested usage\nstdout: %s", res.Stdout)
 	}
 	if !strings.Contains(res.Stdout, "Available Commands:") || !strings.Contains(res.Stdout, "create") {

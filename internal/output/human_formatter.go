@@ -99,7 +99,7 @@ func (f *HumanFormatter) renderTable(rows []map[string]any, columns []command.Co
 
 	for _, row := range rows {
 		for i, col := range columns {
-			cell := formatCell(fieldValue(row, col.Field), col.Field)
+			cell := formatTableCell(fieldValue(row, col.Field), col.Field)
 			if w := lipgloss.Width(cell); w > widths[i] {
 				widths[i] = w
 			}
@@ -112,7 +112,7 @@ func (f *HumanFormatter) renderTable(rows []map[string]any, columns []command.Co
 	for _, row := range rows {
 		values := make([]string, len(columns))
 		for i, col := range columns {
-			values[i] = formatCell(fieldValue(row, col.Field), col.Field)
+			values[i] = formatTableCell(fieldValue(row, col.Field), col.Field)
 		}
 		if _, err := fmt.Fprintln(f.out, renderTableLine(values, widths, true)); err != nil {
 			return err
@@ -245,6 +245,10 @@ func formatCell(v any, fieldName string) string {
 	return formatValue(v)
 }
 
+func formatTableCell(v any, fieldName string) string {
+	return sanitizeForTable(formatCell(v, fieldName))
+}
+
 func formatValue(v any) string {
 	switch value := v.(type) {
 	case nil:
@@ -290,6 +294,14 @@ func formatDuration(seconds float64) string {
 		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
 	}
 	return fmt.Sprintf("%dh %dm %ds", int(d.Hours()), int(d.Minutes())%60, int(d.Seconds())%60)
+}
+
+func sanitizeForTable(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\t", " ")
+	s = strings.ReplaceAll(s, "\u00a0", " ")
+	return strings.TrimSpace(s)
 }
 
 func humanizeKey(key string) string {

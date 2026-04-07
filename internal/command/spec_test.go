@@ -2,6 +2,7 @@ package command
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
@@ -87,8 +88,6 @@ func TestBuildInvocation_PathParamArg(t *testing.T) {
 		t.Errorf("PathParams[video_id] = %q, want %q", inv.PathParams["video_id"], "abc123")
 	}
 }
-
-
 
 func TestBuildInvocation_UnchangedFlagOmitted(t *testing.T) {
 	spec := &Spec{
@@ -236,7 +235,6 @@ func TestBuildInvocation_FlagOverridesData(t *testing.T) {
 	}
 }
 
-
 func TestBuildInvocation_NoBodyWhenNoContent(t *testing.T) {
 	spec := &Spec{
 		Flags: []FlagSpec{
@@ -272,5 +270,49 @@ func TestBuildInvocation_StringSliceFlag(t *testing.T) {
 	}
 	if len(events) != 2 {
 		t.Errorf("events length = %d, want 2", len(events))
+	}
+}
+
+func TestBuildInvocation_StringSliceEnumValidation(t *testing.T) {
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "events", Type: "string-slice", Source: "body", JSONName: "events", Enum: []string{"avatar_video.success", "avatar_video.fail"}},
+		},
+	}
+
+	cmd := helperCmd(t, spec, []string{"--events", "avatar_video.success,bogus"})
+
+	_, err := spec.BuildInvocation(cmd, nil, nil)
+	if err == nil {
+		t.Fatal("expected enum validation error, got nil")
+	}
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected *CLIError, got %T", err)
+	}
+	if cliErr.ExitCode != clierrors.ExitUsage {
+		t.Fatalf("ExitCode = %d, want %d", cliErr.ExitCode, clierrors.ExitUsage)
+	}
+	if got := cliErr.Message; got == "" || !strings.Contains(got, `value "bogus"`) {
+		t.Fatalf("message = %q, want invalid slice value", got)
+	}
+}
+
+func TestBuildInvocation_StringSliceEnumValid(t *testing.T) {
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "events", Type: "string-slice", Source: "body", JSONName: "events", Enum: []string{"avatar_video.success", "avatar_video.fail"}},
+		},
+	}
+
+	cmd := helperCmd(t, spec, []string{"--events", "avatar_video.success,avatar_video.fail"})
+
+	inv, err := spec.BuildInvocation(cmd, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	events, ok := inv.Body["events"].([]string)
+	if !ok || len(events) != 2 {
+		t.Fatalf("Body[events] = %#v, want 2 validated string-slice values", inv.Body["events"])
 	}
 }
