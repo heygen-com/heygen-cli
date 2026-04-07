@@ -59,9 +59,9 @@ type Spec struct {
 
 	// Execution behavior (used by executor)
 	Paginated   bool        // true → command supports cursor pagination via API query flags like --token/--limit
-	PollConfig  *PollConfig // non-nil → pollable; defines polling behavior for --wait (future)
-	Destructive bool        // triggers --force confirmation prompt (future)
-	Columns     []Column    // TUI table column definitions (future)
+	PollConfig  *PollConfig // non-nil → pollable; defines polling behavior for --wait
+	Destructive bool        // triggers --force confirmation prompt (not yet implemented)
+	Columns     []Column    // TUI table column definitions for --human output
 }
 
 // ArgSpec defines a positional argument derived from a URL path parameter.
@@ -96,8 +96,8 @@ type FlagSpec struct {
 	JSONName string   // original API parameter/field name ("folder_id")
 }
 
-// PollConfig defines how --wait polling works for async commands (future).
-// Will be implemented alongside Track B (polling framework).
+// PollConfig defines how --wait polling works for async commands.
+// Registered per-command in cmd/heygen/poll_configs.go.
 type PollConfig struct {
 	StatusEndpoint string   // GET endpoint to check status
 	StatusField    string   // JSON field containing status (e.g., "status")
@@ -107,8 +107,8 @@ type PollConfig struct {
 	HintCommand    string   // CLI get command for manual follow-up (e.g. "video get")
 }
 
-// Column defines a TUI table column for --human output (future).
-// Will be implemented alongside M3 (TUI formatting).
+// Column defines a TUI table column for --human output.
+// Curated per-command in cmd/heygen/columns.go.
 type Column struct {
 	Header string // table column header ("Status")
 	Field  string // JSON field path, supports dot notation ("avatar.name")
