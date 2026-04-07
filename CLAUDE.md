@@ -81,3 +81,12 @@ Data(v json.RawMessage, dataField string, columns []command.Column) error
 - Command tests: use `runCommand()` in `cmd/heygen/testutil_test.go`. It creates a fresh Cobra tree, captures stdout/stderr/exit code, and renders errors through the formatter (same path as `main()`).
 - Use `t.Setenv()` for env vars (auto-restored).
 - Assert on exit codes (0/1/2/3/4) **and** stderr envelope shape, not just error presence.
+
+### Documentation
+When a change affects user-facing behavior, update the relevant doc:
+- New command group or removed group → README.md command table
+- New hand-written command or enhancement pattern → CONTRIBUTING.md
+- Changed release workflow → RELEASE.md
+- Changed key commands or async patterns → SKILL.md
+
+Do not update docs for internal refactors, test changes, or codegen-only changes.
