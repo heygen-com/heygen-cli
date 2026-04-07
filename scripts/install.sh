@@ -3,6 +3,7 @@
 set -euo pipefail
 
 REPO="${HEYGEN_REPO:-heygen-com/heygen-cli}"
+CDN_BASE="${HEYGEN_CDN_BASE_URL:-https://static.heygen.ai/cli}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -48,6 +49,31 @@ checksum_cmd() {
     return
   fi
   fail "missing sha256 tool (need sha256sum or shasum)"
+}
+
+download() {
+  local url="$1"
+  local output="${2:-}"
+
+  if command -v curl >/dev/null 2>&1; then
+    if [[ -n "$output" ]]; then
+      curl -fsSL "$url" -o "$output"
+    else
+      curl -fsSL "$url"
+    fi
+    return
+  fi
+
+  if command -v wget >/dev/null 2>&1; then
+    if [[ -n "$output" ]]; then
+      wget -q -O "$output" "$url"
+    else
+      wget -q -O - "$url"
+    fi
+    return
+  fi
+
+  fail "curl or wget required"
 }
 
 github_token() {
@@ -137,7 +163,11 @@ github_api() {
 }
 
 latest_stable_tag() {
-  github_api "/releases/latest" | tr -d '\n' | json_get_string tag_name
+  local version
+  if ! version="$(download "${CDN_BASE}/stable")"; then
+    fail "failed to resolve latest stable version from ${CDN_BASE}/stable"
+  fi
+  printf '%s\n' "$version" | tr -d '\r\n'
 }
 
 latest_dev_tag() {
@@ -244,6 +274,20 @@ download_with_curl() {
   curl -fsSL "${base_url}/${checksums_name}" -o "${TMPDIR}/${checksums_name}"
 }
 
+download_with_cdn() {
+  local release_tag="$1"
+  local asset_name="$2"
+  local checksums_name="$3"
+  local release_url="${CDN_BASE}/releases/${release_tag}"
+
+  if ! download "${release_url}/${asset_name}" "${TMPDIR}/${asset_name}"; then
+    fail "failed to download ${asset_name} from ${release_url}"
+  fi
+  if ! download "${release_url}/${checksums_name}" "${TMPDIR}/${checksums_name}"; then
+    fail "failed to download ${checksums_name} from ${release_url}"
+  fi
+}
+
 verify_checksum() {
   local asset_name="$1"
   local checksums_name="$2"
@@ -277,12 +321,26 @@ install_archive() {
   install -m 0755 "$extracted_bin" "${INSTALL_DIR}/heygen"
 }
 
+normalize_arch() {
+  local os="$1"
+  local arch="$2"
+
+  if [[ "$os" == "darwin" && "$arch" == "amd64" ]]; then
+    if [[ "$(sysctl -n sysctl.proc_translated 2>/dev/null || true)" == "1" ]]; then
+      printf 'arm64\n'
+      return
+    fi
+  fi
+
+  printf '%s\n' "$arch"
+}
+
 main() {
-  local os arch release_tag asset_name checksums_name version_output
+  local os arch release_tag asset_name checksums_name version_output source_desc
 
   parse_args "$@"
   os="$(detect_os)"
-  arch="$(detect_arch)"
+  arch="$(normalize_arch "$os" "$(detect_arch)")"
   release_tag="$(resolve_release_tag)"
   if [[ -z "$release_tag" ]]; then
     fail "could not determine release tag"
@@ -291,14 +349,30 @@ main() {
   checksums_name="checksums.txt"
 
   log "Detected: ${os} ${arch}"
-  log "Installing heygen from ${REPO} release tag '${release_tag}'"
+  case "$MODE" in
+    dev)
+      source_desc="${REPO} GitHub release"
+      ;;
+    stable | version)
+      source_desc="${CDN_BASE}"
+      ;;
+  esac
+  log "Installing heygen release tag '${release_tag}' from ${source_desc}"
 
-  if download_with_gh "$release_tag" "$asset_name" "$checksums_name"; then
-    log "Downloaded release assets with gh"
-  else
-    download_with_curl "$release_tag" "$asset_name" "$checksums_name"
-    log "Downloaded release assets with curl"
-  fi
+  case "$MODE" in
+    dev)
+      if download_with_gh "$release_tag" "$asset_name" "$checksums_name"; then
+        log "Downloaded release assets with gh"
+      else
+        download_with_curl "$release_tag" "$asset_name" "$checksums_name"
+        log "Downloaded release assets with curl"
+      fi
+      ;;
+    stable | version)
+      download_with_cdn "$release_tag" "$asset_name" "$checksums_name"
+      log "Downloaded release assets from CDN"
+      ;;
+  esac
 
   verify_checksum "$asset_name" "$checksums_name"
   install_archive "${TMPDIR}/${asset_name}" "$os"

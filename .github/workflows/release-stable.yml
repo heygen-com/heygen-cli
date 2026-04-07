@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -43,6 +44,16 @@ jobs:
       - name: Run tests
         run: make test
 
+      - name: Validate AWS release config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${{ vars.AWS_ROLE_ARN }}" ]]; then
+            echo "missing GitHub Actions variable AWS_ROLE_ARN" >&2
+            exit 1
+          fi
+
       - name: Create git tag
         shell: bash
         run: |
@@ -62,3 +73,36 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ github.event.inputs.version }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Upload stable release artifacts to S3
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ github.event.inputs.version }}"
+
+          # Upload immutable artifacts first.
+          aws s3 cp dist/ "s3://heygen-public/cli/releases/${tag}/" \
+            --recursive \
+            --exclude "*" \
+            --include "heygen_*.tar.gz" \
+            --include "heygen_*.zip" \
+            --include "checksums.txt" \
+            --cache-control "public, max-age=31536000, immutable"
+
+          # Upload the installer before flipping the stable pointer.
+          aws s3 cp scripts/install.sh "s3://heygen-public/cli/install.sh" \
+            --content-type "text/plain" \
+            --cache-control "public, max-age=300"
+
+          # Activate the release last so clients never observe a partial rollout.
+          echo -n "${tag}" > /tmp/version-pointer
+          aws s3 cp /tmp/version-pointer "s3://heygen-public/cli/stable" \
+            --content-type "text/plain" \
+            --cache-control "public, max-age=60"

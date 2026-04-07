@@ -39,7 +39,8 @@ gh workflow run release-stable.yml -f version=v0.1.0
 ```
 
 3. The workflow validates the version, creates the tag on `main`, and
-   publishes the stable release artifacts via GoReleaser.
+   publishes the stable release artifacts via GoReleaser, then uploads the
+   installer, checksums, and platform archives to S3 for CDN-backed installs.
 
 ## Version Scheme
 
