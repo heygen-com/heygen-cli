@@ -82,9 +82,6 @@ parse_args() {
           fail "--version requires a value"
         fi
         REQUESTED_VERSION="$2"
-        if [[ ! "$REQUESTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.].+)?$ ]]; then
-          fail "--version must include the leading v (for example: v0.1.0)"
-        fi
         if [[ ! "$REQUESTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
           fail "--version only supports stable releases (for example: v0.1.0)"
         fi
