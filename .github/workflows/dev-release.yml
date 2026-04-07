@@ -38,8 +38,7 @@ jobs:
           fi
 
           base="$(echo "$latest_stable" | sed 's/^v//' | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')"
-          short_sha="$(git rev-parse --short HEAD)"
-          version="v${base}-dev.$(date -u +%Y%m%d).${short_sha}"
+          version="v${base}-dev.$(date -u +%Y%m%d%H%M)"
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 

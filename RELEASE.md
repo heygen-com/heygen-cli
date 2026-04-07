@@ -50,7 +50,7 @@ All versions use semver with a `v` prefix. The `v` prefix is required everywhere
 | Build type | Tag format | Example |
 |---|---|---|
 | Stable | `v{major}.{minor}.{patch}` | `v0.1.0` |
-| Dev | `v{base}-dev.{YYYYMMDD}.{shorthash}` | `v0.1.1-dev.20260406.abc1234` |
+| Dev | `v{base}-dev.{YYYYMMDDHHmm}` | `v0.1.1-dev.202604071502` |
 | Local (no ldflags) | — | `dev` |
 
 ### Ordering
@@ -58,11 +58,11 @@ All versions use semver with a `v` prefix. The `v` prefix is required everywhere
 Semver ordering is guaranteed:
 
 ```
-v0.2.0 > v0.1.1-dev.20260407.def > v0.1.1-dev.20260406.abc > v0.1.0
+v0.2.0 > v0.1.1-dev.202604071502 > v0.1.1-dev.202604071400 > v0.1.0
 ```
 
 - Stable always beats prerelease of the same base version
-- Dev builds sort chronologically by date within the same base
+- Dev builds sort chronologically by minute-precision timestamp
 - Dev builds of the next version sort above the current stable
 
 ### Dev version auto-derivation
@@ -71,7 +71,7 @@ The dev release workflow auto-computes the version tag. No manual bumping or VER
 
 1. Reads the latest stable tag (e.g., `v0.1.0`)
 2. Bumps patch: `v0.1.0` → `v0.1.1`
-3. Appends `-dev.YYYYMMDD.SHORTHASH`: `v0.1.1-dev.20260406.abc1234`
+3. Appends `-dev.YYYYMMDDHHmm`: `v0.1.1-dev.202604071502`
 
 If no stable tag exists, starts from `v0.0.1-dev.*`.
 
