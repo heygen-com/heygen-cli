@@ -77,6 +77,7 @@ Exit Codes:
   3   Authentication error (missing or invalid API key)
   4   Timeout (resource created but operation not yet complete)
 
+Tip: Use --request-schema on any command to see the expected JSON input fields.
 Use "heygen update" to check for and install newer versions.
 `)
 	})
