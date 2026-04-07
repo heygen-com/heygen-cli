@@ -31,7 +31,7 @@ type Client struct {
 
 // New creates an analytics client. Disabled clients are inert no-ops.
 func New(version string, enabled bool) *Client {
-	if !enabled || posthogAPIKey == "" || strings.Contains(posthogAPIKey, "<project-token") {
+	if !enabled || posthogAPIKey == "" {
 		return &Client{}
 	}
 
