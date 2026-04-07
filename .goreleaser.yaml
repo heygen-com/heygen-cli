@@ -15,7 +15,7 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
+      - -X main.version={{.Tag}}
 archives:
   - id: default
     formats:
@@ -27,5 +27,7 @@ archives:
     name_template: "{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 snapshot:
   version_template: "{{ .Tag }}-next"
+release:
+  prerelease: auto
 checksum:
   name_template: checksums.txt
