@@ -138,7 +138,10 @@ func runUpdate(ctx *cmdContext, targetVersion string) error {
 		return clierrors.New(fmt.Sprintf("failed to resolve executable path: %v", err))
 	}
 
-	updater, err := newReleaseUpdater(false)
+	// Auto-detect update channel from current version: dev builds track
+	// dev prereleases, stable builds track stable releases only.
+	isDevBuild := strings.Contains(current, "-dev.")
+	updater, err := newReleaseUpdater(isDevBuild)
 	if err != nil {
 		return err
 	}
