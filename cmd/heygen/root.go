@@ -21,7 +21,7 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 		// NOTE: Only user-facing env vars are listed here. Internal/operational
 		// vars (HEYGEN_MAX_RETRIES, HEYGEN_NO_ANALYTICS, HEYGEN_CONFIG_DIR) are
 		// intentionally hidden. Use "heygen config list" to see all settings.
-		Long: `HeyGen CLI — create and manage videos, avatars, and more.`,
+		Long:          `HeyGen CLI — create and manage videos, avatars, and more.`,
 		Version:       version,
 		SilenceUsage:  true, // we handle usage errors ourselves
 		SilenceErrors: true, // we handle error output ourselves
@@ -127,7 +127,7 @@ func registerGroups(root *cobra.Command, ctx *cmdContext, groups map[string][]*c
 		if short == "" {
 			short = humanizeCommandToken(groupName) + " commands"
 		}
-		groupCmd := &cobra.Command{Use: groupName, Short: short}
+		groupCmd := newCommandGroup(groupName, short)
 		for _, spec := range groups[groupName] {
 			registerSpecCommand(groupCmd, spec, ctx)
 		}
@@ -172,12 +172,23 @@ func ensureIntermediateCommand(parent *cobra.Command, token string) *cobra.Comma
 		}
 	}
 
-	child := &cobra.Command{
-		Use:   token,
-		Short: humanizeCommandToken(token) + " commands",
-	}
+	child := newCommandGroup(token, humanizeCommandToken(token)+" commands")
 	parent.AddCommand(child)
 	return child
+}
+
+func newCommandGroup(use, short string) *cobra.Command {
+	return &cobra.Command{
+		Use:   use,
+		Short: short,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return clierrors.NewUsage(
+					fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath()))
+			}
+			return cmd.Help()
+		},
+	}
 }
 
 func humanizeCommandToken(token string) string {

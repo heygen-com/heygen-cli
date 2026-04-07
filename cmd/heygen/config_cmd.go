@@ -17,11 +17,8 @@ type configResponse struct {
 }
 
 func newConfigCmd(ctx *cmdContext) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:         "config",
-		Short:       "Manage CLI configuration",
-		Annotations: map[string]string{"skipAuth": "true"},
-	}
+	cmd := newCommandGroup("config", "Manage CLI configuration")
+	cmd.Annotations = map[string]string{"skipAuth": "true"}
 	cmd.AddCommand(newConfigSetCmd(ctx))
 	cmd.AddCommand(newConfigGetCmd(ctx))
 	cmd.AddCommand(newConfigListCmd(ctx))

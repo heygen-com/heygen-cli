@@ -122,11 +122,53 @@ func TestGeneratedRoot_IntermediateHelp(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stdout, "Usage:\n  heygen voice speech [command]") {
+	if !strings.Contains(res.Stdout, "Usage:") || !strings.Contains(res.Stdout, "heygen voice speech [command]") {
 		t.Errorf("help missing nested usage\nstdout: %s", res.Stdout)
 	}
 	if !strings.Contains(res.Stdout, "create") {
 		t.Errorf("help missing nested child command\nstdout: %s", res.Stdout)
+	}
+}
+
+func TestGeneratedRoot_GroupCommand_UnknownSubcommand(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "nonexistent")
+
+	if res.ExitCode != clierrors.ExitUsage {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "unknown command") || !strings.Contains(res.Stderr, "heygen video") {
+		t.Fatalf("stderr = %q, want unknown subcommand error", res.Stderr)
+	}
+}
+
+func TestGeneratedRoot_GroupCommand_NoArgs_PrintsHelp(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "Available Commands:") {
+		t.Fatalf("stdout = %q, want group help", res.Stdout)
+	}
+}
+
+func TestGeneratedRoot_NestedGroupCommand_UnknownSubcommand(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video-agent", "sessions", "nonexistent")
+
+	if res.ExitCode != clierrors.ExitUsage {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "unknown command") || !strings.Contains(res.Stderr, "heygen video-agent sessions") {
+		t.Fatalf("stderr = %q, want nested unknown subcommand error", res.Stderr)
 	}
 }
 

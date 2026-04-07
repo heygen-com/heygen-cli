@@ -79,6 +79,21 @@ func TestHumanFormatter_Data_KeyValue(t *testing.T) {
 	}
 }
 
+func TestHumanFormatter_Data_KeyValuePreservesMultilineStrings(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	input := json.RawMessage("{\"data\":{\"name\":\"Line 1\\nLine 2\"}}")
+	if err := f.Data(input, "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "Line 1\nLine 2") {
+		t.Fatalf("key-value output should preserve multiline strings:\n%s", got)
+	}
+}
+
 func TestHumanFormatter_Data_TimestampFormatting(t *testing.T) {
 	var out bytes.Buffer
 	f := NewHumanFormatter(&out, &bytes.Buffer{})
@@ -141,6 +156,13 @@ func TestHumanFormatter_Data_PrimitiveArray(t *testing.T) {
 	got := stripANSI(out.String())
 	if !strings.Contains(got, "Value") || !strings.Contains(got, "en") || !strings.Contains(got, "es") {
 		t.Fatalf("primitive arrays should render as a single-column table:\n%s", got)
+	}
+}
+
+func TestFormatTableCell_SanitizesWhitespace(t *testing.T) {
+	got := formatTableCell("\nMark\u00a0", "name")
+	if got != "Mark" {
+		t.Fatalf("formatTableCell = %q, want %q", got, "Mark")
 	}
 }
 
