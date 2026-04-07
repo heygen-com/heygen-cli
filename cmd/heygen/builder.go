@@ -26,10 +26,15 @@ import (
 func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 	var rawData string
 
+	description := spec.Description
+	if spec.BodyEncoding == "json" && !hasBodyFlags(spec) {
+		description += "\n\nUse --request-schema to see all available request fields."
+	}
+
 	cmd := &cobra.Command{
 		Use:     buildUseLine(spec),
 		Short:   spec.Summary,
-		Long:    spec.Description,
+		Long:    description,
 		Example: strings.Join(spec.Examples, "\n"),
 		Args: func(cmd *cobra.Command, args []string) error {
 			if isSchemaRequest(cmd) {
@@ -187,6 +192,15 @@ func commandPathParts(spec *command.Spec) []string {
 
 // buildUseLine constructs the leaf Cobra Use string from the spec name and args.
 // Example: "create <video-id>" or "list".
+func hasBodyFlags(spec *command.Spec) bool {
+	for _, f := range spec.Flags {
+		if f.Source == "body" {
+			return true
+		}
+	}
+	return false
+}
+
 func buildUseLine(spec *command.Spec) string {
 	path := commandPathParts(spec)
 	name := spec.Name
