@@ -12,7 +12,7 @@ import (
 )
 
 func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
-	ctx := &cmdContext{formatter: formatter}
+	ctx := &cmdContext{formatter: formatter, version: version}
 
 	root := &cobra.Command{
 		Use:   "heygen",
@@ -33,7 +33,9 @@ Exit Codes:
   1   General error (API error, network failure)
   2   Usage error (invalid flags, missing arguments)
   3   Authentication error (missing or invalid API key)
-  4   Timeout (resource created but operation not yet complete)`,
+  4   Timeout (resource created but operation not yet complete)
+
+Use "heygen update" to check for and install newer versions.`,
 		Version:       version,
 		SilenceUsage:  true, // we handle usage errors ourselves
 		SilenceErrors: true, // we handle error output ourselves
@@ -51,6 +53,7 @@ Exit Codes:
 
 	root.AddCommand(newAuthCmd(ctx))
 	root.AddCommand(newConfigCmd(ctx))
+	root.AddCommand(newUpdateCmd(ctx))
 	registerGroups(root, ctx, gen.Groups)
 	attachCustomCommands(root, ctx)
 	installFlattenedHelp(root)
@@ -62,7 +65,7 @@ Exit Codes:
 // from Specs instead of hand-written command constructors. Used by tests to
 // verify the generic builder produces correct behavior.
 func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[string][]*command.Spec) *cobra.Command {
-	ctx := &cmdContext{formatter: formatter}
+	ctx := &cmdContext{formatter: formatter, version: version}
 
 	root := &cobra.Command{
 		Use:           "heygen",
@@ -83,6 +86,7 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 
 	root.AddCommand(newAuthCmd(ctx))
 	root.AddCommand(newConfigCmd(ctx))
+	root.AddCommand(newUpdateCmd(ctx))
 	registerGroups(root, ctx, groups)
 	attachCustomCommands(root, ctx)
 	installFlattenedHelp(root)

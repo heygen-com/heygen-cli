@@ -14,6 +14,7 @@ type cmdContext struct {
 	client         *client.Client
 	formatter      output.Formatter
 	configProvider config.Provider
+	version        string
 }
 
 // skipAuth checks whether the command (or any parent) is annotated to
