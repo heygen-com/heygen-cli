@@ -1,61 +1,6 @@
 # Release Process
 
-## Install the CLI
-
-### Install script
-
-Recommended for internal users who do not want to build from source.
-
-If `gh` is installed and authenticated:
-
-```bash
-gh api repos/heygen-com/heygen-cli/contents/scripts/install.sh \
-  --jq '.content' | base64 -d | bash
-```
-
-If you want to use a token directly:
-
-```bash
-curl -fsSL \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Accept: application/vnd.github.raw" \
-  https://api.github.com/repos/heygen-com/heygen-cli/contents/scripts/install.sh \
-  | bash
-```
-
-The installer downloads the latest stable release and installs `heygen` into
-`~/.local/bin` by default.
-
-Install the latest dev prerelease:
-
-```bash
-gh api repos/heygen-com/heygen-cli/contents/scripts/install.sh \
-  --jq '.content' | base64 -d | bash -s -- --dev
-```
-
-Install a specific version:
-
-```bash
-gh api repos/heygen-com/heygen-cli/contents/scripts/install.sh \
-  --jq '.content' | base64 -d | bash -s -- --version v0.1.0
-```
-
-### Manual download
-
-1. Open the repo's Releases page.
-2. Find the `Internal Dev Build` prerelease.
-3. Download the archive for your platform.
-4. Extract the archive and move `heygen` into your `PATH`.
-
-### From source
-
-For contributors with Go installed:
-
-```bash
-git clone git@github.com:heygen-com/heygen-cli.git
-cd heygen-cli
-make install
-```
+For install instructions, see [README.md](./README.md).
 
 ## Release Types
 
