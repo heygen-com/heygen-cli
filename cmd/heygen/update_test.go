@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/heygen-com/heygen-cli/internal/analytics"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
@@ -42,7 +43,7 @@ func runUpdateRoot(t *testing.T, version string, args ...string) cmdResult {
 	formatter := formatterForArgs(args, &stdout, &stderr)
 	t.Setenv("HEYGEN_API_KEY", "")
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
-	cmd := newRootCmd(version, formatter)
+	cmd := newRootCmd(version, formatter, analytics.New("test", false))
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 	cmd.SetArgs(args)

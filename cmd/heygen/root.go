@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	"github.com/heygen-com/heygen-cli/gen"
+	"github.com/heygen-com/heygen-cli/internal/analytics"
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/heygen-com/heygen-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
-func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
+func newRootCmd(version string, formatter output.Formatter, analyticsClient *analytics.Client) *cobra.Command {
 	ctx := &cmdContext{formatter: formatter, version: version}
 
 	root := &cobra.Command{
@@ -26,6 +27,7 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 		SilenceUsage:  true, // we handle usage errors ourselves
 		SilenceErrors: true, // we handle error output ourselves
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			analyticsClient.CommandRun(cmd.CommandPath())
 			return initContext(cmd, version, ctx)
 		},
 	}
@@ -83,7 +85,7 @@ Use "heygen update" to check for and install newer versions.
 // newRootCmdWithSpecs creates a root command that registers generated commands
 // from Specs instead of hand-written command constructors. Used by tests to
 // verify the generic builder produces correct behavior.
-func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[string][]*command.Spec) *cobra.Command {
+func newRootCmdWithSpecs(version string, formatter output.Formatter, analyticsClient *analytics.Client, groups map[string][]*command.Spec) *cobra.Command {
 	ctx := &cmdContext{formatter: formatter, version: version}
 
 	root := &cobra.Command{
@@ -93,6 +95,7 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			analyticsClient.CommandRun(cmd.CommandPath())
 			return initContext(cmd, version, ctx)
 		},
 	}

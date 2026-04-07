@@ -4,7 +4,10 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/heygen-com/heygen-cli/internal/analytics"
+	"github.com/heygen-com/heygen-cli/internal/config"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
@@ -15,20 +18,32 @@ func main() {
 	// Bootstrap formatter created before the Cobra tree so it's available
 	// for errors returned from command execution, including in --human mode.
 	formatter := formatterForArgs(os.Args[1:], os.Stdout, os.Stderr)
+	analyticsClient := analytics.New(version, analyticsEnabled())
 
-	cmd := newRootCmd(version, formatter)
-	if err := cmd.Execute(); err != nil {
+	cmd := newRootCmd(version, formatter, analyticsClient)
+	start := time.Now()
+	executedCmd, err := cmd.ExecuteC()
+
+	exitCode := 0
+	if err != nil {
 		var cliErr *clierrors.CLIError
 		if errors.As(err, &cliErr) {
 			formatter.Error(cliErr)
-			os.Exit(cliErr.ExitCode)
+			exitCode = cliErr.ExitCode
+		} else {
+			// Cobra returns plain errors for unknown commands and arg validation.
+			// Detect these and wrap as usage errors (exit 2).
+			wrapped := classifyError(err)
+			formatter.Error(wrapped)
+			exitCode = wrapped.ExitCode
 		}
-		// Cobra returns plain errors for unknown commands and arg validation.
-		// Detect these and wrap as usage errors (exit 2).
-		wrapped := classifyError(err)
-		formatter.Error(wrapped)
-		os.Exit(wrapped.ExitCode)
 	}
+
+	if analyticsClient.Started() && executedCmd != nil {
+		analyticsClient.CommandRunComplete(executedCmd.CommandPath(), exitCode, time.Since(start))
+	}
+	analyticsClient.Close()
+	os.Exit(exitCode)
 }
 
 // classifyError wraps non-CLIError errors with the appropriate exit code.
@@ -45,4 +60,16 @@ func classifyError(err error) *clierrors.CLIError {
 		return clierrors.NewUsage(msg)
 	}
 	return clierrors.New(msg)
+}
+
+func analyticsEnabled() bool {
+	if os.Getenv("HEYGEN_NO_ANALYTICS") != "" {
+		return false
+	}
+	fp := &config.FileProvider{}
+	val, found, err := fp.Get(config.KeyAnalytics)
+	if err == nil && found && val == "false" {
+		return false
+	}
+	return true
 }

@@ -77,6 +77,7 @@ func New(apiKey string, opts ...Option) *Client {
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("x-api-key", c.apiKey)
 	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("X-HeyGen-Source", "cli")
 	if req.Header.Get("Content-Type") == "" && req.Body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

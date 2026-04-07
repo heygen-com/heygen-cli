@@ -17,6 +17,8 @@ require (
 	github.com/charmbracelet/bubbletea v1.2.4
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/creativeprojects/go-selfupdate v1.5.0
+	github.com/google/uuid v1.6.0
+	github.com/posthog/posthog-go v1.11.2
 	github.com/spf13/pflag v1.0.9
 	golang.org/x/term v0.31.0
 )
@@ -34,11 +36,13 @@ require (
 	github.com/go-fed/httpsig v1.1.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
+	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/google/go-github/v30 v30.1.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
