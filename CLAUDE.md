@@ -86,7 +86,9 @@ Data(v json.RawMessage, dataField string, columns []command.Column) error
 When a change affects user-facing behavior, update the relevant doc:
 - New command group or removed group → README.md command table
 - New hand-written command or enhancement pattern → CONTRIBUTING.md
-- Changed release workflow → RELEASE.md
+- Changed release or CI workflow (triggers, versioning, channels) → RELEASE.md
 - Changed key commands or async patterns → SKILL.md
 
-Do not update docs for internal refactors, test changes, or codegen-only changes.
+CI workflow changes that affect how releases are built, triggered, or distributed count as release workflow changes — update RELEASE.md.
+
+Do not update docs for internal refactors, test changes, or codegen-only changes. Lint/CI changes that don't affect the release pipeline (e.g., adding a linter, changing test timeouts) are exempt.
