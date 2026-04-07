@@ -19,13 +19,14 @@ var Groups = map[string][]*command.Spec{
 		AvatarList,
 		AvatarLooksGet,
 		AvatarLooksList,
+		AvatarLooksUpdate,
 	},
-	"overdub": {
-		OverdubCreate,
-		OverdubDelete,
-		OverdubGet,
-		OverdubList,
-		OverdubUpdate,
+	"lipsync": {
+		LipsyncCreate,
+		LipsyncDelete,
+		LipsyncGet,
+		LipsyncList,
+		LipsyncUpdate,
 	},
 	"user": {
 		UserMeGet,
@@ -79,7 +80,7 @@ var Groups = map[string][]*command.Spec{
 var GroupDescriptions = map[string]string{
 	"asset":           "Upload files for use in video creation",
 	"avatar":          "List and manage avatars and looks",
-	"overdub":         "Dub or replace audio on existing videos",
+	"lipsync":         "Dub or replace audio on existing videos",
 	"user":            "Account information and billing",
 	"video":           "Create, list, retrieve, and delete videos",
 	"video-agent":     "Create videos from text prompts using AI",

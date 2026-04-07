@@ -80,7 +80,7 @@ The CLI mirrors the [HeyGen v3 API](https://developers.heygen.com). Pattern: `he
 | `avatar` | List and manage avatars and looks |
 | `voice` | List voices, design voices, generate speech |
 | `video-translate` | Translate videos into other languages |
-| `overdub` | Dub or replace audio on existing videos |
+| `lipsync` | Dub or replace audio on existing videos |
 | `webhook` | Manage webhook endpoints and events |
 | `asset` | Upload files for use in video creation |
 | `user` | Account info and billing |

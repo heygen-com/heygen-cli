@@ -52,7 +52,7 @@ func TestGeneratedRoot_VoiceSpeechCreate(t *testing.T) {
 
 func TestGeneratedRoot_UserMeGet(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
-		"GET /v3/user/me": {
+		"GET /v3/users/me": {
 			StatusCode: 200,
 			Body:       `{"data":{"user_id":"user_123","email":"test@example.com"}}`,
 		},

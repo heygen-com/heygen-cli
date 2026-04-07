@@ -50,7 +50,7 @@ var DefaultColumns = map[string][]command.Column{
 		{Header: "Event Type", Field: "event_type"},
 		{Header: "Created", Field: "created_at"},
 	},
-	"overdub/list": {
+	"lipsync/list": {
 		{Header: "ID", Field: "id"},
 		{Header: "Title", Field: "title"},
 		{Header: "Status", Field: "status"},

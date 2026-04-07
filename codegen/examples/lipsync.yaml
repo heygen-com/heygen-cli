@@ -1,0 +1,10 @@
+"GET /v3/lipsyncs":
+  - "heygen lipsync list --limit 10"
+"POST /v3/lipsyncs":
+  - "cat request.json | heygen lipsync create -d -"
+"GET /v3/lipsyncs/{lipsync_id}":
+  - "heygen lipsync get <lipsync-id>"
+"PATCH /v3/lipsyncs/{lipsync_id}":
+  - "heygen lipsync update <lipsync-id> --title 'Updated title'"
+"DELETE /v3/lipsyncs/{lipsync_id}":
+  - "heygen lipsync delete <lipsync-id>"
