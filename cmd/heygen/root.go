@@ -37,6 +37,10 @@ func newRootCmd(version string, formatter output.Formatter) *cobra.Command {
 	root.CompletionOptions.HiddenDefaultCmd = true
 	root.PersistentFlags().Bool("human", false, "Display output as a formatted table instead of JSON")
 
+	// Move examples after flags in help output (matches gh, aws, gcloud convention).
+	// Cobra's default puts examples before flags; most CLIs do the opposite.
+	root.SetUsageTemplate(usageTemplateExamplesLast)
+
 	root.AddCommand(newAuthCmd(ctx))
 	root.AddCommand(newConfigCmd(ctx))
 	root.AddCommand(newUpdateCmd(ctx))
@@ -98,6 +102,8 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, groups map[
 	})
 	root.CompletionOptions.HiddenDefaultCmd = true
 	root.PersistentFlags().Bool("human", false, "Display output as a formatted table instead of JSON")
+
+	root.SetUsageTemplate(usageTemplateExamplesLast)
 
 	root.AddCommand(newAuthCmd(ctx))
 	root.AddCommand(newConfigCmd(ctx))
@@ -184,3 +190,36 @@ func humanizeCommandToken(token string) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// usageTemplateExamplesLast is Cobra's default usage template with Examples
+// moved after Global Flags. Matches the convention used by gh, aws, and gcloud.
+const usageTemplateExamplesLast = `Usage:{{if .Runnable}}
+  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
+
+Aliases:
+  {{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}{{$cmds := .Commands}}{{if eq (len .Groups) 0}}
+
+Available Commands:{{range $cmds}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{range $group := .Groups}}
+
+{{.Title}}{{range $cmds}}{{if (and (eq .GroupID $group.ID) (or .IsAvailableCommand (eq .Name "help")))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if not .AllChildCommandsHaveGroup}}
+
+Additional Commands:{{range $cmds}}{{if (and (eq .GroupID "") (or .IsAvailableCommand (eq .Name "help")))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+
+Flags:
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
+
+Global Flags:
+{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasExample}}
+
+Examples:
+{{.Example}}{{end}}{{if .HasHelpSubCommands}}
+
+Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
+  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
+
+Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
+`
