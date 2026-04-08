@@ -23,6 +23,9 @@ var {{pascalCase .Group}}{{pascalCase .Name}} = &command.Spec{
 {{- if .Paginated}}
 	Paginated:   true,
 {{- end}}
+{{- if .Destructive}}
+	Destructive: true,
+{{- end}}
 {{- if .Examples}}
 	Examples: []string{
 {{- range .Examples}}

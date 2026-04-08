@@ -32,6 +32,7 @@ var assetTypes = map[string]assetInfo{
 func newVideoDownloadCmd(ctx *cmdContext) *cobra.Command {
 	var outputPath string
 	var asset string
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "download <video-id>",
@@ -46,6 +47,33 @@ func newVideoDownloadCmd(ctx *cmdContext) *cobra.Command {
 			if !ok {
 				return clierrors.NewUsage(
 					fmt.Sprintf("invalid --asset value %q: must be one of: video, captioned", asset))
+			}
+
+			dest := outputPath
+			if dest == "" {
+				// Sanitize: strip directory components from video ID to prevent
+				// path traversal. Handles IDs with / or \\ safely.
+				dest = filepath.Base(videoID) + info.ext
+			}
+
+			if !force {
+				if _, err := os.Stat(dest); err == nil {
+					if !stdinIsTerminalFunc() {
+						return &clierrors.CLIError{
+							Code:     "file_exists",
+							Message:  fmt.Sprintf("file %q already exists", dest),
+							Hint:     "Use --force to overwrite, or --output-path to write to a different file",
+							ExitCode: clierrors.ExitGeneral,
+						}
+					}
+					if err := confirmAction(
+						cmd.ErrOrStderr(),
+						cmd.InOrStdin(),
+						fmt.Sprintf("File %q already exists. Overwrite?", dest),
+					); err != nil {
+						return err
+					}
+				}
 			}
 
 			spec := &command.Spec{
@@ -64,13 +92,6 @@ func newVideoDownloadCmd(ctx *cmdContext) *cobra.Command {
 			assetURL, err := extractAssetURL(result, videoID, info)
 			if err != nil {
 				return err
-			}
-
-			dest := outputPath
-			if dest == "" {
-				// Sanitize: strip directory components from video ID to prevent
-				// path traversal. Handles IDs with / or \ safely.
-				dest = filepath.Base(videoID) + info.ext
 			}
 
 			if err := downloadFile(cmd.Context(), assetURL, dest); err != nil {
@@ -92,6 +113,7 @@ func newVideoDownloadCmd(ctx *cmdContext) *cobra.Command {
 
 	cmd.Flags().StringVar(&asset, "asset", "video", "Asset to download: video, captioned")
 	cmd.Flags().StringVar(&outputPath, "output-path", "", "Output file path (default: {video-id}.mp4)")
+	cmd.Flags().BoolVar(&force, "force", false, "Overwrite existing files without prompting")
 	return cmd
 }
 

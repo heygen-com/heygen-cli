@@ -29,6 +29,7 @@ var VideoDelete = &command.Spec{
 	Endpoint:       "/v3/videos/{video_id}",
 	Method:         "DELETE",
 	BodyEncoding:   "",
+	Destructive:    true,
 	Examples: []string{
 		"heygen video delete <video-id>",
 	},

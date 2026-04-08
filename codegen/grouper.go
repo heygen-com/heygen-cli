@@ -171,6 +171,7 @@ func buildSpec(
 	// Pagination — only sets Paginated bool. The cursor field names and data
 	// field are API conventions hardcoded in the client package.
 	spec.Paginated = detectPagination(op, pathItem)
+	spec.Destructive = method == "DELETE"
 
 	// Flags from query params
 	for _, paramRef := range collectParams(pathItem, op) {

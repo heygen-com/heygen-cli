@@ -198,6 +198,7 @@ var LipsyncDelete = &command.Spec{
 	Endpoint:       "/v3/lipsyncs/{lipsync_id}",
 	Method:         "DELETE",
 	BodyEncoding:   "",
+	Destructive:    true,
 	Examples: []string{
 		"heygen lipsync delete <lipsync-id>",
 	},

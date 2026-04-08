@@ -73,6 +73,19 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
+			if spec.Destructive {
+				force, _ := cmd.Flags().GetBool("force")
+				if !force && stdinIsTerminalFunc() {
+					if err := confirmAction(
+						cmd.ErrOrStderr(),
+						cmd.InOrStdin(),
+						fmt.Sprintf("Warning: %s. Continue?", spec.Summary),
+					); err != nil {
+						return err
+					}
+				}
+			}
+
 			// Poll config is looked up at call time, not attached to Spec.
 			// Spec is immutable (generated); poll configs are hand-written in cmd/.
 			pc := pollConfigs[spec.Group+"/"+spec.Name]
@@ -181,6 +194,9 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 	if spec.BodyEncoding == "json" {
 		cmd.Flags().StringVarP(&rawData, "data", "d", "",
 			"JSON request body (inline JSON, file path, or - for stdin). When used with individual flags, flags override matching fields in the JSON.")
+	}
+	if spec.Destructive {
+		cmd.Flags().Bool("force", false, "Skip confirmation prompt for destructive operations")
 	}
 
 	return cmd
