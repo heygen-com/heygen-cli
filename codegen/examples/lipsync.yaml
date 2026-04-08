@@ -1,10 +1,15 @@
 "GET /v3/lipsyncs":
-  - "heygen lipsync list --limit 10"
+  - desc: "List lipsync jobs"
+    cmd: "heygen lipsync list --limit 10"
 "POST /v3/lipsyncs":
-  - "cat request.json | heygen lipsync create -d -"
+  - desc: "Create a lipsync job from JSON (use --request-schema for required fields)"
+    cmd: "heygen lipsync create -d request.json"
 "GET /v3/lipsyncs/{lipsync_id}":
-  - "heygen lipsync get <lipsync-id>"
+  - desc: "Check lipsync status"
+    cmd: "heygen lipsync get <lipsync-id>"
 "PATCH /v3/lipsyncs/{lipsync_id}":
-  - "heygen lipsync update <lipsync-id> --title 'Updated title'"
+  - desc: "Update lipsync title"
+    cmd: "heygen lipsync update <lipsync-id> --title 'Updated title'"
 "DELETE /v3/lipsyncs/{lipsync_id}":
-  - "heygen lipsync delete <lipsync-id>"
+  - desc: "Delete a lipsync job"
+    cmd: "heygen lipsync delete <lipsync-id>"

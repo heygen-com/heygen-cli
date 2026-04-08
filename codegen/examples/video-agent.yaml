@@ -1,15 +1,25 @@
 "POST /v3/video-agents":
-  - "heygen video-agent create --prompt 'Make a product demo'"
-  - "heygen video-agent create -d '{\"prompt\":\"Make a product demo\"}'"
+  - desc: "Create a video and wait for completion"
+    cmd: "heygen video-agent create --prompt 'Make a product demo' --wait"
+  - desc: "Create with specific avatar and voice"
+    cmd: "heygen video-agent create --prompt 'Product launch' --avatar-id <avatar-id> --voice-id <voice-id> --wait"
+  - desc: "Create with JSON body"
+    cmd: "heygen video-agent create -d '{\"prompt\":\"Make a product demo\"}' --wait"
 "GET /v3/video-agents/styles":
-  - "heygen video-agent styles list"
+  - desc: "Browse available video styles"
+    cmd: "heygen video-agent styles list"
 "POST /v3/video-agents/sessions":
-  - "heygen video-agent sessions create --prompt 'Interview video'"
+  - desc: "Start an interactive session"
+    cmd: "heygen video-agent sessions create --prompt 'Interview video'"
 "GET /v3/video-agents/sessions/{session_id}":
-  - "heygen video-agent sessions get <session-id>"
+  - desc: "Check session status"
+    cmd: "heygen video-agent sessions get <session-id>"
 "POST /v3/video-agents/sessions/{session_id}/messages":
-  - "heygen video-agent sessions messages create <session-id> --message 'Add intro'"
+  - desc: "Send a follow-up message"
+    cmd: "heygen video-agent sessions messages create <session-id> --message 'Add intro'"
 "GET /v3/video-agents/sessions/{session_id}/resources":
-  - "heygen video-agent sessions resources get <session-id>"
+  - desc: "Get session resources"
+    cmd: "heygen video-agent sessions resources get <session-id>"
 "POST /v3/video-agents/sessions/{session_id}/stop":
-  - "heygen video-agent sessions stop <session-id>"
+  - desc: "Stop an in-progress session"
+    cmd: "heygen video-agent sessions stop <session-id>"

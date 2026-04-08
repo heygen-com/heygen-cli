@@ -1,25 +1,38 @@
 "GET /v3/video-translations":
-  - "heygen video-translate list --limit 10"
+  - desc: "List translations"
+    cmd: "heygen video-translate list --limit 10"
 "GET /v3/video-translations/{video_translation_id}":
-  - "heygen video-translate get <video-translation-id>"
+  - desc: "Check translation status"
+    cmd: "heygen video-translate get <video-translation-id>"
 "POST /v3/video-translations":
-  - "cat request.json | heygen video-translate create -d -"
-  - "heygen video-translate create --output-languages es --mode precision"
+  - desc: "Translate a video to Spanish and wait (use --request-schema for all fields)"
+    cmd: "heygen video-translate create --output-languages es --mode precision --wait"
+  - desc: "Translate with full config from JSON file"
+    cmd: "heygen video-translate create -d request.json --wait"
 "PATCH /v3/video-translations/{video_translation_id}":
-  - "heygen video-translate update <video-translation-id> --title 'New title'"
+  - desc: "Update translation title"
+    cmd: "heygen video-translate update <video-translation-id> --title 'New title'"
 "DELETE /v3/video-translations/{video_translation_id}":
-  - "heygen video-translate delete <video-translation-id>"
+  - desc: "Delete a translation"
+    cmd: "heygen video-translate delete <video-translation-id>"
 "GET /v3/video-translations/{video_translation_id}/caption":
-  - "heygen video-translate caption get <video-translation-id> --format srt"
+  - desc: "Download caption as SRT"
+    cmd: "heygen video-translate caption get <video-translation-id> --format srt"
 "GET /v3/video-translations/languages":
-  - "heygen video-translate languages list"
+  - desc: "List supported languages"
+    cmd: "heygen video-translate languages list"
 "POST /v3/video-translations/proofreads":
-  - "cat request.json | heygen video-translate proofreads create -d -"
+  - desc: "Create a proofread from JSON"
+    cmd: "heygen video-translate proofreads create -d request.json"
 "GET /v3/video-translations/proofreads/{proofread_id}":
-  - "heygen video-translate proofreads get <proofread-id>"
+  - desc: "Check proofread status"
+    cmd: "heygen video-translate proofreads get <proofread-id>"
 "POST /v3/video-translations/proofreads/{proofread_id}/generate":
-  - "heygen video-translate proofreads generate <proofread-id>"
+  - desc: "Generate proofread output"
+    cmd: "heygen video-translate proofreads generate <proofread-id>"
 "GET /v3/video-translations/proofreads/{proofread_id}/srt":
-  - "heygen video-translate proofreads srt get <proofread-id>"
+  - desc: "Download proofread SRT"
+    cmd: "heygen video-translate proofreads srt get <proofread-id>"
 "PUT /v3/video-translations/proofreads/{proofread_id}/srt":
-  - "heygen video-translate proofreads srt update <proofread-id>"
+  - desc: "Upload corrected SRT"
+    cmd: "heygen video-translate proofreads srt update <proofread-id>"

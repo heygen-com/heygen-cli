@@ -1,14 +1,21 @@
 "GET /v3/avatars":
-  - "heygen avatar list --limit 10"
+  - desc: "List avatars"
+    cmd: "heygen avatar list --limit 10"
 "GET /v3/avatars/{group_id}":
-  - "heygen avatar get <group-id>"
+  - desc: "Get avatar details"
+    cmd: "heygen avatar get <group-id>"
 "POST /v3/avatars":
-  - "heygen avatar create"
+  - desc: "See required fields for avatar creation"
+    cmd: "heygen avatar create --request-schema"
 "POST /v3/avatars/{group_id}/consent":
-  - "heygen avatar consent create <group-id>"
+  - desc: "Submit avatar consent"
+    cmd: "heygen avatar consent create <group-id>"
 "GET /v3/avatars/looks":
-  - "heygen avatar looks list --limit 10"
+  - desc: "Browse avatar looks"
+    cmd: "heygen avatar looks list --limit 10"
 "GET /v3/avatars/looks/{look_id}":
-  - "heygen avatar looks get <look-id>"
+  - desc: "Get look details"
+    cmd: "heygen avatar looks get <look-id>"
 "PATCH /v3/avatars/looks/{look_id}":
-  - "heygen avatar looks update <look-id> --name 'New name'"
+  - desc: "Rename a look"
+    cmd: "heygen avatar looks update <look-id> --name 'New name'"

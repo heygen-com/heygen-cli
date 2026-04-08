@@ -15,8 +15,8 @@ var VoiceCreate = &command.Spec{
 	Method:         "POST",
 	BodyEncoding:   "json",
 	Examples: []string{
-		"heygen voice create --prompt 'warm, confident female narrator'",
-		"heygen voice create --prompt 'deep male voice with British accent' --gender male",
+		"# Design a voice by description\n  heygen voice create --prompt 'warm, confident female narrator'",
+		"# Design with gender hint and seed variation\n  heygen voice create --prompt 'deep male voice' --gender male --seed 1",
 	},
 	Flags: []command.FlagSpec{
 		{
@@ -81,7 +81,9 @@ var VoiceList = &command.Spec{
 	BodyEncoding:   "",
 	Paginated:      true,
 	Examples: []string{
-		"heygen voice list --type public",
+		"# List public voices\n  heygen voice list --type public",
+		"# List starfish-engine voices (required for TTS)\n  heygen voice list --engine starfish",
+		"# Filter by language and gender\n  heygen voice list --language English --gender female --limit 5",
 	},
 	Flags: []command.FlagSpec{
 		{
@@ -163,14 +165,14 @@ var VoiceSpeechCreate = &command.Spec{
 	Group:          "voice",
 	Name:           "speech create",
 	Summary:        "Create speech audio from text",
-	Description:    "Synthesize speech audio from text using a specified voice. Returns a URL to the generated audio file along with duration and optional word-level timestamps.",
-	RequestSchema:  "{\n  \"description\": \"Request body for POST /v1/audio/text_to_speech.\",\n  \"properties\": {\n    \"input_type\": {\n      \"default\": \"text\",\n      \"description\": \"Type of the input: 'text' for plain text, 'ssml' for SSML markup. Defaults to 'text'.\",\n      \"type\": \"string\"\n    },\n    \"language\": {\n      \"description\": \"Base language code (e.g. 'en', 'pt', 'zh'). Optional — auto-detected from text when omitted.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"locale\": {\n      \"description\": \"BCP-47 locale tag (e.g. 'en-US', 'pt-BR'). When set, language is inferred from locale.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"speed\": {\n      \"default\": 1,\n      \"description\": \"Speed multiplier (0.5-2.0).\",\n      \"type\": \"number\"\n    },\n    \"text\": {\n      \"description\": \"Text to synthesize (1-5000 characters).\",\n      \"type\": \"string\"\n    },\n    \"voice_id\": {\n      \"description\": \"Voice ID to use. Discover available voices via GET /v1/audio/voices.\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"text\",\n    \"voice_id\"\n  ],\n  \"type\": \"object\"\n}",
-	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response payload for POST /v1/audio/text_to_speech.\",\n      \"properties\": {\n        \"audio_url\": {\n          \"description\": \"URL of the generated audio file.\",\n          \"type\": \"string\"\n        },\n        \"duration\": {\n          \"description\": \"Duration of the audio in seconds.\",\n          \"type\": \"number\"\n        },\n        \"request_id\": {\n          \"description\": \"Unique identifier for this generation request.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"word_timestamps\": {\n          \"description\": \"Word-level timing data.\",\n          \"items\": {\n            \"description\": \"Word-level timing data from TTS generation.\",\n            \"properties\": {\n              \"end\": {\n                \"description\": \"End time in seconds.\",\n                \"type\": \"number\"\n              },\n              \"start\": {\n                \"description\": \"Start time in seconds.\",\n                \"type\": \"number\"\n              },\n              \"word\": {\n                \"description\": \"The word.\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"word\",\n              \"start\",\n              \"end\"\n            ],\n            \"type\": \"object\"\n          },\n          \"nullable\": true,\n          \"type\": \"array\"\n        }\n      },\n      \"required\": [\n        \"audio_url\",\n        \"duration\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Description:    "Synthesize speech audio from text using a specified voice. The voice must support the starfish engine — use GET /v3/voices?engine=starfish to find compatible voices. Returns a URL to the generated audio file along with duration and optional word-level timestamps.",
+	RequestSchema:  "{\n  \"description\": \"Request body for text-to-speech generation.\",\n  \"properties\": {\n    \"input_type\": {\n      \"default\": \"text\",\n      \"description\": \"Type of the input: 'text' for plain text, 'ssml' for SSML markup. Defaults to 'text'.\",\n      \"type\": \"string\"\n    },\n    \"language\": {\n      \"description\": \"Base language code (e.g. 'en', 'pt', 'zh'). Optional — auto-detected from text when omitted.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"locale\": {\n      \"description\": \"BCP-47 locale tag (e.g. 'en-US', 'pt-BR'). When set, language is inferred from locale.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"speed\": {\n      \"default\": 1,\n      \"description\": \"Speed multiplier (0.5-2.0).\",\n      \"type\": \"number\"\n    },\n    \"text\": {\n      \"description\": \"Text to synthesize (1-5000 characters).\",\n      \"type\": \"string\"\n    },\n    \"voice_id\": {\n      \"description\": \"Voice ID to use. The voice must support the starfish engine. Filter compatible voices by passing engine=starfish to the voice listing endpoint.\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"text\",\n    \"voice_id\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response payload for text-to-speech generation.\",\n      \"properties\": {\n        \"audio_url\": {\n          \"description\": \"URL of the generated audio file.\",\n          \"type\": \"string\"\n        },\n        \"duration\": {\n          \"description\": \"Duration of the audio in seconds.\",\n          \"type\": \"number\"\n        },\n        \"request_id\": {\n          \"description\": \"Unique identifier for this generation request.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"word_timestamps\": {\n          \"description\": \"Word-level timing data.\",\n          \"items\": {\n            \"description\": \"Word-level timing data from TTS generation.\",\n            \"properties\": {\n              \"end\": {\n                \"description\": \"End time in seconds.\",\n                \"type\": \"number\"\n              },\n              \"start\": {\n                \"description\": \"Start time in seconds.\",\n                \"type\": \"number\"\n              },\n              \"word\": {\n                \"description\": \"The word.\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"word\",\n              \"start\",\n              \"end\"\n            ],\n            \"type\": \"object\"\n          },\n          \"nullable\": true,\n          \"type\": \"array\"\n        }\n      },\n      \"required\": [\n        \"audio_url\",\n        \"duration\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
 	Endpoint:       "/v3/voices/speech",
 	Method:         "POST",
 	BodyEncoding:   "json",
 	Examples: []string{
-		"heygen voice speech create --text 'Hello world' --voice-id en_male",
+		"# Generate speech (requires starfish-engine voice)\n  heygen voice speech create --text 'Hello world' --voice-id <voice-id>",
 	},
 	Flags: []command.FlagSpec{
 		{
@@ -237,7 +239,7 @@ var VoiceSpeechCreate = &command.Spec{
 			Name:     "voice-id",
 			Type:     "string",
 			Default:  "",
-			Help:     "Voice ID to use. Discover available voices via GET /v1/audio/voices.",
+			Help:     "Voice ID to use. The voice must support the starfish engine. Filter compatible voices by passing engine=starfish to the voice listing endpoint.",
 			Required: true,
 			Enum:     nil,
 			Min:      nil,

@@ -1,10 +1,18 @@
 "GET /v3/videos":
-  - "heygen video list --limit 10"
-  - "heygen video list --folder-id abc123"
+  - desc: "List recent videos"
+    cmd: "heygen video list --limit 10"
+  - desc: "List videos in a folder"
+    cmd: "heygen video list --folder-id <folder-id>"
 "POST /v3/videos":
-  - "heygen video create -d '{\"type\":\"avatar\",\"avatar_id\":\"josh_lite\",\"script\":\"Hello world\",\"voice_id\":\"en_male\"}'"
-  - "heygen video create -d '{\"type\":\"image\",\"image\":{\"type\":\"url\",\"url\":\"https://example.com/photo.jpg\"},\"script\":\"Hello\",\"voice_id\":\"en_male\"}'"
+  - desc: "Create an avatar video and wait for completion"
+    cmd: "heygen video create -d '{\"type\":\"avatar\",\"avatar_id\":\"<avatar-id>\",\"script\":\"Hello world\",\"voice_id\":\"<voice-id>\"}' --wait"
+  - desc: "Create from a custom image"
+    cmd: "heygen video create -d '{\"type\":\"image\",\"image\":{\"type\":\"url\",\"url\":\"https://example.com/photo.jpg\"},\"script\":\"Hello\",\"voice_id\":\"<voice-id>\"}' --wait"
+  - desc: "See all available request fields"
+    cmd: "heygen video create --request-schema"
 "GET /v3/videos/{video_id}":
-  - "heygen video get <video-id>"
+  - desc: "Check video status"
+    cmd: "heygen video get <video-id>"
 "DELETE /v3/videos/{video_id}":
-  - "heygen video delete <video-id>"
+  - desc: "Delete a video"
+    cmd: "heygen video delete <video-id>"

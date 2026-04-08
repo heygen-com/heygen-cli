@@ -1,14 +1,23 @@
 "GET /v3/webhooks/endpoints":
-  - "heygen webhook endpoints list"
+  - desc: "List webhook endpoints"
+    cmd: "heygen webhook endpoints list"
 "POST /v3/webhooks/endpoints":
-  - "heygen webhook endpoints create --url https://example.com/hook"
+  - desc: "Register a webhook"
+    cmd: "heygen webhook endpoints create --url https://example.com/hook"
+  - desc: "Register with event filter"
+    cmd: "heygen webhook endpoints create --url https://example.com/hook --events avatar_video.success --events avatar_video.fail"
 "PATCH /v3/webhooks/endpoints/{endpoint_id}":
-  - "heygen webhook endpoints update <endpoint-id> --url https://new.example.com/hook"
+  - desc: "Update webhook URL"
+    cmd: "heygen webhook endpoints update <endpoint-id> --url https://new.example.com/hook"
 "DELETE /v3/webhooks/endpoints/{endpoint_id}":
-  - "heygen webhook endpoints delete <endpoint-id>"
+  - desc: "Delete a webhook"
+    cmd: "heygen webhook endpoints delete <endpoint-id>"
 "POST /v3/webhooks/endpoints/{endpoint_id}/rotate-secret":
-  - "heygen webhook endpoints rotate-secret <endpoint-id>"
+  - desc: "Rotate signing secret"
+    cmd: "heygen webhook endpoints rotate-secret <endpoint-id>"
 "GET /v3/webhooks/event-types":
-  - "heygen webhook event-types list"
+  - desc: "List available event types"
+    cmd: "heygen webhook event-types list"
 "GET /v3/webhooks/events":
-  - "heygen webhook events list --event-type avatar_video.success"
+  - desc: "List events by type"
+    cmd: "heygen webhook events list --event-type avatar_video.success"

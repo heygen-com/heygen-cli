@@ -1,2 +1,3 @@
 "POST /v3/assets":
-  - "heygen asset create --file ./video.mp4"
+  - desc: "Upload a file for use in video creation"
+    cmd: "heygen asset create --file ./video.mp4"

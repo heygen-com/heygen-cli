@@ -14,6 +14,6 @@ var UserMeGet = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Examples: []string{
-		"heygen user me get",
+		"# View account info and credits\n  heygen user me get",
 	},
 }
