@@ -60,7 +60,7 @@ type Spec struct {
 	// Execution behavior (used by executor)
 	Paginated   bool        // true → command supports cursor pagination via API query flags like --token/--limit
 	PollConfig  *PollConfig // non-nil → pollable; defines polling behavior for --wait
-	Destructive bool        // triggers --force confirmation prompt (not yet implemented)
+	Destructive bool        // true → command registers --force and prompts before destructive execution
 	Columns     []Column    // TUI table column definitions for --human output
 }
 

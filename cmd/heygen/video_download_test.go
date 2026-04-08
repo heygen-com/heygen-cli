@@ -257,6 +257,88 @@ func TestVideoDownload_PreservesExistingFileOnFailure(t *testing.T) {
 	}
 }
 
+func TestVideoDownload_ForceOverwritesExistingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	dest := filepath.Join(tmpDir, "existing.mp4")
+	if err := os.WriteFile(dest, []byte("original-content"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v3/videos/vid_123":
+			writeJSON(t, w, map[string]any{
+				"data": map[string]any{
+					"video_url": srv.URL + "/download/vid_123.mp4",
+					"status":    "completed",
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/download/vid_123.mp4":
+			_, _ = w.Write([]byte("new-content"))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "download", "vid_123", "--output-path", dest, "--force")
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "new-content" {
+		t.Fatalf("file contents = %q, want %q", string(data), "new-content")
+	}
+}
+
+func TestVideoDownload_FileExistsNonTTYRequiresForce(t *testing.T) {
+	tmpDir := t.TempDir()
+	dest := filepath.Join(tmpDir, "existing.mp4")
+	if err := os.WriteFile(dest, []byte("original-content"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var videoRequests int
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos/vid_123": {
+			StatusCode: 200,
+			Body:       `{"data":{"video_url":"https://example.test/video.mp4","status":"completed"}}`,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				videoRequests++
+			},
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "download", "vid_123", "--output-path", dest)
+	if res.ExitCode != clierrors.ExitGeneral {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stderr)
+	}
+	if videoRequests != 0 {
+		t.Fatalf("videoRequests = %d, want 0", videoRequests)
+	}
+	if !strings.Contains(res.Stderr, `"code":"file_exists"`) {
+		t.Fatalf("stderr = %q, want file_exists error code", res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "--force") {
+		t.Fatalf("stderr = %q, want --force hint", res.Stderr)
+	}
+
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "original-content" {
+		t.Fatalf("file contents = %q, want %q", string(data), "original-content")
+	}
+}
+
 func TestVideoDownload_VideoNotFound(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/videos/vid_missing": {

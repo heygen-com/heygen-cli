@@ -302,6 +302,7 @@ var VideoTranslateDelete = &command.Spec{
 	Endpoint:       "/v3/video-translations/{video_translation_id}",
 	Method:         "DELETE",
 	BodyEncoding:   "",
+	Destructive:    true,
 	Examples: []string{
 		"heygen video-translate delete <video-translation-id>",
 	},

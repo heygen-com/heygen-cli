@@ -66,6 +66,7 @@ var WebhookEndpointsDelete = &command.Spec{
 	Endpoint:       "/v3/webhooks/endpoints/{endpoint_id}",
 	Method:         "DELETE",
 	BodyEncoding:   "",
+	Destructive:    true,
 	Examples: []string{
 		"heygen webhook endpoints delete <endpoint-id>",
 	},

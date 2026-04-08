@@ -106,6 +106,19 @@ var videoAgentWaitSpec = &command.Spec{
 	Examples:     []string{"heygen video-agent create --wait"},
 }
 
+var videoDeleteSpec = &command.Spec{
+	Group:       "video",
+	Name:        "delete",
+	Summary:     "Delete a video",
+	Endpoint:    "/v3/videos/{video_id}",
+	Method:      "DELETE",
+	Destructive: true,
+	Args: []command.ArgSpec{
+		{Name: "video-id", Param: "video_id"},
+	},
+	Examples: []string{"heygen video delete <video-id>"},
+}
+
 func TestGenBuilder_VideoList_Success(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/videos": {
@@ -344,6 +357,153 @@ func TestGenBuilder_HelpShowsRequiredAnnotation(t *testing.T) {
 	}
 	if strings.Contains(res.Stdout, "Video orientation (required)") {
 		t.Fatalf("stdout = %s, optional flag should not be marked required", res.Stdout)
+	}
+}
+
+func TestGenBuilder_DestructiveForceSkipsPrompt(t *testing.T) {
+	var deleteCalls int
+	srv := setupTestServer(t, map[string]testHandler{
+		"DELETE /v3/videos/vid_123": {
+			StatusCode: 200,
+			Body:       `{"data":{"id":"vid_123"}}`,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				deleteCalls++
+			},
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", videoDeleteSpec, "delete", "vid_123", "--force")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if deleteCalls != 1 {
+		t.Fatalf("deleteCalls = %d, want 1", deleteCalls)
+	}
+	if strings.Contains(res.Stderr, "Continue? [y/N]") {
+		t.Fatalf("stderr = %q, want no prompt", res.Stderr)
+	}
+}
+
+func TestGenBuilder_DestructiveNonTTYSkipsPrompt(t *testing.T) {
+	var deleteCalls int
+	srv := setupTestServer(t, map[string]testHandler{
+		"DELETE /v3/videos/vid_123": {
+			StatusCode: 200,
+			Body:       `{"data":{"id":"vid_123"}}`,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				deleteCalls++
+			},
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", videoDeleteSpec, "delete", "vid_123")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if deleteCalls != 1 {
+		t.Fatalf("deleteCalls = %d, want 1", deleteCalls)
+	}
+	if strings.Contains(res.Stderr, "Continue? [y/N]") {
+		t.Fatalf("stderr = %q, want no prompt", res.Stderr)
+	}
+}
+
+func TestGenBuilder_DestructiveTTYYesConfirms(t *testing.T) {
+	orig := stdinIsTerminalFunc
+	stdinIsTerminalFunc = func() bool { return true }
+	t.Cleanup(func() { stdinIsTerminalFunc = orig })
+
+	var deleteCalls int
+	srv := setupTestServer(t, map[string]testHandler{
+		"DELETE /v3/videos/vid_123": {
+			StatusCode: 200,
+			Body:       `{"data":{"id":"vid_123"}}`,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				deleteCalls++
+			},
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommandWithInput(t, srv.URL, "test-key", videoDeleteSpec, strings.NewReader("y\n"), "delete", "vid_123")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if deleteCalls != 1 {
+		t.Fatalf("deleteCalls = %d, want 1", deleteCalls)
+	}
+	if !strings.Contains(res.Stderr, "Warning: Delete a video. Continue? [y/N]") {
+		t.Fatalf("stderr = %q, want prompt", res.Stderr)
+	}
+}
+
+func TestGenBuilder_DestructiveTTYNoCancels(t *testing.T) {
+	orig := stdinIsTerminalFunc
+	stdinIsTerminalFunc = func() bool { return true }
+	t.Cleanup(func() { stdinIsTerminalFunc = orig })
+
+	var deleteCalls int
+	srv := setupTestServer(t, map[string]testHandler{
+		"DELETE /v3/videos/vid_123": {
+			StatusCode: 200,
+			Body:       `{"data":{"id":"vid_123"}}`,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				deleteCalls++
+			},
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommandWithInput(t, srv.URL, "test-key", videoDeleteSpec, strings.NewReader("n\n"), "delete", "vid_123")
+
+	if res.ExitCode != clierrors.ExitGeneral {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stderr)
+	}
+	if deleteCalls != 0 {
+		t.Fatalf("deleteCalls = %d, want 0", deleteCalls)
+	}
+	if !strings.Contains(res.Stderr, `"code":"canceled"`) {
+		t.Fatalf("stderr = %q, want canceled error code", res.Stderr)
+	}
+}
+
+func TestGenBuilder_DestructiveTTYEmptyCancels(t *testing.T) {
+	orig := stdinIsTerminalFunc
+	stdinIsTerminalFunc = func() bool { return true }
+	t.Cleanup(func() { stdinIsTerminalFunc = orig })
+
+	var deleteCalls int
+	srv := setupTestServer(t, map[string]testHandler{
+		"DELETE /v3/videos/vid_123": {
+			StatusCode: 200,
+			Body:       `{"data":{"id":"vid_123"}}`,
+			ValidateRequest: func(t *testing.T, r *http.Request) {
+				t.Helper()
+				deleteCalls++
+			},
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommandWithInput(t, srv.URL, "test-key", videoDeleteSpec, strings.NewReader("\n"), "delete", "vid_123")
+
+	if res.ExitCode != clierrors.ExitGeneral {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stderr)
+	}
+	if deleteCalls != 0 {
+		t.Fatalf("deleteCalls = %d, want 0", deleteCalls)
+	}
+	if !strings.Contains(res.Stderr, `"code":"canceled"`) {
+		t.Fatalf("stderr = %q, want canceled error code", res.Stderr)
 	}
 }
 
@@ -1010,12 +1170,24 @@ func TestGenBuilder_MultipartFileFlag_RoutesToInvocationFilePath(t *testing.T) {
 func runGenCommand(t *testing.T, serverURL, apiKey string, spec *command.Spec, args ...string) cmdResult {
 	t.Helper()
 
-	return runGeneratedRootCommand(t, serverURL, apiKey, map[string][]*command.Spec{
+	return runGenCommandWithInput(t, serverURL, apiKey, spec, nil, args...)
+}
+
+func runGenCommandWithInput(t *testing.T, serverURL, apiKey string, spec *command.Spec, stdin io.Reader, args ...string) cmdResult {
+	t.Helper()
+
+	return runGeneratedRootCommandWithInput(t, serverURL, apiKey, map[string][]*command.Spec{
 		spec.Group: {spec},
-	}, append([]string{spec.Group}, args...)...)
+	}, stdin, append([]string{spec.Group}, args...)...)
 }
 
 func runGeneratedRootCommand(t *testing.T, serverURL, apiKey string, groups map[string][]*command.Spec, args ...string) cmdResult {
+	t.Helper()
+
+	return runGeneratedRootCommandWithInput(t, serverURL, apiKey, groups, nil, args...)
+}
+
+func runGeneratedRootCommandWithInput(t *testing.T, serverURL, apiKey string, groups map[string][]*command.Spec, stdin io.Reader, args ...string) cmdResult {
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
@@ -1032,6 +1204,9 @@ func runGeneratedRootCommand(t *testing.T, serverURL, apiKey string, groups map[
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs(args)
+	if stdin != nil {
+		root.SetIn(stdin)
+	}
 
 	err := root.Execute()
 
