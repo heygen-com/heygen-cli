@@ -1,0 +1,42 @@
+name: Auto-generate CLI commands
+
+on:
+  push:
+    branches:
+      - "sync/cli-codegen-*"
+    paths:
+      - "codegen/external-api.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-generate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GIT_PAT }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Regenerate
+        run: make generate SPEC=codegen/external-api.json
+
+      - name: Push if changed
+        run: |
+          git add gen/
+          if git diff --cached --quiet -- gen/; then
+            echo "No generated changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "codegen: regenerate gen/ from updated spec"
+          git push
