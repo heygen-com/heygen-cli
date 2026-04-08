@@ -73,6 +73,32 @@ jobs:
       - name: Run gitleaks
         run: gitleaks detect --source . --redact=10 --verbose
 
+  codegen-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Verify gen/ matches spec
+        run: |
+          if [ ! -f codegen/external-api.json ]; then
+            echo "No checked-in spec at codegen/external-api.json, skipping."
+            exit 0
+          fi
+          make generate SPEC=codegen/external-api.json
+          git add -A
+          if git diff --cached --quiet -- gen/; then
+            echo "gen/ is in sync with the spec."
+          else
+            echo "::error::gen/ is out of sync with codegen/external-api.json."
+            echo "Run 'make generate SPEC=codegen/external-api.json' and commit the result."
+            git diff --cached --stat -- gen/
+            exit 1
+          fi
+
   goreleaser-check:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
