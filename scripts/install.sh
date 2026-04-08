@@ -110,7 +110,7 @@ latest_stable_tag() {
   if ! version="$(download "${CDN_BASE}/stable")"; then
     fail "failed to resolve latest stable version from ${CDN_BASE}/stable"
   fi
-  printf '%s\n' "$version" | tr -d '\r\n'
+  printf '%s' "$version" | tr -d '\r'
 }
 
 resolve_release_tag() {

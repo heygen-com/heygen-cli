@@ -82,10 +82,12 @@ jobs:
 
       - name: Upload stable release artifacts to S3
         shell: bash
+        env:
+          TAG: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
 
-          tag="${{ github.event.inputs.version }}"
+          tag="$TAG"
 
           # Upload immutable artifacts first.
           aws s3 cp dist/ "s3://heygen-public/cli/releases/${tag}/" \
