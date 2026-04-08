@@ -76,5 +76,5 @@ heygen video get --response-schema
 
 - The CLI retries transient errors (429, 5xx) automatically.
 - Use `heygen update` to check for and install a newer CLI release.
-- Video download writes to `{video-id}.mp4` by default. Override with `--output-path`.
+- Video download writes to `{video-id}.mp4` by default. Override with `--output-path`. Errors if the file already exists; use `--force` to overwrite.
 - For the full API reference (concepts, limits, pricing), see https://developers.heygen.com
