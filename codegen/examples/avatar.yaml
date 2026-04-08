@@ -10,3 +10,5 @@
   - "heygen avatar looks list --limit 10"
 "GET /v3/avatars/looks/{look_id}":
   - "heygen avatar looks get <look-id>"
+"PATCH /v3/avatars/looks/{look_id}":
+  - "heygen avatar looks update <look-id> --name 'New name'"

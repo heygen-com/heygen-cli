@@ -10,7 +10,7 @@ import (
 
 func TestAuthStatus_Success(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
-		"GET /v3/user/me": {
+		"GET /v3/users/me": {
 			StatusCode: 200,
 			Body:       `{"data":{"email":"user@example.com","username":"demo"}}`,
 		},
@@ -41,7 +41,7 @@ func TestAuthStatus_Success(t *testing.T) {
 
 func TestAuthStatus_InvalidKey(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
-		"GET /v3/user/me": {
+		"GET /v3/users/me": {
 			StatusCode: 401,
 			Body:       `{"error":{"message":"invalid API key"}}`,
 		},
