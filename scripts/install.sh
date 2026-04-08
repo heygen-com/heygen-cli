@@ -2,11 +2,10 @@
 
 set -euo pipefail
 
-REPO="${HEYGEN_REPO:-heygen-com/heygen-cli}"
+CDN_BASE="${HEYGEN_CDN_BASE_URL:-https://static.heygen.ai/cli}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
-MODE="stable"
 REQUESTED_VERSION=""
 
 log() {
@@ -50,63 +49,51 @@ checksum_cmd() {
   fail "missing sha256 tool (need sha256sum or shasum)"
 }
 
-github_token() {
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    printf '%s\n' "$GITHUB_TOKEN"
-    return
-  fi
-  if [[ -n "${GH_TOKEN:-}" ]]; then
-    printf '%s\n' "$GH_TOKEN"
-    return
-  fi
-  if command -v gh >/dev/null 2>&1; then
-    local token
-    token="$(gh auth token 2>/dev/null || true)"
-    if [[ -n "$token" ]]; then
-      printf '%s\n' "$token"
-      return
-    fi
-  fi
-  return 1
-}
+download() {
+  local url="$1"
+  local output="${2:-}"
 
-json_get_string() {
-  local key="$1"
-  sed -n "s/.*\"${key}\":\"\\([^\"]*\\)\".*/\\1/p"
+  if command -v curl >/dev/null 2>&1; then
+    if [[ -n "$output" ]]; then
+      curl -fsSL "$url" -o "$output"
+    else
+      curl -fsSL "$url"
+    fi
+    return
+  fi
+
+  if command -v wget >/dev/null 2>&1; then
+    if [[ -n "$output" ]]; then
+      wget -q -O "$output" "$url"
+    else
+      wget -q -O - "$url"
+    fi
+    return
+  fi
+
+  fail "curl or wget required"
 }
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --dev)
-        if [[ -n "$REQUESTED_VERSION" ]]; then
-          fail "--dev cannot be combined with --version"
-        fi
-        MODE="dev"
-        shift
-        ;;
       --version)
         if [[ $# -lt 2 ]]; then
           fail "--version requires a value"
         fi
-        if [[ "$MODE" == "dev" ]]; then
-          fail "--version cannot be combined with --dev"
-        fi
         REQUESTED_VERSION="$2"
-        if [[ ! "$REQUESTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.].+)?$ ]]; then
-          fail "--version must include the leading v (for example: v0.1.0)"
+        if [[ ! "$REQUESTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          fail "--version only supports stable releases (for example: v0.1.0)"
         fi
-        MODE="version"
         shift 2
         ;;
       -h | --help)
         cat <<'EOF'
-Usage: install.sh [--dev] [--version <tag>]
+Usage: install.sh [--version <tag>]
 
-Install the HeyGen CLI release for the current platform.
+Install the HeyGen CLI stable release for the current platform.
 
 Options:
-  --dev              Install the latest dev prerelease
   --version <tag>    Install a specific version tag (for example: v0.1.0)
 EOF
         exit 0
@@ -118,130 +105,34 @@ EOF
   done
 }
 
-github_api() {
-  local path="$1"
-  local token
-  local url="https://api.github.com/repos/${REPO}${path}"
-
-  if token="$(github_token)"; then
-    curl -fsSL \
-      -H "Authorization: Bearer ${token}" \
-      -H "Accept: application/vnd.github+json" \
-      "$url"
-    return
-  fi
-
-  curl -fsSL \
-    -H "Accept: application/vnd.github+json" \
-    "$url"
-}
-
 latest_stable_tag() {
-  github_api "/releases/latest" | tr -d '\n' | json_get_string tag_name
-}
-
-latest_dev_tag() {
-  if command -v gh >/dev/null 2>&1 && gh auth token >/dev/null 2>&1; then
-    gh release list --repo "$REPO" --exclude-drafts --limit 50 --json tagName,isPrerelease --jq 'map(select(.isPrerelease))[0].tagName'
-    return
+  local version
+  if ! version="$(download "${CDN_BASE}/stable")"; then
+    fail "failed to resolve latest stable version from ${CDN_BASE}/stable"
   fi
-
-  github_api "/releases?per_page=50" | tr -d '\n' | sed 's/[[:space:]]//g' | awk '
-    BEGIN { RS="\\{"; FS="," }
-    {
-      tag=""; prerelease=""; draft=""
-      for (i = 1; i <= NF; i++) {
-        if ($i ~ /"tag_name":"/) {
-          field=$i
-          sub(/.*"tag_name":"/, "", field)
-          sub(/".*/, "", field)
-          tag=field
-        }
-        if ($i ~ /"prerelease":/) {
-          field=$i
-          sub(/.*"prerelease":/, "", field)
-          sub(/[^a-z].*/, "", field)
-          prerelease=field
-        }
-        if ($i ~ /"draft":/) {
-          field=$i
-          sub(/.*"draft":/, "", field)
-          sub(/[^a-z].*/, "", field)
-          draft=field
-        }
-      }
-      if (tag != "" && prerelease == "true" && draft != "true") {
-        print tag
-        exit
-      }
-    }
-  '
+  printf '%s' "$version" | tr -d '\r'
 }
 
 resolve_release_tag() {
-  case "$MODE" in
-    stable)
-      latest_stable_tag
-      ;;
-    dev)
-      latest_dev_tag
-      ;;
-    version)
-      printf '%s\n' "$REQUESTED_VERSION"
-      ;;
-  esac
-}
-
-download_with_gh() {
-  local release_tag="$1"
-  local asset_name="$2"
-  local checksums_name="$3"
-
-  if ! command -v gh >/dev/null 2>&1; then
-    return 1
-  fi
-  if ! gh auth token >/dev/null 2>&1; then
-    return 1
-  fi
-
-  if ! gh release download "$release_tag" --repo "$REPO" --pattern "$asset_name" --dir "$TMPDIR" >/dev/null 2>&1; then
-    return 1
-  fi
-  if ! gh release download "$release_tag" --repo "$REPO" --pattern "$checksums_name" --dir "$TMPDIR" >/dev/null 2>&1; then
-    return 1
-  fi
-  if [[ ! -f "${TMPDIR}/${asset_name}" || ! -f "${TMPDIR}/${checksums_name}" ]]; then
-    return 1
-  fi
-  return 0
-}
-
-download_with_curl() {
-  local release_tag="$1"
-  local asset_name="$2"
-  local checksums_name="$3"
-  local token=""
-  local base_url
-
-  if token="$(github_token)"; then
-    :
-  else
-    token=""
-  fi
-
-  base_url="https://github.com/${REPO}/releases/download/${release_tag}"
-  if [[ -n "${HEYGEN_RELEASE_BASE_URL:-}" ]]; then
-    base_url="${HEYGEN_RELEASE_BASE_URL%/}/${release_tag}"
-  fi
-
-  if [[ -n "$token" ]]; then
-    curl -fsSL -H "Authorization: Bearer ${token}" "${base_url}/${asset_name}" -o "${TMPDIR}/${asset_name}"
-    curl -fsSL -H "Authorization: Bearer ${token}" "${base_url}/${checksums_name}" -o "${TMPDIR}/${checksums_name}"
+  if [[ -n "$REQUESTED_VERSION" ]]; then
+    printf '%s\n' "$REQUESTED_VERSION"
     return
   fi
+  latest_stable_tag
+}
 
-  curl -fsSL "${base_url}/${asset_name}" -o "${TMPDIR}/${asset_name}"
-  curl -fsSL "${base_url}/${checksums_name}" -o "${TMPDIR}/${checksums_name}"
+download_with_cdn() {
+  local release_tag="$1"
+  local asset_name="$2"
+  local checksums_name="$3"
+  local release_url="${CDN_BASE}/releases/${release_tag}"
+
+  if ! download "${release_url}/${asset_name}" "${TMPDIR}/${asset_name}"; then
+    fail "failed to download ${asset_name} from ${release_url}"
+  fi
+  if ! download "${release_url}/${checksums_name}" "${TMPDIR}/${checksums_name}"; then
+    fail "failed to download ${checksums_name} from ${release_url}"
+  fi
 }
 
 verify_checksum() {
@@ -277,12 +168,26 @@ install_archive() {
   install -m 0755 "$extracted_bin" "${INSTALL_DIR}/heygen"
 }
 
+normalize_arch() {
+  local os="$1"
+  local arch="$2"
+
+  if [[ "$os" == "darwin" && "$arch" == "amd64" ]]; then
+    if [[ "$(sysctl -n sysctl.proc_translated 2>/dev/null || true)" == "1" ]]; then
+      printf 'arm64\n'
+      return
+    fi
+  fi
+
+  printf '%s\n' "$arch"
+}
+
 main() {
   local os arch release_tag asset_name checksums_name version_output
 
   parse_args "$@"
   os="$(detect_os)"
-  arch="$(detect_arch)"
+  arch="$(normalize_arch "$os" "$(detect_arch)")"
   release_tag="$(resolve_release_tag)"
   if [[ -z "$release_tag" ]]; then
     fail "could not determine release tag"
@@ -291,14 +196,10 @@ main() {
   checksums_name="checksums.txt"
 
   log "Detected: ${os} ${arch}"
-  log "Installing heygen from ${REPO} release tag '${release_tag}'"
+  log "Installing heygen release tag '${release_tag}' from ${CDN_BASE}"
 
-  if download_with_gh "$release_tag" "$asset_name" "$checksums_name"; then
-    log "Downloaded release assets with gh"
-  else
-    download_with_curl "$release_tag" "$asset_name" "$checksums_name"
-    log "Downloaded release assets with curl"
-  fi
+  download_with_cdn "$release_tag" "$asset_name" "$checksums_name"
+  log "Downloaded release assets from CDN"
 
   verify_checksum "$asset_name" "$checksums_name"
   install_archive "${TMPDIR}/${asset_name}" "$os"

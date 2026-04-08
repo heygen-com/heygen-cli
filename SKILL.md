@@ -8,7 +8,7 @@ description: "Create AI videos, manage avatars, translate videos, and download r
 Official CLI for the HeyGen video generation API. 30+ commands auto-generated from the OpenAPI spec. All output is JSON by default.
 
 - **API Docs**: https://developers.heygen.com
-- **Install**: `curl -fsSL https://heygen-cli.heygen.com/install.sh | bash`
+- **Install**: `curl -fsSL https://static.heygen.ai/cli/install.sh | bash`
 - **Auth**: Requires `HEYGEN_API_KEY` environment variable. The key must be provisioned by a user from https://app.heygen.com/settings/api
 
 ## Key Commands

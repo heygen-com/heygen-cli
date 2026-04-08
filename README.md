@@ -7,7 +7,7 @@ Built for developers, AI agents, and CI/CD pipelines. JSON output by default.
 ## Install
 
 ```bash
-curl -fsSL https://heygen-cli.heygen.com/install.sh | bash
+curl -fsSL https://static.heygen.ai/cli/install.sh | bash
 ```
 
 This installs the latest stable release into `~/.local/bin`.
@@ -24,7 +24,7 @@ brew install heygen/tap/heygen
 **Specific version:**
 
 ```bash
-curl -fsSL https://heygen-cli.heygen.com/install.sh | bash -s -- --version v0.1.0
+curl -fsSL https://static.heygen.ai/cli/install.sh | bash -s -- --version v0.1.0
 ```
 
 **From source** (requires Go 1.23+):
