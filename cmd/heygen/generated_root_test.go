@@ -162,12 +162,12 @@ func TestGeneratedRoot_NestedGroupCommand_UnknownSubcommand(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{})
 	defer srv.Close()
 
-	res := runCommand(t, srv.URL, "test-key", "video-agent", "sessions", "nonexistent")
+	res := runCommand(t, srv.URL, "test-key", "video-agent", "resources", "nonexistent")
 
 	if res.ExitCode != clierrors.ExitUsage {
 		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "unknown command") || !strings.Contains(res.Stderr, "heygen video-agent sessions") {
+	if !strings.Contains(res.Stderr, "unknown command") || !strings.Contains(res.Stderr, "heygen video-agent resources") {
 		t.Fatalf("stderr = %q, want nested unknown subcommand error", res.Stderr)
 	}
 }
@@ -201,37 +201,14 @@ func TestGeneratedRoot_VideoAgentHelp_FlattensNestedLeaves(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stdout, "sessions create") {
-		t.Errorf("help missing flattened sessions create entry\nstdout: %s", res.Stdout)
-	}
-	if !strings.Contains(res.Stdout, "sessions messages create") {
-		t.Errorf("help missing flattened deep leaf entry\nstdout: %s", res.Stdout)
+	if !strings.Contains(res.Stdout, "resources get") {
+		t.Errorf("help missing flattened resources get entry\nstdout: %s", res.Stdout)
 	}
 	if !strings.Contains(res.Stdout, "styles list") {
 		t.Errorf("help missing flattened styles list entry\nstdout: %s", res.Stdout)
 	}
-	if strings.Contains(res.Stdout, "Sessions commands") {
-		t.Errorf("help still shows generic intermediate command label\nstdout: %s", res.Stdout)
-	}
-}
-
-func TestGeneratedRoot_VideoAgentSessionsHelp_FlattensNestedLeaves(t *testing.T) {
-	srv := setupTestServer(t, map[string]testHandler{})
-	defer srv.Close()
-
-	res := runCommand(t, srv.URL, "test-key", "video-agent", "sessions", "--help")
-
-	if res.ExitCode != 0 {
-		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
-	}
-	if !strings.Contains(res.Stdout, "messages create") {
-		t.Errorf("help missing flattened messages create entry\nstdout: %s", res.Stdout)
-	}
-	if !strings.Contains(res.Stdout, "resources get") {
-		t.Errorf("help missing flattened resources get entry\nstdout: %s", res.Stdout)
-	}
-	if strings.Contains(res.Stdout, "Messages commands") {
-		t.Errorf("help still shows generic messages intermediate label\nstdout: %s", res.Stdout)
+	if !strings.Contains(res.Stdout, "send") {
+		t.Errorf("help missing send command\nstdout: %s", res.Stdout)
 	}
 }
 
