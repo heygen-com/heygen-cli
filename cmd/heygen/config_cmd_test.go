@@ -76,7 +76,9 @@ func TestConfigGet_FromEnv(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	t.Setenv("HEYGEN_OUTPUT", "human")
 
-	res := runCommand(t, "http://example.invalid", "", "config", "get", "output")
+	// Use --human=false to get JSON output, since HEYGEN_OUTPUT=human
+	// would otherwise switch the formatter to human mode.
+	res := runCommand(t, "http://example.invalid", "", "config", "get", "output", "--human=false")
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
@@ -96,7 +98,9 @@ func TestConfigGet_FromFile(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	res := runCommand(t, "http://example.invalid", "", "config", "get", "output")
+	// Use --human=false to get JSON output, since the config file sets
+	// output=human which would otherwise switch the formatter.
+	res := runCommand(t, "http://example.invalid", "", "config", "get", "output", "--human=false")
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
