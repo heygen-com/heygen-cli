@@ -15,7 +15,7 @@ var AssetCreate = &command.Spec{
 	Method:         "POST",
 	BodyEncoding:   "multipart",
 	Examples: []string{
-		"heygen asset create --file ./video.mp4",
+		"# Upload a file for use in video creation\n  heygen asset create --file ./video.mp4",
 	},
 	Flags: []command.FlagSpec{
 		{

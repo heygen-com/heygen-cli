@@ -15,7 +15,8 @@ var WebhookEndpointsCreate = &command.Spec{
 	Method:         "POST",
 	BodyEncoding:   "json",
 	Examples: []string{
-		"heygen webhook endpoints create --url https://example.com/hook",
+		"# Register a webhook\n  heygen webhook endpoints create --url https://example.com/hook",
+		"# Register with event filter\n  heygen webhook endpoints create --url https://example.com/hook --events avatar_video.success --events avatar_video.fail",
 	},
 	Flags: []command.FlagSpec{
 		{
@@ -68,7 +69,7 @@ var WebhookEndpointsDelete = &command.Spec{
 	BodyEncoding:   "",
 	Destructive:    true,
 	Examples: []string{
-		"heygen webhook endpoints delete <endpoint-id>",
+		"# Delete a webhook\n  heygen webhook endpoints delete <endpoint-id>",
 	},
 	Args: []command.ArgSpec{
 		{Name: "endpoint-id", Param: "endpoint_id", Help: ""},
@@ -86,7 +87,7 @@ var WebhookEndpointsList = &command.Spec{
 	BodyEncoding:   "",
 	Paginated:      true,
 	Examples: []string{
-		"heygen webhook endpoints list",
+		"# List webhook endpoints\n  heygen webhook endpoints list",
 	},
 	Flags: []command.FlagSpec{
 		{
@@ -126,7 +127,7 @@ var WebhookEndpointsRotateSecret = &command.Spec{
 	Method:         "POST",
 	BodyEncoding:   "",
 	Examples: []string{
-		"heygen webhook endpoints rotate-secret <endpoint-id>",
+		"# Rotate signing secret\n  heygen webhook endpoints rotate-secret <endpoint-id>",
 	},
 	Args: []command.ArgSpec{
 		{Name: "endpoint-id", Param: "endpoint_id", Help: ""},
@@ -144,7 +145,7 @@ var WebhookEndpointsUpdate = &command.Spec{
 	Method:         "PATCH",
 	BodyEncoding:   "json",
 	Examples: []string{
-		"heygen webhook endpoints update <endpoint-id> --url https://new.example.com/hook",
+		"# Update webhook URL\n  heygen webhook endpoints update <endpoint-id> --url https://new.example.com/hook",
 	},
 	Args: []command.ArgSpec{
 		{Name: "endpoint-id", Param: "endpoint_id", Help: ""},
@@ -187,7 +188,7 @@ var WebhookEventTypesList = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Examples: []string{
-		"heygen webhook event-types list",
+		"# List available event types\n  heygen webhook event-types list",
 	},
 }
 
@@ -202,7 +203,7 @@ var WebhookEventsList = &command.Spec{
 	BodyEncoding:   "",
 	Paginated:      true,
 	Examples: []string{
-		"heygen webhook events list --event-type avatar_video.success",
+		"# List events by type\n  heygen webhook events list --event-type avatar_video.success",
 	},
 	Flags: []command.FlagSpec{
 		{

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -12,6 +13,16 @@ import (
 // Hand-written to show real usage patterns. Mandatory for every generated
 // command — make generate fails if any are missing.
 type Examples map[string][]string
+
+// Example is a single curated CLI example from YAML.
+type Example struct {
+	Desc string `yaml:"desc"`
+	Cmd  string `yaml:"cmd"`
+}
+
+func (e Example) normalized() string {
+	return fmt.Sprintf("# %s\n  %s", strings.TrimSpace(e.Desc), strings.TrimSpace(e.Cmd))
+}
 
 // LoadExamples reads examples from a YAML file or a directory of YAML files.
 // When given a directory, all *.yaml files are loaded and merged. Duplicate
@@ -59,13 +70,28 @@ func loadExamplesFile(path string) (Examples, error) {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 
-	var examples Examples
-	if err := yaml.Unmarshal(data, &examples); err != nil {
+	var raw map[string][]Example
+	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 
-	if examples == nil {
-		examples = make(Examples)
+	if raw == nil {
+		return make(Examples), nil
+	}
+
+	examples := make(Examples, len(raw))
+	for endpoint, items := range raw {
+		normalized := make([]string, 0, len(items))
+		for i, item := range items {
+			if strings.TrimSpace(item.Desc) == "" {
+				return nil, fmt.Errorf("parsing %s: endpoint %q example %d: missing desc", path, endpoint, i+1)
+			}
+			if strings.TrimSpace(item.Cmd) == "" {
+				return nil, fmt.Errorf("parsing %s: endpoint %q example %d: missing cmd", path, endpoint, i+1)
+			}
+			normalized = append(normalized, item.normalized())
+		}
+		examples[endpoint] = normalized
 	}
 
 	return examples, nil
