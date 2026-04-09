@@ -25,22 +25,29 @@ func main() {
 	executedCmd, err := cmd.ExecuteC()
 
 	exitCode := 0
+	errorCode := ""
 	if err != nil {
 		var cliErr *clierrors.CLIError
 		if errors.As(err, &cliErr) {
 			formatter.Error(cliErr)
 			exitCode = cliErr.ExitCode
+			errorCode = cliErr.Code
 		} else {
 			// Cobra returns plain errors for unknown commands and arg validation.
 			// Detect these and wrap as usage errors (exit 2).
 			wrapped := classifyError(err)
 			formatter.Error(wrapped)
 			exitCode = wrapped.ExitCode
+			errorCode = wrapped.Code
 		}
 	}
 
 	if analyticsClient.Started() && executedCmd != nil {
-		analyticsClient.CommandRunComplete(executedCmd.CommandPath(), exitCode, time.Since(start))
+		isAPICall := executedCmd != nil && !skipAuth(executedCmd) && !isSchemaRequest(executedCmd)
+		analyticsClient.CommandRunComplete(executedCmd.CommandPath(), exitCode, time.Since(start), analytics.CommandRunCompleteOpts{
+			ErrorCode: errorCode,
+			APICall:   isAPICall,
+		})
 	}
 	analyticsClient.Close()
 	os.Exit(exitCode)

@@ -59,7 +59,10 @@ func TestCommandRunComplete_Properties(t *testing.T) {
 	client := newWithCapture("v1.2.3", stub)
 	client.distinctID = "anon-id"
 
-	client.CommandRunComplete("heygen video create", 4, 1500*time.Millisecond)
+	client.CommandRunComplete("heygen video create", 4, 1500*time.Millisecond, CommandRunCompleteOpts{
+		ErrorCode: "timeout",
+		APICall:   true,
+	})
 
 	if len(stub.messages) != 1 {
 		t.Fatalf("messages = %d, want 1", len(stub.messages))
@@ -83,6 +86,12 @@ func TestCommandRunComplete_Properties(t *testing.T) {
 	}
 	if got := msg.Properties["success"]; got != false {
 		t.Fatalf("success = %v, want false", got)
+	}
+	if got := msg.Properties["error_code"]; got != "timeout" {
+		t.Fatalf("error_code = %v, want %q", got, "timeout")
+	}
+	if got := msg.Properties["api_call"]; got != true {
+		t.Fatalf("api_call = %v, want true", got)
 	}
 }
 
