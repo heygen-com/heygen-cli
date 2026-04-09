@@ -39,12 +39,12 @@ var Groups = map[string][]*command.Spec{
 	},
 	"video-agent": {
 		VideoAgentCreate,
-		VideoAgentSessionsCreate,
-		VideoAgentSessionsGet,
-		VideoAgentSessionsMessagesCreate,
-		VideoAgentSessionsResourcesGet,
-		VideoAgentSessionsStop,
+		VideoAgentGet,
+		VideoAgentResourcesGet,
+		VideoAgentSend,
+		VideoAgentStop,
 		VideoAgentStylesList,
+		VideoAgentVideosList,
 	},
 	"video-translate": {
 		VideoTranslateCaptionGet,
