@@ -56,7 +56,7 @@ var Groups = map[string][]*command.Spec{
 		VideoTranslateProofreadsCreate,
 		VideoTranslateProofreadsGenerate,
 		VideoTranslateProofreadsGet,
-		VideoTranslateProofreadsSrtList,
+		VideoTranslateProofreadsSrtGet,
 		VideoTranslateProofreadsSrtUpdate,
 		VideoTranslateUpdate,
 	},

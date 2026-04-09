@@ -605,9 +605,9 @@ var VideoTranslateProofreadsGet = &command.Spec{
 	},
 }
 
-var VideoTranslateProofreadsSrtList = &command.Spec{
+var VideoTranslateProofreadsSrtGet = &command.Spec{
 	Group:          "video-translate",
-	Name:           "proofreads srt list",
+	Name:           "proofreads srt get",
 	Summary:        "Download proofread SRT",
 	Description:    "Download the edited and original SRT files for a completed proofread.",
 	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for GET /v3/video-translations/proofreads/{id}/srt.\",\n      \"properties\": {\n        \"original_srt_url\": {\n          \"description\": \"Presigned URL for the original SRT file (if provided at creation)\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"srt_url\": {\n          \"description\": \"Presigned URL to download the edited SRT file\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"srt_url\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",

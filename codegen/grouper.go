@@ -70,6 +70,9 @@ var nameOverrides = map[string]string{
 	// POST /v3/video-agents/{session_id} sends a message to an existing session,
 	// not "create". Without this, it conflicts with POST /v3/video-agents (create).
 	"POST /v3/video-agents/{session_id}": "send",
+	// GET /v3/video-agents/{session_id}/videos returns a list of videos, not a
+	// single resource. The default heuristic sees {session_id} and uses "get".
+	"GET /v3/video-agents/{session_id}/videos": "list",
 }
 
 func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDescriptions, error) {
@@ -295,11 +298,10 @@ func deriveCommandName(path, method string, subGroups, allRemaining []string, op
 func terminalVerb(method string, remaining []string, op *openapi3.Operation) string {
 	switch method {
 	case "GET":
-		// If the last path segment is a param, it's a get (specific resource).
-		// If the last segment is a literal, it's a list (collection), even if
-		// parent segments have params (e.g., GET /v3/video-agents/{session_id}/videos).
-		lastIsParam := len(remaining) > 0 && strings.HasPrefix(remaining[len(remaining)-1], "{")
-		if lastIsParam {
+		hasParam := slices.ContainsFunc(remaining, func(s string) bool {
+			return strings.HasPrefix(s, "{")
+		})
+		if hasParam {
 			return "get"
 		}
 		// Singleton GET endpoints (e.g., GET /v3/user/me with summary "Get current user info")
