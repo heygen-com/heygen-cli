@@ -43,11 +43,7 @@ func main() {
 	}
 
 	if analyticsClient.Started() && executedCmd != nil {
-		isAPICall := executedCmd != nil && !skipAuth(executedCmd) && !isSchemaRequest(executedCmd)
-		analyticsClient.CommandRunComplete(executedCmd.CommandPath(), exitCode, time.Since(start), analytics.CommandRunCompleteOpts{
-			ErrorCode: errorCode,
-			APICall:   isAPICall,
-		})
+		analyticsClient.CommandRunComplete(executedCmd.CommandPath(), exitCode, time.Since(start), errorCode)
 	}
 	analyticsClient.Close()
 	os.Exit(exitCode)

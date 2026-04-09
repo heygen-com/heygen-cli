@@ -71,13 +71,7 @@ func (c *Client) CommandRun(command string) {
 	})
 }
 
-// CommandRunCompleteOpts holds optional properties for COMMAND_RUN_COMPLETE.
-type CommandRunCompleteOpts struct {
-	ErrorCode string // structured error code from CLIError.Code (empty on success)
-	APICall   bool   // true if the command made a HeyGen API call
-}
-
-func (c *Client) CommandRunComplete(command string, exitCode int, duration time.Duration, opts CommandRunCompleteOpts) {
+func (c *Client) CommandRunComplete(command string, exitCode int, duration time.Duration, errorCode string) {
 	if !c.enabled || c.ph == nil {
 		return
 	}
@@ -92,8 +86,7 @@ func (c *Client) CommandRunComplete(command string, exitCode int, duration time.
 			Set("exit_code", exitCode).
 			Set("duration_ms", duration.Milliseconds()).
 			Set("success", exitCode == 0).
-			Set("error_code", opts.ErrorCode).
-			Set("api_call", opts.APICall),
+			Set("error_code", errorCode),
 	})
 }
 
