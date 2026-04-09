@@ -293,19 +293,18 @@ func deriveCommandName(path, method string, subGroups, allRemaining []string, op
 }
 
 func terminalVerb(method string, remaining []string, op *openapi3.Operation) string {
-	hasParam := slices.ContainsFunc(remaining, func(s string) bool {
-		return strings.HasPrefix(s, "{")
-	})
-
 	switch method {
 	case "GET":
-		if hasParam {
+		// If the last path segment is a param, it's a get (specific resource).
+		// If the last segment is a literal, it's a list (collection), even if
+		// parent segments have params (e.g., GET /v3/video-agents/{session_id}/videos).
+		lastIsParam := len(remaining) > 0 && strings.HasPrefix(remaining[len(remaining)-1], "{")
+		if lastIsParam {
 			return "get"
 		}
 		// Singleton GET endpoints (e.g., GET /v3/user/me with summary "Get current user info")
 		// are "get" not "list". We detect this from the summary because the URL structure
 		// alone can't distinguish a singleton from a collection when there's no {param}.
-		// This is the one heuristic in the naming algorithm — everything else is structural.
 		if strings.HasPrefix(strings.ToLower(op.Summary), "get ") {
 			return "get"
 		}
