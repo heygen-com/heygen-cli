@@ -273,13 +273,12 @@ func buildSpec(
 // Exception: x-cli-action endpoints where the last literal IS the verb.
 func deriveCommandName(path, method string, subGroups, allRemaining []string, op *openapi3.Operation) string {
 	// Check for manual override first (resolves naming conflicts).
+	// The override replaces only the terminal verb. Sub-groups are preserved.
 	if override, ok := nameOverrides[method+" "+path]; ok {
 		if len(subGroups) == 0 {
 			return override
 		}
-		// For overrides on nested paths, replace only the terminal verb.
-		// e.g., subGroups=[] override="send" → "send"
-		return override
+		return strings.Join(subGroups, " ") + " " + override
 	}
 
 	if isCliAction(op) && len(subGroups) > 0 {
