@@ -421,8 +421,9 @@ func extractJSONPath(raw json.RawMessage, path string) (string, error) {
 }
 
 // translateCreateContextError converts timeout/cancel errors before a resource
-// ID is known into user-friendly CLIErrors. At this stage the client cannot
-// confirm whether creation succeeded, so exit code stays general.
+// ID is known into user-friendly CLIErrors. Deadline exceeded returns exit 4
+// (timeout) since the operation may have been created server-side. Cancel
+// returns exit 1 (general) since the user explicitly interrupted.
 func translateCreateContextError(ctx context.Context, err error) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return newCreateContextError(ctxErr)
@@ -452,7 +453,7 @@ func newCreateContextError(err error) error {
 			Code:     "timeout",
 			Message:  "polling timed out before the operation completed",
 			Hint:     "Re-run the corresponding get command to check the current status manually",
-			ExitCode: clierrors.ExitGeneral,
+			ExitCode: clierrors.ExitTimeout,
 		}
 	case errors.Is(err, context.Canceled):
 		return &clierrors.CLIError{

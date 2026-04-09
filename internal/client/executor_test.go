@@ -625,6 +625,38 @@ func TestExecuteAndPoll_TimeoutDuringRequest(t *testing.T) {
 	}
 }
 
+func TestExecuteAndPoll_TimeoutDuringCreate(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Block the create request until context expires
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+
+	_, err := c.ExecuteAndPoll(ctx, pollableVideoCreateSpec(), emptyInvocation(), PollOptions{
+		BaseDelay: time.Millisecond,
+		MaxDelay:  time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected *CLIError, got %T: %v", err, err)
+	}
+	if cliErr.Code != "timeout" {
+		t.Fatalf("code = %q, want timeout", cliErr.Code)
+	}
+	if cliErr.ExitCode != clierrors.ExitTimeout {
+		t.Fatalf("ExitCode = %d, want %d (ExitTimeout)", cliErr.ExitCode, clierrors.ExitTimeout)
+	}
+}
+
 func TestExecuteAndPoll_Cancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
