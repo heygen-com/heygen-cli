@@ -63,6 +63,15 @@ var descriptionOverrides = GroupDescriptions{
 	"webhook": "Create, list, and manage webhook endpoints and events",
 }
 
+// nameOverrides maps "METHOD /path" to a custom command name.
+// Use this when the default naming algorithm produces conflicts
+// (e.g., two POST endpoints in the same group both map to "create").
+var nameOverrides = map[string]string{
+	// POST /v3/video-agents/{session_id} sends a message to an existing session,
+	// not "create". Without this, it conflicts with POST /v3/video-agents (create).
+	"POST /v3/video-agents/{session_id}": "send",
+}
+
 func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDescriptions, error) {
 	groups := make(command.Groups)
 	descriptions := make(GroupDescriptions)
@@ -108,6 +117,10 @@ func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDe
 		})
 	}
 
+	if err := validateCommandNames(groups); err != nil {
+		return nil, nil, err
+	}
+
 	if err := validateFlagNames(groups); err != nil {
 		return nil, nil, err
 	}
@@ -149,7 +162,7 @@ func buildSpec(
 
 	spec := &command.Spec{
 		Group:          groupName,
-		Name:           deriveCommandName(method, subGroups, remaining, op),
+		Name:           deriveCommandName(path, method, subGroups, remaining, op),
 		Summary:        op.Summary,
 		Description:    op.Description,
 		Endpoint:       path,
@@ -258,7 +271,17 @@ func buildSpec(
 
 // deriveCommandName builds the command name from sub-groups + terminal verb.
 // Exception: x-cli-action endpoints where the last literal IS the verb.
-func deriveCommandName(method string, subGroups, allRemaining []string, op *openapi3.Operation) string {
+func deriveCommandName(path, method string, subGroups, allRemaining []string, op *openapi3.Operation) string {
+	// Check for manual override first (resolves naming conflicts).
+	if override, ok := nameOverrides[method+" "+path]; ok {
+		if len(subGroups) == 0 {
+			return override
+		}
+		// For overrides on nested paths, replace only the terminal verb.
+		// e.g., subGroups=[] override="send" → "send"
+		return override
+	}
+
 	if isCliAction(op) && len(subGroups) > 0 {
 		return strings.Join(subGroups, " ")
 	}
@@ -641,6 +664,27 @@ var reservedFlags = map[string]bool{
 	"data": true, "d": true,
 	"help": true, "h": true,
 	"version": true, "v": true,
+}
+
+// validateCommandNames checks for duplicate command names within a group.
+// If two endpoints produce the same name, codegen would generate duplicate
+// Go variable declarations. This catches the conflict early with an actionable
+// error message pointing to the nameOverrides map.
+func validateCommandNames(groups command.Groups) error {
+	for groupName, specs := range groups {
+		seen := make(map[string]string) // name → endpoint
+		for _, spec := range specs {
+			if prev, ok := seen[spec.Name]; ok {
+				return fmt.Errorf(
+					"naming conflict in group %q: two endpoints map to %q\n"+
+						"  %s\n  %s %s\n"+
+						"Add an entry to nameOverrides in codegen/grouper.go to disambiguate",
+					groupName, spec.Name, prev, spec.Method, spec.Endpoint)
+			}
+			seen[spec.Name] = spec.Method + " " + spec.Endpoint
+		}
+	}
+	return nil
 }
 
 func validateFlagNames(groups command.Groups) error {
