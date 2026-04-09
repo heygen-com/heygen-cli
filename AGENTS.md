@@ -57,7 +57,7 @@ var nameOverrides = map[string]string{
     "POST /v3/video-agents/{session_id}": "send",
 }
 ```
-The key is `"METHOD /path"`, the value is the custom command name. Codegen checks overrides before applying default naming.
+The key is `"METHOD /path"`, the value replaces the terminal verb (e.g., `create` becomes `send`). Sub-groups derived from the path are preserved. For example, an override of `"inspect"` on a nested path with sub-groups `parts details` produces `parts details inspect`, not just `inspect`.
 
 ### Errors
 - All command errors must be `*CLIError`. Use `clierrors.New()` (exit 1), `clierrors.NewAuth()` (exit 3), `clierrors.NewUsage()` (exit 2).
