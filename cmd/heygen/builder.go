@@ -75,7 +75,15 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 
 			if spec.Destructive {
 				force, _ := cmd.Flags().GetBool("force")
-				if !force && stdinIsTerminalFunc() {
+				if !force {
+					if !stdinIsTerminalFunc() {
+						return &clierrors.CLIError{
+							Code:     "confirmation_required",
+							Message:  fmt.Sprintf("destructive operation %q requires confirmation", spec.Name),
+							Hint:     "Use --force to skip confirmation in non-interactive environments",
+							ExitCode: clierrors.ExitGeneral,
+						}
+					}
 					if err := confirmAction(
 						cmd.ErrOrStderr(),
 						cmd.InOrStdin(),

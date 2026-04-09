@@ -387,30 +387,25 @@ func TestGenBuilder_DestructiveForceSkipsPrompt(t *testing.T) {
 	}
 }
 
-func TestGenBuilder_DestructiveNonTTYSkipsPrompt(t *testing.T) {
-	var deleteCalls int
+func TestGenBuilder_DestructiveNonTTYRequiresForce(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"DELETE /v3/videos/vid_123": {
 			StatusCode: 200,
 			Body:       `{"data":{"id":"vid_123"}}`,
-			ValidateRequest: func(t *testing.T, r *http.Request) {
-				t.Helper()
-				deleteCalls++
-			},
 		},
 	})
 	defer srv.Close()
 
 	res := runGenCommand(t, srv.URL, "test-key", videoDeleteSpec, "delete", "vid_123")
 
-	if res.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	if res.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if deleteCalls != 1 {
-		t.Fatalf("deleteCalls = %d, want 1", deleteCalls)
+	if !strings.Contains(res.Stderr, "confirmation_required") {
+		t.Fatalf("stderr = %q, want confirmation_required error", res.Stderr)
 	}
-	if strings.Contains(res.Stderr, "Continue? [y/N]") {
-		t.Fatalf("stderr = %q, want no prompt", res.Stderr)
+	if !strings.Contains(res.Stderr, "--force") {
+		t.Fatalf("stderr = %q, want --force hint", res.Stderr)
 	}
 }
 
