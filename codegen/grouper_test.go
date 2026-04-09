@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -289,6 +290,59 @@ func TestGroupEndpoints_SingletonGetUsesGetVerb(t *testing.T) {
 		}
 	}
 	t.Error("user 'me get' not found")
+}
+
+func TestDeriveCommandName_Override(t *testing.T) {
+	// Override with no sub-groups: just the override name
+	got := deriveCommandName("/v3/video-agents/{session_id}", "POST", nil, []string{"{session_id}"}, &openapi3.Operation{})
+	if got != "send" {
+		t.Fatalf("deriveCommandName = %q, want %q", got, "send")
+	}
+}
+
+func TestDeriveCommandName_OverrideNested(t *testing.T) {
+	// Override with sub-groups: preserve sub-groups, replace terminal verb
+	old := nameOverrides
+	nameOverrides = map[string]string{
+		"POST /v3/widgets/parts/{part_id}/details": "inspect",
+	}
+	defer func() { nameOverrides = old }()
+
+	got := deriveCommandName("/v3/widgets/parts/{part_id}/details", "POST", []string{"parts", "details"}, []string{"parts", "{part_id}", "details"}, &openapi3.Operation{})
+	if got != "parts details inspect" {
+		t.Fatalf("deriveCommandName = %q, want %q", got, "parts details inspect")
+	}
+}
+
+func TestValidateCommandNames_DetectsConflict(t *testing.T) {
+	groups := command.Groups{
+		"widget": {
+			&command.Spec{Name: "create", Method: "POST", Endpoint: "/v3/widgets"},
+			&command.Spec{Name: "create", Method: "POST", Endpoint: "/v3/widgets/{widget_id}"},
+		},
+	}
+	err := validateCommandNames(groups)
+	if err == nil {
+		t.Fatal("expected error for duplicate names")
+	}
+	if !strings.Contains(err.Error(), "naming conflict") {
+		t.Fatalf("error = %q, want naming conflict", err.Error())
+	}
+	if !strings.Contains(err.Error(), "nameOverrides") {
+		t.Fatalf("error = %q, want nameOverrides hint", err.Error())
+	}
+}
+
+func TestValidateCommandNames_NoConflict(t *testing.T) {
+	groups := command.Groups{
+		"widget": {
+			&command.Spec{Name: "create", Method: "POST", Endpoint: "/v3/widgets"},
+			&command.Spec{Name: "send", Method: "POST", Endpoint: "/v3/widgets/{widget_id}"},
+		},
+	}
+	if err := validateCommandNames(groups); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestUnwrapNullableType_String(t *testing.T) {
