@@ -1190,6 +1190,7 @@ func runGeneratedRootCommandWithInput(t *testing.T, serverURL, apiKey string, gr
 
 	t.Setenv("HEYGEN_API_KEY", apiKey)
 	t.Setenv("HEYGEN_API_BASE", serverURL)
+	t.Setenv("HEYGEN_ALLOW_HTTP", "1")
 	t.Setenv("HEYGEN_NO_ANALYTICS", "1")
 	if _, ok := os.LookupEnv("HEYGEN_CONFIG_DIR"); !ok {
 		t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
