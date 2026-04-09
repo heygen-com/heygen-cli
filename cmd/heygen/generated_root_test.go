@@ -162,12 +162,12 @@ func TestGeneratedRoot_NestedGroupCommand_UnknownSubcommand(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{})
 	defer srv.Close()
 
-	res := runCommand(t, srv.URL, "test-key", "video-agent", "resources", "nonexistent")
+	res := runCommand(t, srv.URL, "test-key", "webhook", "endpoints", "nonexistent")
 
 	if res.ExitCode != clierrors.ExitUsage {
 		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "unknown command") || !strings.Contains(res.Stderr, "heygen video-agent resources") {
+	if !strings.Contains(res.Stderr, "unknown command") || !strings.Contains(res.Stderr, "heygen webhook endpoints") {
 		t.Fatalf("stderr = %q, want nested unknown subcommand error", res.Stderr)
 	}
 }
