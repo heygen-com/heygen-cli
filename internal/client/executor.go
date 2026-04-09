@@ -452,7 +452,7 @@ func newCreateContextError(err error) error {
 			Code:     "timeout",
 			Message:  "polling timed out before the operation completed",
 			Hint:     "Re-run the corresponding get command to check the current status manually",
-			ExitCode: clierrors.ExitGeneral,
+			ExitCode: clierrors.ExitTimeout,
 		}
 	case errors.Is(err, context.Canceled):
 		return &clierrors.CLIError{
