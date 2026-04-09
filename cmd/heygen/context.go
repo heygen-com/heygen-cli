@@ -1,9 +1,13 @@
 package main
 
 import (
+	"net/url"
+	"os"
+
 	"github.com/heygen-com/heygen-cli/internal/auth"
 	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/config"
+	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/heygen-com/heygen-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -69,8 +73,13 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 		return err
 	}
 
+	baseURL := provider.BaseURL()
+	if u, err := url.Parse(baseURL); err == nil && u.Scheme == "http" && os.Getenv("HEYGEN_ALLOW_HTTP") == "" {
+		return clierrors.NewUsage("HEYGEN_API_BASE uses HTTP which transmits API keys in plaintext. Set HEYGEN_ALLOW_HTTP=1 to allow.")
+	}
+
 	ctx.client = client.New(apiKey,
-		client.WithBaseURL(provider.BaseURL()),
+		client.WithBaseURL(baseURL),
 		client.WithUserAgent("heygen-cli/"+version),
 	)
 
