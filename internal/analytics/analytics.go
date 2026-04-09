@@ -71,7 +71,7 @@ func (c *Client) CommandRun(command string) {
 	})
 }
 
-func (c *Client) CommandRunComplete(command string, exitCode int, duration time.Duration) {
+func (c *Client) CommandRunComplete(command string, exitCode int, duration time.Duration, errorCode string) {
 	if !c.enabled || c.ph == nil {
 		return
 	}
@@ -85,7 +85,8 @@ func (c *Client) CommandRunComplete(command string, exitCode int, duration time.
 			Set("arch", runtime.GOARCH).
 			Set("exit_code", exitCode).
 			Set("duration_ms", duration.Milliseconds()).
-			Set("success", exitCode == 0),
+			Set("success", exitCode == 0).
+			Set("error_code", errorCode),
 	})
 }
 
