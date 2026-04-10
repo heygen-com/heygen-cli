@@ -1,5 +1,9 @@
 # HeyGen CLI
 
+[![CI](https://github.com/heygen-com/heygen-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/heygen-com/heygen-cli/actions/workflows/ci.yml)
+[![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
+
 Official command-line tool for the [HeyGen](https://heygen.com) video generation API. Create AI avatar videos, translate videos, generate speech, and manage assets — all from the terminal.
 
 Built for developers, AI agents, and CI/CD pipelines. JSON output by default.
@@ -201,6 +205,10 @@ heygen config list               # show all settings with sources
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, build instructions, and how to add new commands.
+
+## License
+
+[Apache License 2.0](./LICENSE)
 
 ## Links
 

@@ -1,0 +1,42 @@
+name: Bug Report
+description: Report a bug in the HeyGen CLI
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands to reproduce the issue.
+      placeholder: |
+        1. heygen video list --limit 2
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Paste the full command output (stdout and stderr).
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: CLI version
+      description: Output of `heygen --version`
+      placeholder: v0.0.3
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 15.3 / Ubuntu 24.04 / Windows 11
+    validations:
+      required: true
