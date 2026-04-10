@@ -1,16 +1,44 @@
+version: "2"
+
 linters:
   enable:
     - gosec
 
-linters-settings:
-  gosec:
-    excludes:
-      # Env var name constants containing "KEY"/"TOKEN", not actual secrets.
-      - G101
-      # Standard term.IsTerminal(int(f.Fd())) idiom; uintptr -> int won't overflow.
-      - G115
-      # CLI reads user-provided file paths by design.
-      - G304
-      # Codegen writes 0755 dirs and 0644 source files; standard for generated code.
-      - G301
-      - G306
+  settings:
+    gosec:
+      excludes:
+        # Env var name constants containing "KEY"/"TOKEN", not actual secrets.
+        - G101
+        # Standard term.IsTerminal(int(f.Fd())) idiom; uintptr -> int won't overflow.
+        - G115
+        # CLI reads user-provided file paths by design.
+        - G304
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Exclude gosec from test files: test code uses env-controlled paths
+      # and relaxed file permissions for fixture setup.
+      - linters: [gosec]
+        path: _test\.go$
+      # QF rules are optional style suggestions, not bugs.
+      # Not enforced in v1; keep them advisory.
+      - linters: [staticcheck]
+        text: "^QF"
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

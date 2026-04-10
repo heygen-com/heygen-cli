@@ -33,7 +33,7 @@ import (
 // All output is gofmt'd. Variable names are PascalCase derived from
 // group + command name via strcase.ToCamel.
 func Generate(groups command.Groups, descriptions GroupDescriptions, tmplDir, outDir string) error {
-	if err := os.MkdirAll(outDir, 0755); err != nil {
+	if err := os.MkdirAll(outDir, 0755); err != nil { //nolint:gosec // G301: generated source directory, 0755 is standard
 		return fmt.Errorf("creating output directory: %w", err)
 	}
 
@@ -101,11 +101,11 @@ func writeFromTemplate(tmpl *template.Template, data interface{}, filename strin
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
 		// Write unformatted for debugging
-		_ = os.WriteFile(filename+".raw", buf.Bytes(), 0644)
+		_ = os.WriteFile(filename+".raw", buf.Bytes(), 0644) //nolint:gosec // G306: debug output for generated code
 		return fmt.Errorf("gofmt %s: %w (raw output written to %s.raw)", filename, err, filename)
 	}
 
-	return os.WriteFile(filename, formatted, 0644)
+	return os.WriteFile(filename, formatted, 0644) //nolint:gosec // G306: generated Go source files, 0644 is standard
 }
 
 // Template helper functions
