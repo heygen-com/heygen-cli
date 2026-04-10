@@ -19,19 +19,13 @@ This installs the latest stable release into `~/.local/bin`.
 <details>
 <summary>Other install methods</summary>
 
-**Homebrew** (once the repo is public):
-
-```bash
-brew install heygen/tap/heygen
-```
-
 **Specific version:**
 
 ```bash
 curl -fsSL https://static.heygen.ai/cli/install.sh | bash -s -- --version v0.1.0
 ```
 
-**From source** (requires Go 1.23+):
+**From source** (requires Go 1.25+):
 
 ```bash
 git clone https://github.com/heygen-com/heygen-cli.git
@@ -169,7 +163,7 @@ heygen video get <video-id>       # check status
 heygen video download <video-id>  # download when complete
 ```
 
-`--wait` uses exponential backoff and respects `--timeout` (default 10m). Exit code 4 on timeout — stdout contains partial resource data with a hint for manual follow-up.
+`--wait` uses exponential backoff and respects `--timeout` (default 20m). Exit code 4 on timeout — stdout contains partial resource data with a hint for manual follow-up.
 
 ## Agent and CI/CD Usage
 
