@@ -1,18 +1,8 @@
 version: 2
 updates:
-  - package-ecosystem: gomod
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    allow:
-      - dependency-type: direct
-    # Only open PRs for security updates, not every minor/patch bump.
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
-    commit-message:
-      prefix: "deps"
+  # GitHub Actions version updates only.
+  # Go module security updates are handled by Dependabot security updates
+  # (enabled in repo settings), not version updates here.
   - package-ecosystem: github-actions
     directory: /
     schedule:
