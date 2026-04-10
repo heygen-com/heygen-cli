@@ -47,12 +47,12 @@ import (
 //
 // Edge case — nested sub-resource with action:
 //
-//	POST /v3/video-agents/sessions/{session_id}/stop  [x-cli-action: true]
-//	  → group: "video-agent" (from tag "Video Agent")
-//	  → remaining segments: [sessions, {session_id}, stop]
-//	  → sessions → sub-group, {session_id} → arg, stop → sub-group
+//	POST /v3/webhooks/endpoints/{endpoint_id}/rotate-secret  [x-cli-action: true]
+//	  → group: "webhook" (from tag "Webhooks")
+//	  → remaining segments: [endpoints, {endpoint_id}, rotate-secret]
+//	  → endpoints → sub-group, {endpoint_id} → arg, rotate-secret → literal
 //	  → x-cli-action: true → no terminal verb appended
-//	  → result: heygen video-agent sessions stop <session-id>
+//	  → result: heygen webhook endpoints rotate-secret <endpoint-id>
 //
 // GroupDescriptions maps group name → description from the OpenAPI tag.
 // Used by the builder for group command help text.
