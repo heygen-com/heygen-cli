@@ -25,7 +25,7 @@ output: add TUI table formatter
 
 # Cross-cutting (multiple packages)
 add --wait polling with status tracking
-add pagination with --all flag
+add --force confirmation for destructive commands
 
 # Infrastructure
 ci: add golangci-lint

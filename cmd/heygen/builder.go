@@ -211,7 +211,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 }
 
 // commandPathParts splits a generated command path into nested Cobra tokens.
-// Example: "sessions messages create" -> ["sessions", "messages", "create"].
+// Example: "proofreads srt update" -> ["proofreads", "srt", "update"].
 func commandPathParts(spec *command.Spec) []string {
 	return strings.Fields(spec.Name)
 }

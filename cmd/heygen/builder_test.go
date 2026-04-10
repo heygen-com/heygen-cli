@@ -1037,9 +1037,9 @@ func TestGenBuilder_DeepNestedCommand_Executes(t *testing.T) {
 	var gotBody map[string]any
 
 	srv := setupTestServer(t, map[string]testHandler{
-		"POST /v3/video-agents/sessions/sess_123/messages": {
+		"PUT /v3/video-translations/proofreads/pr_123/srt": {
 			StatusCode: 200,
-			Body:       `{"data":{"id":"msg_123"}}`,
+			Body:       `{"data":{"id":"pr_123"}}`,
 			ValidateRequest: func(t *testing.T, r *http.Request) {
 				t.Helper()
 				body, _ := io.ReadAll(r.Body)
@@ -1050,29 +1050,29 @@ func TestGenBuilder_DeepNestedCommand_Executes(t *testing.T) {
 	defer srv.Close()
 
 	spec := &command.Spec{
-		Group:        "video-agent",
-		Name:         "sessions messages create",
-		Summary:      "Create a session message",
-		Endpoint:     "/v3/video-agents/sessions/{session_id}/messages",
-		Method:       "POST",
+		Group:        "video-translate",
+		Name:         "proofreads srt update",
+		Summary:      "Upload proofread SRT",
+		Endpoint:     "/v3/video-translations/proofreads/{proofread_id}/srt",
+		Method:       "PUT",
 		BodyEncoding: "json",
 		Args: []command.ArgSpec{
-			{Name: "session-id", Param: "session_id"},
+			{Name: "proofread-id", Param: "proofread_id"},
 		},
 		Flags: []command.FlagSpec{
-			{Name: "message", Type: "string", Source: "body", JSONName: "message", Required: true},
+			{Name: "content", Type: "string", Source: "body", JSONName: "content", Required: true},
 		},
-		Examples: []string{"heygen video-agent sessions messages create <session-id> --message 'Add intro'"},
+		Examples: []string{"heygen video-translate proofreads srt update <proofread-id> --content 'SRT data'"},
 	}
 
-	res := runGenCommand(t, srv.URL, "test-key", spec, "sessions", "messages", "create",
-		"sess_123", "--message", "Add intro")
+	res := runGenCommand(t, srv.URL, "test-key", spec, "proofreads", "srt", "update",
+		"pr_123", "--content", "SRT data")
 
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if gotBody["message"] != "Add intro" {
-		t.Errorf("body.message = %v, want %q", gotBody["message"], "Add intro")
+	if gotBody["content"] != "SRT data" {
+		t.Errorf("body.content = %v, want %q", gotBody["content"], "SRT data")
 	}
 }
 
