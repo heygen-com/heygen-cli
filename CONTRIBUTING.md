@@ -25,6 +25,7 @@ HEYGEN_API_KEY=<key> ./bin/heygen video list --limit 2
 
 ```
 cmd/heygen/        Cobra commands, hand-written enhancements, entry point
+internal/analytics/ PostHog usage tracking (opt-out)
 internal/auth/     Credential resolution (env var → file)
 internal/client/   HTTP client, executor, retry logic
 internal/command/  Spec, Invocation, Groups, Column types
