@@ -151,7 +151,7 @@ func (s *Spec) BuildInvocation(cmd *cobra.Command, args []string, data map[strin
 		if i >= len(args) {
 			break
 		}
-		inv.PathParams[arg.Param] = args[i]
+		inv.PathParams[arg.Param] = args[i] //nolint:gosec // G602: i is bounded by range over s.Args and len(args) guard above
 	}
 
 	// Step 3: Flags — only if explicitly set by the user

@@ -1,0 +1,36 @@
+version: "2"
+
+linters:
+  enable:
+    - gosec
+
+  settings:
+    gosec:
+      excludes:
+        # Env var name constants containing "KEY"/"TOKEN", not actual secrets.
+        - G101
+        # Standard term.IsTerminal(int(f.Fd())) idiom; uintptr -> int won't overflow.
+        - G115
+        # CLI reads user-provided file paths by design.
+        - G304
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Test code uses env-controlled paths and relaxed file permissions
+      # for fixture setup; gosec rules don't apply.
+      - linters: [gosec]
+        path: _test\.go$
+      # QF rules are optional style refactors (e.g., De Morgan's law),
+      # not bugs. Pre-existing in test code; not worth enforcing.
+      - linters: [staticcheck]
+        text: "^QF"
+
+formatters:
+  exclusions:
+    generated: lax

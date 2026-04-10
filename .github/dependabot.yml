@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # GitHub Actions version updates only.
+  # Go module security updates are handled by Dependabot security updates
+  # (enabled in repo settings), not version updates here.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"

@@ -81,7 +81,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	if req.Header.Get("Content-Type") == "" && req.Body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	return c.httpClient.Do(req)
+	return c.httpClient.Do(req) //nolint:gosec // G704: CLI makes HTTP requests to user-configured API endpoints
 }
 
 // BaseURL returns the configured base URL.

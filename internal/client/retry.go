@@ -170,7 +170,7 @@ func backoffDelay(attempt int, config RetryConfig) time.Duration {
 		delay = float64(config.MaxDelay)
 	}
 
-	jitter := 0.75 + rand.Float64()*0.5
+	jitter := 0.75 + rand.Float64()*0.5 //nolint:gosec // G404: jitter does not need crypto randomness
 	return time.Duration(delay * jitter)
 }
 
