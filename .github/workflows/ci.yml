@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.25"
 
       - name: Build
         run: make build
@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.25"
 
       - uses: golangci/golangci-lint-action@v6
         with:
@@ -73,6 +73,21 @@ jobs:
       - name: Run gitleaks
         run: gitleaks detect --source . --redact=10 --verbose
 
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
   goreleaser-check:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
@@ -83,7 +98,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.25"
 
       - uses: goreleaser/goreleaser-action@v6
         with:

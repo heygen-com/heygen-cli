@@ -1,0 +1,16 @@
+linters:
+  enable:
+    - gosec
+
+linters-settings:
+  gosec:
+    excludes:
+      # Env var name constants containing "KEY"/"TOKEN", not actual secrets.
+      - G101
+      # Standard term.IsTerminal(int(f.Fd())) idiom; uintptr -> int won't overflow.
+      - G115
+      # CLI reads user-provided file paths by design.
+      - G304
+      # Codegen writes 0755 dirs and 0644 source files; standard for generated code.
+      - G301
+      - G306
