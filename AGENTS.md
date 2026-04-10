@@ -15,6 +15,7 @@ make generate SPEC=path/to/spec.json  # regenerate gen/ from OpenAPI spec
 Smoke test against real API: `HEYGEN_API_KEY=<key> ./bin/heygen video list --limit 2`
 
 For project layout and development guide, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+For branch names, commit messages, and PR titles, see [.github/GIT_CONVENTIONS.md](.github/GIT_CONVENTIONS.md).
 
 ## Key Rules
 
