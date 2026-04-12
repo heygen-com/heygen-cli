@@ -535,7 +535,7 @@ func TestGenBuilder_VideoCreate_Wait_Success(t *testing.T) {
 		originalHandler.ServeHTTP(w, r)
 	})
 
-	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait")
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "-d", `{"test":true}`)
 
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
@@ -589,7 +589,7 @@ func TestGenBuilder_VideoCreate_Wait_Human_NonTTYFallback(t *testing.T) {
 		originalHandler.ServeHTTP(w, r)
 	})
 
-	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--human")
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--human", "-d", `{"test":true}`)
 
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
@@ -615,7 +615,7 @@ func TestGenBuilder_VideoCreate_Wait_Failure(t *testing.T) {
 	})
 	defer srv.Close()
 
-	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait")
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "-d", `{"test":true}`)
 
 	if res.ExitCode != 1 {
 		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
@@ -647,7 +647,7 @@ func TestGenBuilder_VideoCreate_Wait_Timeout(t *testing.T) {
 	})
 	defer srv.Close()
 
-	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--timeout", "20ms")
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--timeout", "20ms", "-d", `{"test":true}`)
 
 	if res.ExitCode != clierrors.ExitTimeout {
 		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitTimeout, res.Stderr)
@@ -686,7 +686,7 @@ func TestGenBuilder_VideoCreate_Wait_TimeoutBeforeFirstPoll(t *testing.T) {
 	})
 	defer srv.Close()
 
-	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--timeout", "20ms")
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--timeout", "20ms", "-d", `{"test":true}`)
 
 	if res.ExitCode != clierrors.ExitTimeout {
 		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitTimeout, res.Stderr)
@@ -709,7 +709,7 @@ func TestGenBuilder_VideoCreate_Wait_Timeout_Human(t *testing.T) {
 	})
 	defer srv.Close()
 
-	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--timeout", "20ms", "--human")
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "--wait", "--timeout", "20ms", "--human", "-d", `{"test":true}`)
 
 	if res.ExitCode != clierrors.ExitTimeout {
 		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitTimeout, res.Stderr)
@@ -744,7 +744,7 @@ func TestGenBuilder_VideoAgentCreate_Wait_Timeout_UsesVideoGetHint(t *testing.T)
 	})
 	defer srv.Close()
 
-	res := runGenCommand(t, srv.URL, "test-key", videoAgentWaitSpec, "create", "--wait", "--timeout", "20ms")
+	res := runGenCommand(t, srv.URL, "test-key", videoAgentWaitSpec, "create", "--wait", "--timeout", "20ms", "-d", `{"prompt":"test"}`)
 
 	if res.ExitCode != clierrors.ExitTimeout {
 		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitTimeout, res.Stderr)
@@ -775,7 +775,7 @@ func TestGenBuilder_VideoCreate_NoWait(t *testing.T) {
 	})
 	defer srv.Close()
 
-	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create")
+	res := runGenCommand(t, srv.URL, "test-key", videoCreateWaitSpec, "create", "-d", `{"test":true}`)
 
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
@@ -816,6 +816,72 @@ func TestGenBuilder_VideoCreate_WaitNotAvailable(t *testing.T) {
 	}
 	if !strings.Contains(res.Stderr, "unknown flag: --wait") {
 		t.Fatalf("stderr = %s, want unknown flag error", res.Stderr)
+	}
+}
+
+func TestGenBuilder_PostWithoutBody_RejectsEmptyRequest(t *testing.T) {
+	requiredBodySpec := &command.Spec{
+		Group:         "video",
+		Name:          "create",
+		Summary:       "Create a video",
+		Endpoint:      "/v3/videos",
+		Method:        "POST",
+		BodyEncoding:  "json",
+		RequestSchema: `{"type":"object","properties":{"title":{"type":"string"}},"required":["title"]}`,
+		Examples:      []string{"heygen video create -d ..."},
+	}
+
+	srv := setupTestServer(t, map[string]testHandler{})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", requiredBodySpec, "create")
+
+	if res.ExitCode != clierrors.ExitUsage {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitUsage, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "request body required") {
+		t.Fatalf("stderr = %s, want 'request body required' message", res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "--request-schema") {
+		t.Fatalf("stderr = %s, want --request-schema hint", res.Stderr)
+	}
+}
+
+// POST commands with an intentionally empty request schema (e.g.
+// video-agent stop — properties: {}, required: []) must not be rejected
+// by the empty-body guard.
+func TestGenBuilder_PostWithEmptySchema_AllowsEmptyBody(t *testing.T) {
+	emptyBodySpec := &command.Spec{
+		Group:        "video-agent",
+		Name:         "stop",
+		Summary:      "Stop Video Agent session",
+		Endpoint:     "/v3/video-agents/{session_id}/stop",
+		Method:       "POST",
+		BodyEncoding: "json",
+		RequestSchema: `{
+			"description": "Request body for stopping a session (empty — no fields required).",
+			"properties": {},
+			"required": [],
+			"type": "object"
+		}`,
+		Args: []command.ArgSpec{
+			{Name: "session-id", Param: "session_id"},
+		},
+		Examples: []string{"heygen video-agent stop <session-id>"},
+	}
+
+	srv := setupTestServer(t, map[string]testHandler{
+		"POST /v3/video-agents/sess_123/stop": {
+			StatusCode: 200,
+			Body:       `{"data":{"session_id":"sess_123"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runGenCommand(t, srv.URL, "test-key", emptyBodySpec, "stop", "sess_123")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
 }
 

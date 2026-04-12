@@ -73,6 +73,15 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				return err
 			}
 
+			// POST/PUT/PATCH commands with JSON bodies must have input
+			// unless the request schema is intentionally empty (e.g.
+			// `video-agent stop`). Without this check, an empty body is
+			// sent to the API and returns a confusing 400.
+			if spec.BodyEncoding == "json" && inv.Body == nil && spec.Method != "DELETE" && !requestBodyOptional(spec) {
+				return clierrors.NewUsage(
+					fmt.Sprintf("request body required: use -d '{...}' or pass individual flags. Run 'heygen %s %s --request-schema' to see the expected format", spec.Group, spec.Name))
+			}
+
 			if spec.Destructive {
 				force, _ := cmd.Flags().GetBool("force")
 				if !force {
@@ -225,6 +234,32 @@ func hasBodyFlags(spec *command.Spec) bool {
 		}
 	}
 	return false
+}
+
+// requestBodyOptional reports whether the command's request schema accepts
+// an empty body. True when the schema has no properties, no required fields,
+// and no discriminators (oneOf/anyOf/allOf). Used to let commands like
+// `video-agent stop` — which POSTs an empty body by design — through the
+// empty-body guard in RunE.
+func requestBodyOptional(spec *command.Spec) bool {
+	if spec.RequestSchema == "" {
+		return true
+	}
+	var s struct {
+		Properties map[string]any `json:"properties"`
+		Required   []string       `json:"required"`
+		OneOf      []any          `json:"oneOf"`
+		AnyOf      []any          `json:"anyOf"`
+		AllOf      []any          `json:"allOf"`
+	}
+	if err := json.Unmarshal([]byte(spec.RequestSchema), &s); err != nil {
+		return false
+	}
+	return len(s.Properties) == 0 &&
+		len(s.Required) == 0 &&
+		len(s.OneOf) == 0 &&
+		len(s.AnyOf) == 0 &&
+		len(s.AllOf) == 0
 }
 
 func buildUseLine(spec *command.Spec) string {
