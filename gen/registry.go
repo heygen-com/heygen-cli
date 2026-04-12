@@ -47,7 +47,6 @@ var Groups = map[string][]*command.Spec{
 		VideoAgentVideosList,
 	},
 	"video-translate": {
-		VideoTranslateCaptionGet,
 		VideoTranslateCreate,
 		VideoTranslateDelete,
 		VideoTranslateGet,
