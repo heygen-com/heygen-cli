@@ -43,19 +43,27 @@ Get a key at [app.heygen.com/settings/api](https://app.heygen.com/settings/api).
 
 ## Quick start
 
+**1. Create a finished video from a prompt** (returns JSON including `video_id`):
+
 ```bash
-# List your recent videos
-heygen video list --limit 5
-
-# Create a video from a prompt and block until it's ready
 heygen video-agent create --prompt "30-second product demo" --wait
-
-# Agent pattern: introspect the input shape, then pipe JSON through jq
-heygen video-agent create --request-schema | jq '.properties | keys'
-heygen video-agent create --prompt "Welcome" | jq '.data | {status, video_id}'
 ```
 
-Add `--human` to any command for a human-readable layout. Set `HEYGEN_OUTPUT=human` to make it the default.
+**2. Get its metadata and share link:**
+
+```bash
+heygen video get <video-id>
+```
+
+Response includes `video_url` (raw mp4), `video_page_url` (shareable UI link), `thumbnail_url`, and `duration`.
+
+**3. Download the mp4:**
+
+```bash
+heygen video download <video-id>
+```
+
+Add `--human` to any command for a readable layout. Set `HEYGEN_OUTPUT=human` to make it the default.
 
 ## Commands
 
