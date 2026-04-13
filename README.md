@@ -4,7 +4,7 @@
 [![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-The official HeyGen CLI. JSON-first, schema-introspectable, and designed to be driven by coding agents (Claude Code, Codex, Cursor) as much as by humans.
+The official HeyGen CLI. JSON-first, self-describing, and designed to be driven by coding agents (Claude Code, Codex, Cursor) as much as by humans.
 
 ![demo](docs/demo.gif)
 
@@ -13,8 +13,9 @@ Full reference and examples: **[developers.heygen.com/cli](https://developers.he
 ## Why this CLI
 
 - **JSON on stdout, structured errors on stderr, stable exit codes** (`0` ok, `1` API, `2` usage, `3` auth, `4` timeout).
-- **Introspectable.** `--request-schema` and `--response-schema` return JSON Schema without auth or API calls.
-- **Non-interactive by default.** Set `HEYGEN_API_KEY` and nothing reads a TTY. The one stdin-reader (`auth login`) is labeled and pipeable.
+- **Self-describing.** `--request-schema` and `--response-schema` return JSON Schema without auth or API calls.
+- **Non-interactive by default.** Set `HEYGEN_API_KEY` and nothing reads a TTY.
+- **`auth login` is the one exception** — it reads stdin, and accepts a pipe, so agents can wire it up non-interactively too.
 
 ## Install
 
@@ -30,10 +31,10 @@ Installs to `~/.local/bin`. macOS + Linux; Windows via WSL. See the [CLI docs](h
 export HEYGEN_API_KEY=your-key-here   # preferred for agents and CI
 ```
 
-Or persist credentials to `~/.heygen/credentials`:
+Or use `auth login` to persist the key to `~/.heygen/credentials` — interactively or piped:
 
 ```bash
-heygen auth login                    # interactive prompt
+heygen auth login                    # prompt
 echo "$KEY" | heygen auth login      # piped
 heygen auth status                   # verify
 ```
