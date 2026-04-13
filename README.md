@@ -6,6 +6,8 @@
 
 **Create AI videos from the terminal.** Official CLI for the [HeyGen](https://heygen.com) video generation API — built for developers, AI agents, and CI/CD pipelines. JSON output by default.
 
+![demo](docs/demo.gif)
+
 ## Install
 
 ```bash
