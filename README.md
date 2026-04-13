@@ -29,7 +29,9 @@ Full reference and examples: **[developers.heygen.com/cli](https://developers.he
 curl -fsSL https://static.heygen.ai/cli/install.sh | bash
 ```
 
-Installs to `~/.local/bin`. macOS + Linux; Windows via WSL.
+Single static binary — no runtime required. Installs to `~/.local/bin`. macOS + Linux; Windows via WSL.
+
+You only need a HeyGen API key — see [Authenticate](#authenticate) below.
 
 ## Updates
 
