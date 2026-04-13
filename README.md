@@ -4,13 +4,20 @@
 [![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-**The official HeyGen CLI.** Agent-first — self-describing, JSON-native, and built to be driven by coding agents (Claude Code, Codex, and others) as much as by humans.
+**Make AI videos from the command line.** Drive HeyGen with code, not clicks.
 
 ![demo](docs/demo.gif)
 
 Full reference and examples: **[developers.heygen.com/cli](https://developers.heygen.com/cli)**.
 
-## What makes it agent-first
+## Built for
+
+- **Coding agents** — Claude Code, Codex, and others. Tool-use is trivial when every command is JSON-in, JSON-out with schemas you can introspect.
+- **CI/CD pipelines** — auto-generate weekly recap videos, keep release-note vlogs in sync with commits.
+- **Bulk operations** — translate 100 videos in one shell loop; dub a back-catalog overnight.
+- **Custom integrations** — wrap it in your own tool; the contract (exit codes, error envelope, JSON output) is stable.
+
+## Agent-first by design
 
 - **JSON on stdout, structured errors on stderr, stable exit codes** (`0` ok, `1` API, `2` usage, `3` auth, `4` timeout).
 - **Self-describing.** `--request-schema` and `--response-schema` return JSON Schema without auth or API calls.
@@ -63,7 +70,12 @@ heygen video-agent create --prompt "30-second product demo" --wait
 heygen video get <video-id>
 ```
 
-Response includes `video_url` (raw mp4), `video_page_url` (shareable UI link), `thumbnail_url`, and `duration`.
+Returns JSON with `video_url` (raw mp4), `video_page_url` (shareable UI link), `thumbnail_url`, and `duration`. Pipe to `jq` to extract what you need:
+
+```bash
+heygen video get <video-id> | jq -r '.data.video_page_url'
+# → https://app.heygen.com/videos/...
+```
 
 **3. Download the mp4:**
 
