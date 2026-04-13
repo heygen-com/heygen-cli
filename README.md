@@ -16,14 +16,10 @@ curl -fsSL https://static.heygen.ai/cli/install.sh | bash
 
 This installs the latest stable release into `~/.local/bin`.
 
+**Supported platforms:** macOS (Apple Silicon and Intel) and Linux (x64 and arm64). Windows support is coming soon; use WSL in the meantime.
+
 <details>
 <summary>Other install methods</summary>
-
-**Homebrew** (once the repo is public):
-
-```bash
-brew install heygen/tap/heygen
-```
 
 **Specific version:**
 
@@ -31,7 +27,7 @@ brew install heygen/tap/heygen
 curl -fsSL https://static.heygen.ai/cli/install.sh | bash -s -- --version v0.1.0
 ```
 
-**From source** (requires Go 1.23+):
+**From source** (requires Go 1.25+):
 
 ```bash
 git clone https://github.com/heygen-com/heygen-cli.git
@@ -169,7 +165,20 @@ heygen video get <video-id>       # check status
 heygen video download <video-id>  # download when complete
 ```
 
-`--wait` uses exponential backoff and respects `--timeout` (default 10m). Exit code 4 on timeout — stdout contains partial resource data with a hint for manual follow-up.
+`--wait` uses exponential backoff and respects `--timeout` (default 20m). Exit code 4 on timeout — stdout contains partial resource data with a hint for manual follow-up.
+
+## Downloading Videos
+
+```bash
+# Defaults to ./{video-id}.mp4
+heygen video download <video-id>
+
+# Choose a destination path
+heygen video download <video-id> --output-path my-video.mp4
+
+# Download the captioned version (if the video was created with captions)
+heygen video download <video-id> --asset captioned
+```
 
 ## Agent and CI/CD Usage
 
