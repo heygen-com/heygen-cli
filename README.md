@@ -29,11 +29,17 @@ Full reference and examples: **[developers.heygen.com/cli](https://developers.he
 curl -fsSL https://static.heygen.ai/cli/install.sh | bash
 ```
 
-Installs to `~/.local/bin`. macOS + Linux; Windows via WSL. Upgrade later with `heygen update`.
+Installs to `~/.local/bin`. macOS + Linux; Windows via WSL.
+
+## Updates
+
+```bash
+heygen update            # install the latest version
+```
 
 ## Authenticate
 
-Three options. The first two are agent- and CI-friendly; the third is for humans.
+Choose one of the three options below. The first two are agent- and CI-friendly; the third is for humans.
 
 **1. Environment variable** — agents, CI; ephemeral, no file on disk:
 
