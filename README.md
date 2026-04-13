@@ -4,13 +4,13 @@
 [![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-The official HeyGen CLI. JSON-first, self-describing, and designed to be driven by coding agents (Claude Code, Codex, Cursor) as much as by humans.
+**The official HeyGen CLI.** Agent-first — self-describing, JSON-native, and built to be driven by coding agents (Claude Code, Codex, and others) as much as by humans.
 
 ![demo](docs/demo.gif)
 
 Full reference and examples: **[developers.heygen.com/cli](https://developers.heygen.com/cli)**.
 
-## Why this CLI
+## What makes it agent-first
 
 - **JSON on stdout, structured errors on stderr, stable exit codes** (`0` ok, `1` API, `2` usage, `3` auth, `4` timeout).
 - **Self-describing.** `--request-schema` and `--response-schema` return JSON Schema without auth or API calls.
