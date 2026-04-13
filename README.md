@@ -105,23 +105,28 @@ Every command supports `--help`. Commands with a request body expose `--request-
 
 ## How it behaves
 
-**Stdout is always JSON.** Even `video download` — the file writes to disk and stdout gets `{"asset", "message", "path"}` so agents can chain on `.path`.
+| Aspect | Behavior |
+|--------|----------|
+| **stdout** | Always JSON. Even `video download` — binary writes to disk; stdout emits `{"asset", "message", "path"}` so you can chain on `.path`. |
+| **stderr** | Structured envelope on error: `{"error": {"code", "message", "hint"}}`. Stable `code` values for programmatic branching. |
+| **Exit codes** | `0` ok · `1` API or network · `2` usage · `3` auth · `4` timeout under `--wait` (stdout contains partial resource for resume) |
+| **Request bodies** | Flags for simple inputs; `-d` for nested JSON (inline, file path, or `-` for stdin). Flags override matching fields. |
+| **Async jobs** | `--wait` blocks with exponential backoff; `--timeout` sets max (default 20m). 429s and 5xx retry automatically. |
 
-**Stderr on error** is a structured envelope:
+Example error envelope:
 
 ```json
 {"error": {"code": "not_found", "message": "Video not found", "hint": "Check ID with: heygen video list"}}
 ```
 
-**Exit codes:** `0` success · `1` API or network error · `2` usage error · `3` auth · `4` timeout under `--wait` (stdout contains the partial resource so you can resume).
-
-**Request bodies.** Simple fields go through flags. Nested inputs use `-d` (inline JSON, a file path, or `-` for stdin). Flags override fields in the JSON body.
-
-**Async jobs.** Use `--wait` to block with exponential backoff; `--timeout` controls the max wait (default 20m). 429s and 5xx are retried automatically.
-
 ## Configuration
 
-Credentials: `~/.heygen/credentials`. Config: `~/.heygen/config.toml`. `HEYGEN_API_KEY` and `HEYGEN_OUTPUT` env vars override both.
+| File | Purpose |
+|------|---------|
+| `~/.heygen/credentials` | API key |
+| `~/.heygen/config.toml` | Output format and other non-secret settings |
+
+`HEYGEN_API_KEY` and `HEYGEN_OUTPUT` env vars override the respective files.
 
 ```bash
 heygen config list       # show all settings with sources
