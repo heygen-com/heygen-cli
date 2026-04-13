@@ -12,17 +12,16 @@ Full reference and examples: **[developers.heygen.com/cli](https://developers.he
 
 ## Built for
 
-- **Coding agents** — Claude Code, Codex, and others. Tool-use is trivial when every command is JSON-in, JSON-out with schemas you can introspect.
-- **CI/CD pipelines** — auto-generate weekly recap videos, keep release-note vlogs in sync with commits.
-- **Bulk operations** — translate 100 videos in one shell loop; dub a back-catalog overnight.
-- **Custom integrations** — wrap it in your own tool; the contract (exit codes, error envelope, JSON output) is stable.
+- **Coding agents** — Claude Code, Codex, and others
+- **CI/CD pipelines** — weekly recap videos, release-note vlogs
+- **Bulk operations** — translate 100 videos in one shell loop
+- **Custom integrations** — wrap it in your own tool
 
 ## Agent-first by design
 
 - **JSON on stdout, structured errors on stderr, stable exit codes.**
 - **Self-describing.** `--request-schema` and `--response-schema` return JSON Schema without auth or API calls.
 - **Non-interactive by default.** Set `HEYGEN_API_KEY` and nothing reads a TTY.
-- **`auth login` is the one exception** — it reads stdin, and accepts a pipe, so agents can wire it up non-interactively too.
 
 ## Install
 
@@ -30,7 +29,7 @@ Full reference and examples: **[developers.heygen.com/cli](https://developers.he
 curl -fsSL https://static.heygen.ai/cli/install.sh | bash
 ```
 
-Installs to `~/.local/bin`. macOS + Linux; Windows via WSL. See the [CLI docs](https://developers.heygen.com/cli) for other install methods.
+Installs to `~/.local/bin`. macOS + Linux; Windows via WSL. Upgrade later with `heygen update`.
 
 ## Authenticate
 
@@ -101,7 +100,7 @@ Mirrors the [HeyGen v3 API](https://developers.heygen.com). Pattern: `heygen <no
 | `asset` | Upload files for use in video creation |
 | `user` | Account info and billing |
 
-Every command supports `--help`. Commands with a request body expose `--request-schema`; commands with a structured response expose `--response-schema`.
+Every command supports `--help`.
 
 ## How it behaves
 
@@ -130,7 +129,6 @@ Example error envelope:
 
 ```bash
 heygen config list       # show all settings with sources
-heygen update            # self-update to latest
 ```
 
 ## Contributing
