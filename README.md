@@ -4,9 +4,7 @@
 [![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-Official command-line tool for the [HeyGen](https://heygen.com) video generation API. Create AI avatar videos, translate videos, generate speech, and manage assets — all from the terminal.
-
-Built for developers, AI agents, and CI/CD pipelines. JSON output by default.
+**Create AI videos from the terminal.** Official CLI for the [HeyGen](https://heygen.com) video generation API — built for developers, AI agents, and CI/CD pipelines. JSON output by default.
 
 ## Install
 
