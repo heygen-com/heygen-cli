@@ -27,19 +27,27 @@ Installs to `~/.local/bin`. macOS + Linux; Windows via WSL. See the [CLI docs](h
 
 ## Authenticate
 
-```bash
-export HEYGEN_API_KEY=your-key-here   # preferred for agents and CI
-```
+Three options. The first two are agent- and CI-friendly; the third is for humans.
 
-Or use `auth login` to persist the key to `~/.heygen/credentials` — interactively or piped:
+**1. Environment variable** — agents, CI; ephemeral, no file on disk:
 
 ```bash
-heygen auth login                    # prompt
-echo "$KEY" | heygen auth login      # piped
-heygen auth status                   # verify
+export HEYGEN_API_KEY=your-key-here
 ```
 
-Get a key at [app.heygen.com/settings/api](https://app.heygen.com/settings/api).
+**2. Pipe to `auth login`** — agents; persists to `~/.heygen/credentials`:
+
+```bash
+echo "$KEY" | heygen auth login
+```
+
+**3. Interactive `auth login`** — humans; persists to `~/.heygen/credentials`:
+
+```bash
+heygen auth login
+```
+
+Verify any of the above with `heygen auth status`. Get a key at [app.heygen.com/settings/api](https://app.heygen.com/settings/api).
 
 ## Quick start
 
