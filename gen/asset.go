@@ -7,8 +7,8 @@ import "github.com/heygen-com/heygen-cli/internal/command"
 var AssetCreate = &command.Spec{
 	Group:          "asset",
 	Name:           "create",
-	Summary:        "Upload an asset",
-	Description:    "Upload a file (image, video, audio, or PDF) to get an asset_id for use in other endpoints like POST /v3/video-agents. Uses multipart/form-data with a 'file' field. Max 32 MB. MIME type is auto-detected from file bytes. Supported types: image (png, jpeg), video (mp4, webm), audio (mp3, wav), and pdf.",
+	Summary:        "Upload Asset",
+	Description:    "Uploads a file (image, video, audio, or PDF) and returns an asset_id for use in other endpoints. Max 32 MB. Supported types: png, jpeg, mp4, webm, mp3, wav, pdf.",
 	RequestSchema:  "{\n  \"properties\": {\n    \"file\": {\n      \"description\": \"File to upload (image, video, audio, or PDF). Max 32 MB.\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"file\"\n  ],\n  \"type\": \"object\"\n}",
 	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response from uploading an asset via POST /v3/assets.\",\n      \"properties\": {\n        \"asset_id\": {\n          \"description\": \"Unique asset identifier for use in other endpoints like POST /v3/video-agents\",\n          \"type\": \"string\"\n        },\n        \"mime_type\": {\n          \"description\": \"Detected MIME type of the file\",\n          \"type\": \"string\"\n        },\n        \"size_bytes\": {\n          \"description\": \"File size in bytes\",\n          \"type\": \"integer\"\n        },\n        \"url\": {\n          \"description\": \"Public URL of the uploaded asset\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"asset_id\",\n        \"url\",\n        \"mime_type\",\n        \"size_bytes\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
 	Endpoint:       "/v3/assets",
