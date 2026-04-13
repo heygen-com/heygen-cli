@@ -19,7 +19,7 @@ Full reference and examples: **[developers.heygen.com/cli](https://developers.he
 
 ## Agent-first by design
 
-- **JSON on stdout, structured errors on stderr, stable exit codes** (`0` ok, `1` API, `2` usage, `3` auth, `4` timeout).
+- **JSON on stdout, structured errors on stderr, stable exit codes.**
 - **Self-describing.** `--request-schema` and `--response-schema` return JSON Schema without auth or API calls.
 - **Non-interactive by default.** Set `HEYGEN_API_KEY` and nothing reads a TTY.
 - **`auth login` is the one exception** — it reads stdin, and accepts a pipe, so agents can wire it up non-interactively too.
