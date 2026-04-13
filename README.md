@@ -4,9 +4,18 @@
 [![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-Official command-line tool for the [HeyGen](https://heygen.com) video generation API. Create AI avatar videos, translate videos, generate speech, and manage assets — all from the terminal.
+The official HeyGen CLI. JSON-first, self-describing, and designed to be driven by coding agents (Claude Code, Codex, Cursor) as much as by humans.
 
-Built for developers, AI agents, and CI/CD pipelines. JSON output by default.
+![demo](docs/demo.gif)
+
+Full reference and examples: **[developers.heygen.com/cli](https://developers.heygen.com/cli)**.
+
+## Why this CLI
+
+- **JSON on stdout, structured errors on stderr, stable exit codes** (`0` ok, `1` API, `2` usage, `3` auth, `4` timeout).
+- **Self-describing.** `--request-schema` and `--response-schema` return JSON Schema without auth or API calls.
+- **Non-interactive by default.** Set `HEYGEN_API_KEY` and nothing reads a TTY.
+- **`auth login` is the one exception** — it reads stdin, and accepts a pipe, so agents can wire it up non-interactively too.
 
 ## Install
 
@@ -14,69 +23,48 @@ Built for developers, AI agents, and CI/CD pipelines. JSON output by default.
 curl -fsSL https://static.heygen.ai/cli/install.sh | bash
 ```
 
-This installs the latest stable release into `~/.local/bin`.
-
-**Supported platforms:** macOS (Apple Silicon and Intel) and Linux (x64 and arm64). Windows support is coming soon; use WSL in the meantime.
-
-<details>
-<summary>Other install methods</summary>
-
-**Specific version:**
-
-```bash
-curl -fsSL https://static.heygen.ai/cli/install.sh | bash -s -- --version v0.1.0
-```
-
-**From source** (requires Go 1.25+):
-
-```bash
-git clone https://github.com/heygen-com/heygen-cli.git
-cd heygen-cli && make install
-```
-
-</details>
+Installs to `~/.local/bin`. macOS + Linux; Windows via WSL. See the [CLI docs](https://developers.heygen.com/cli) for other install methods.
 
 ## Authenticate
 
 ```bash
-heygen auth login
+export HEYGEN_API_KEY=your-key-here   # preferred for agents and CI
 ```
 
-Paste your API key when prompted. Get one from [app.heygen.com/settings/api](https://app.heygen.com/settings/api).
-
-For CI/Docker/agents, set the environment variable instead:
+Or use `auth login` to persist the key to `~/.heygen/credentials` — interactively or piped:
 
 ```bash
-export HEYGEN_API_KEY=your-key-here
+heygen auth login                    # prompt
+echo "$KEY" | heygen auth login      # piped
+heygen auth status                   # verify
 ```
 
-Verify your credentials:
+Get a key at [app.heygen.com/settings/api](https://app.heygen.com/settings/api).
+
+## Quick start
 
 ```bash
-heygen auth status
-```
-
-## Quick Start
-
-```bash
-# Create a video from a text prompt (blocks until done)
-heygen video-agent create --prompt "Make a 30-second product demo" --wait
-
-# Download the result
-heygen video download <video-id>
-
-# List your videos
+# List your recent videos
 heygen video list --limit 5
+
+# Create a video from a prompt and block until it's ready
+heygen video-agent create --prompt "30-second product demo" --wait
+
+# Agent pattern: introspect the input shape, then pipe JSON through jq
+heygen video-agent create --request-schema | jq '.properties | keys'
+heygen video-agent create --prompt "Welcome" | jq '.data | {status, video_id}'
 ```
+
+Add `--human` to any command for a human-readable layout. Set `HEYGEN_OUTPUT=human` to make it the default.
 
 ## Commands
 
-The CLI mirrors the [HeyGen v3 API](https://developers.heygen.com). Pattern: `heygen <noun> <verb>`.
+Mirrors the [HeyGen v3 API](https://developers.heygen.com). Pattern: `heygen <noun> <verb>`.
 
 | Group | What it does |
 |-------|-------------|
 | `video-agent` | Create videos from text prompts using AI |
-| `video` | Create, list, get, delete, and download videos |
+| `video` | Create, list, get, delete, download videos |
 | `avatar` | List and manage avatars and looks |
 | `voice` | List voices, design voices, generate speech |
 | `video-translate` | Translate videos into other languages |
@@ -85,135 +73,36 @@ The CLI mirrors the [HeyGen v3 API](https://developers.heygen.com). Pattern: `he
 | `asset` | Upload files for use in video creation |
 | `user` | Account info and billing |
 
-Every command supports `--help`:
+Every command supports `--help`. Commands with a request body expose `--request-schema`; commands with a structured response expose `--response-schema`.
 
-```bash
-heygen --help              # all command groups
-heygen video --help        # video subcommands
-heygen video create --help # flags, examples, and JSON schema info
-```
+## How it behaves
 
-## Complex Request Bodies
+**Stdout is always JSON.** Even `video download` — the file writes to disk and stdout gets `{"asset", "message", "path"}` so agents can chain on `.path`.
 
-Endpoints with nested inputs (discriminated unions, arrays of objects) use `-d` for raw JSON:
-
-```bash
-# Inline JSON
-heygen video-translate create -d '{
-  "video": {"type": "url", "url": "https://..."},
-  "output_languages": ["es"]
-}'
-
-# From a file
-heygen video create -d request.json
-
-# From stdin
-cat request.json | heygen video create -d -
-```
-
-Flags and `-d` can be combined — flags override fields in the JSON.
-
-Use `--request-schema` to discover the expected JSON shape (no auth required):
-
-```bash
-heygen video create --request-schema
-heygen video-agent create --request-schema
-```
-
-## Output
-
-**JSON by default** (for scripts and agents):
-
-```bash
-heygen video list --limit 3
-# stdout: JSON array of video objects
-```
-
-**Human-readable tables** with `--human`:
-
-```bash
-heygen video list --limit 3 --human
-# ID                                Title                     Status     Created
-# 4621f8ba1a8f4811b32f669c37be53a2  HeyGen in 20 Seconds      completed  2026-03-28 15:48
-# 75c58ba041394ddcb3737d7eff9d514b  Video Agent Weekly Recap  completed  2026-03-25 22:18
-```
-
-Make it persistent: `heygen config set output human`
-
-**Errors** go to stderr as structured JSON:
+**Stderr on error** is a structured envelope:
 
 ```json
 {"error": {"code": "not_found", "message": "Video not found", "hint": "Check ID with: heygen video list"}}
 ```
 
-## Async Operations
+**Exit codes:** `0` success · `1` API or network error · `2` usage error · `3` auth · `4` timeout under `--wait` (stdout contains the partial resource so you can resume).
 
-Video creation is asynchronous. Two patterns:
+**Request bodies.** Simple fields go through flags. Nested inputs use `-d` (inline JSON, a file path, or `-` for stdin). Flags override fields in the JSON body.
 
-**Block until done** (recommended):
-
-```bash
-heygen video-agent create --prompt "Demo video" --wait
-# Polls until complete, then outputs the finished resource JSON
-```
-
-**Manual polling:**
-
-```bash
-heygen video create -d '...'      # returns JSON with video_id
-heygen video get <video-id>       # check status
-heygen video download <video-id>  # download when complete
-```
-
-`--wait` uses exponential backoff and respects `--timeout` (default 20m). Exit code 4 on timeout — stdout contains partial resource data with a hint for manual follow-up.
-
-## Downloading Videos
-
-```bash
-# Defaults to ./{video-id}.mp4
-heygen video download <video-id>
-
-# Choose a destination path
-heygen video download <video-id> --output-path my-video.mp4
-
-# Download the captioned version (if the video was created with captions)
-heygen video download <video-id> --asset captioned
-```
-
-## Agent and CI/CD Usage
-
-The CLI is designed for non-interactive use:
-
-- **JSON to stdout** — always, no flags needed
-- **No prompts** — all input via flags, `-d`, or stdin
-- **Structured errors** — JSON envelope on stderr with `code`, `message`, `hint`
-- **Exit codes** — `0` success, `1` error, `2` bad usage, `3` auth failure, `4` timeout
-- **Automatic retries** — 429 and 5xx retried with backoff (respects `Retry-After`)
-
-Set `HEYGEN_API_KEY` as an env var and the CLI is fully non-interactive.
-
-## Self-Update
-
-```bash
-heygen update          # install latest version
-heygen update check    # check without installing
-```
+**Async jobs.** Use `--wait` to block with exponential backoff; `--timeout` controls the max wait (default 20m). 429s and 5xx are retried automatically.
 
 ## Configuration
 
-| Item | Path |
-|------|------|
-| Credentials | `~/.heygen/credentials` |
-| Config | `~/.heygen/config.toml` |
+Credentials: `~/.heygen/credentials`. Config: `~/.heygen/config.toml`. `HEYGEN_API_KEY` and `HEYGEN_OUTPUT` env vars override both.
 
 ```bash
-heygen config set output human   # persist --human as default
-heygen config list               # show all settings with sources
+heygen config list       # show all settings with sources
+heygen update            # self-update to latest
 ```
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, build instructions, and how to add new commands.
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
@@ -221,5 +110,6 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, build instructio
 
 ## Links
 
+- [CLI Documentation](https://developers.heygen.com/cli)
 - [API Documentation](https://developers.heygen.com)
 - [Releases](https://github.com/heygen-com/heygen-cli/releases)
