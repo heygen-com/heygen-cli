@@ -13,7 +13,7 @@ Full reference: **[developers.heygen.com/cli](https://developers.heygen.com/cli)
 ## Why agents pick this CLI
 
 - **JSON in, JSON out.** Stdout is parseable JSON by default — pipe straight into `jq` or your tool loop.
-- **Schema introspection on every command.** `--request-schema` / `--response-schema` return the exact JSON Schema without hitting the API.
+- **Schema introspection built in.** `--request-schema` returns the exact input JSON Schema on any command that takes a body; `--response-schema` returns the output shape on any command with a structured response. No auth, no API call.
 - **Contractual errors.** Structured `{error: {code, message, hint}}` on stderr; stable exit codes (`0` ok, `1` API, `2` usage, `3` auth, `4` timeout with partial result on stdout).
 - **Non-interactive by default.** Set `HEYGEN_API_KEY` and nothing reads a TTY. The one stdin-reading command (`auth login`) is explicitly labeled and accepts pipes.
 - **Built-in retries and `--wait` for async jobs.** 429/5xx back off automatically; long jobs can block with polling and resume on timeout.
@@ -111,20 +111,21 @@ Mirrors the [HeyGen v3 API](https://developers.heygen.com). Pattern: `heygen <no
 | `asset` | Upload files for use in video creation |
 | `user` | Account info and billing |
 
-Every command supports `--help`, `--request-schema`, and `--response-schema`:
+Every command supports `--help`. Commands with a JSON request body also expose `--request-schema`; commands with a structured response also expose `--response-schema`:
 
 ```bash
 heygen --help                               # all groups
 heygen video-agent create --help            # flags, examples, semantics
-heygen video-agent create --request-schema  # input JSON schema
+heygen video-agent create --request-schema  # input JSON schema (create has a body)
 heygen video-agent create --response-schema # output JSON schema
+heygen video list --response-schema         # list has no body, but has a response schema
 ```
 
 ## The machine contract
 
 ### Output
 
-**JSON on stdout, always.** No flag required. The CLI never mixes human-readable text into stdout — it's pure parseable JSON or, for downloads, a binary file.
+**JSON on stdout, always.** No flag required. Every command — including `video download` — emits parseable JSON on stdout; binary download content writes to disk, not to stdout.
 
 ```bash
 heygen video list --limit 3
@@ -189,10 +190,13 @@ On `--wait` timeout, exit code is `4` and stdout contains the partial resource �
 
 ## Downloading videos
 
+Binary content writes to disk. Stdout receives a JSON envelope with the resolved `path` so agents can chain the result:
+
 ```bash
-heygen video download <video-id>                              # → ./<video-id>.mp4
-heygen video download <video-id> --output-path my.mp4         # choose path
-heygen video download <video-id> --asset captioned            # captioned version
+heygen video download <video-id>                          # file → ./<video-id>.mp4
+heygen video download <video-id> --output-path my.mp4     # choose path
+heygen video download <video-id> --asset captioned        # captioned version
+# stdout: {"asset": "video", "message": "Downloaded video to ./<id>.mp4", "path": "./<id>.mp4"}
 ```
 
 ## Humans welcome too
