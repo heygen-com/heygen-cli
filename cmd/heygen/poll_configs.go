@@ -35,4 +35,12 @@ var pollConfigs = map[string]*command.PollConfig{
 		IDField:        "data.video_id",
 		HintCommand:    "video get",
 	},
+	"lipsync/create": {
+		StatusEndpoint: "/v3/lipsyncs/{lipsync_id}",
+		StatusField:    "data.status",
+		TerminalOK:     []string{"completed"},
+		TerminalFail:   []string{"failed"},
+		IDField:        "data.lipsync_id",
+		HintCommand:    "lipsync get",
+	},
 }
