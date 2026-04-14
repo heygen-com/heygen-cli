@@ -2,6 +2,7 @@ package errors
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -120,6 +121,42 @@ func TestFromAPIError_PreservesAPICode(t *testing.T) {
 
 	if cliErr.Code != "custom_code" {
 		t.Errorf("Code = %q, want %q (should preserve API code)", cliErr.Code, "custom_code")
+	}
+}
+
+func TestFromAPIError_AvatarNotFound_AddsHint(t *testing.T) {
+	apiErr := &APIError{Code: "avatar_not_found", Message: "avatar with id X not found"}
+	cliErr := FromAPIError(404, apiErr, "")
+
+	if !strings.Contains(cliErr.Hint,"heygen avatar list") {
+		t.Errorf("Hint = %q, want heygen avatar list", cliErr.Hint)
+	}
+}
+
+func TestFromAPIError_VideoNotFound_AddsHint(t *testing.T) {
+	apiErr := &APIError{Code: "video_not_found", Message: "video not found"}
+	cliErr := FromAPIError(404, apiErr, "")
+
+	if !strings.Contains(cliErr.Hint,"heygen video list") {
+		t.Errorf("Hint = %q, want heygen video list", cliErr.Hint)
+	}
+}
+
+func TestFromAPIError_VoiceNotFound_AddsHint(t *testing.T) {
+	apiErr := &APIError{Code: "voice_not_found", Message: "voice not found"}
+	cliErr := FromAPIError(404, apiErr, "")
+
+	if !strings.Contains(cliErr.Hint,"heygen voice list") {
+		t.Errorf("Hint = %q, want heygen voice list", cliErr.Hint)
+	}
+}
+
+func TestFromAPIError_UnknownCode_NoHint(t *testing.T) {
+	apiErr := &APIError{Code: "something_obscure", Message: "not found"}
+	cliErr := FromAPIError(404, apiErr, "")
+
+	if cliErr.Hint != "" {
+		t.Errorf("Hint = %q, want empty for unknown code", cliErr.Hint)
 	}
 }
 

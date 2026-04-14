@@ -652,7 +652,7 @@ func TestGenBuilder_VideoCreate_Wait_Timeout(t *testing.T) {
 	if res.ExitCode != clierrors.ExitTimeout {
 		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitTimeout, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "polling timed out after 20ms") {
+	if !strings.Contains(res.Stderr, "still processing after --wait of 20ms") {
 		t.Fatalf("stderr = %s, want timeout message", res.Stderr)
 	}
 	if !strings.Contains(res.Stderr, "heygen video get vid_123") {
@@ -717,7 +717,7 @@ func TestGenBuilder_VideoCreate_Wait_Timeout_Human(t *testing.T) {
 	if !strings.Contains(res.Stderr, "Polling: status=processing") {
 		t.Fatalf("stderr = %s, want progress output", res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "Error: polling timed out after 20ms") {
+	if !strings.Contains(res.Stderr, "Error: still processing after --wait of 20ms") {
 		t.Fatalf("stderr = %s, want human timeout error", res.Stderr)
 	}
 	if !strings.Contains(res.Stderr, "Hint: heygen video get vid_123") {

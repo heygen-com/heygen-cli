@@ -35,7 +35,16 @@ The env var takes priority over stored credentials.`,
 				return err
 			}
 			if key == "" {
-				return clierrors.NewUsage("no API key provided")
+				if stdinIsTerminalFunc() {
+					return clierrors.NewUsage(
+						"no API key entered — type your key after the prompt, or paste it.",
+					)
+				}
+				return clierrors.NewUsage(
+					"no API key provided on stdin.\n" +
+						"Pipe your key:  echo \"$KEY\" | heygen auth login\n" +
+						"Or set the HEYGEN_API_KEY environment variable.",
+				)
 			}
 
 			store := &auth.FileCredentialStore{}
@@ -55,6 +64,7 @@ The env var takes priority over stored credentials.`,
 		},
 	}
 }
+
 
 func readAPIKey(in io.Reader, errOut io.Writer) (string, error) {
 	if file, ok := in.(interface{ Fd() uintptr }); ok && term.IsTerminal(int(file.Fd())) {

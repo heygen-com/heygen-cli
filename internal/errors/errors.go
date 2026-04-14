@@ -106,10 +106,27 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 		}
 	}
 
+	hint := hintForAPICode(code)
+
 	return &CLIError{
 		Code:      code,
 		Message:   apiErr.Message,
+		Hint:      hint,
 		RequestID: requestID,
 		ExitCode:  exitCode,
 	}
+}
+
+// hintForAPICode returns a CLI-specific actionable hint for known API error
+// codes. Returns "" if the code has no associated hint.
+func hintForAPICode(code string) string {
+	switch code {
+	case "avatar_not_found":
+		return "List available avatars: heygen avatar list"
+	case "video_not_found":
+		return "List your videos: heygen video list"
+	case "voice_not_found":
+		return "List available voices: heygen voice list"
+	}
+	return ""
 }

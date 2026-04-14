@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/url"
 	"os"
 
@@ -70,6 +71,13 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 	}
 	apiKey, err := resolver.Resolve()
 	if err != nil {
+		// Enrich the generic cold-start auth error ("no API key found")
+		// with the full auth guidance. Don't overwrite specific hints
+		// like "Check the credentials file at ..." (broken file case).
+		var cliErr *clierrors.CLIError
+		if errors.As(err, &cliErr) && cliErr.ExitCode == clierrors.ExitAuth && cliErr.Message == "no API key found" {
+			cliErr.Hint = authGuidance
+		}
 		return err
 	}
 

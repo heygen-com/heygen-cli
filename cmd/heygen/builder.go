@@ -160,7 +160,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 							}
 							return &clierrors.CLIError{
 								Code:     "timeout",
-								Message:  fmt.Sprintf("polling timed out after %s", timeout),
+								Message:  fmt.Sprintf("still processing after --wait of %s (not failed, just not done yet)", timeout),
 								Hint:     hint,
 								ExitCode: clierrors.ExitTimeout,
 							}
