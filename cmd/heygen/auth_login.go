@@ -28,7 +28,7 @@ Interactive:
 Piped:
   echo "$KEY" | heygen auth login
 
-You can also set the HEYGEN_API_KEY environment variable.
+You can also set the ` + authEnvVar + ` environment variable.
 The env var takes priority over stored credentials.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key, err := readAPIKey(cmd.InOrStdin(), cmd.ErrOrStderr())
@@ -37,19 +37,19 @@ The env var takes priority over stored credentials.`,
 			}
 			if key == "" {
 				isTTY := isStdinTTY(cmd.InOrStdin())
-				envKey := os.Getenv("HEYGEN_API_KEY")
+				envKey := os.Getenv(authEnvVar)
 
 				if !isTTY && envKey != "" {
 					// Non-interactive call with no piped input but env var is set.
 					// Most likely an agent/CI checking that auth is set up.
 					// Surface that env var is being used; suggest persistence path.
-					msg := "HEYGEN_API_KEY is set in your environment — the CLI is using that.\n" +
+					msg := authEnvVar + " is set in your environment — the CLI is using that.\n" +
 						"To save it to disk for future sessions:\n" +
-						"  echo \"$HEYGEN_API_KEY\" | heygen auth login\n" +
+						"  echo \"$" + authEnvVar + "\" | heygen auth login\n" +
 						"Or pipe a different key."
 					fmt.Fprintln(cmd.ErrOrStderr(), msg)
 					data, _ := json.Marshal(map[string]string{
-						"message": "Using HEYGEN_API_KEY from environment. No file written.",
+						"message": "Using " + authEnvVar + " from environment. No file written.",
 						"source":  "env",
 					})
 					return ctx.formatter.Data(data, "", nil)
@@ -63,7 +63,7 @@ The env var takes priority over stored credentials.`,
 				return clierrors.NewUsage(
 					"no API key provided on stdin.\n" +
 						"Pipe your key:  echo \"$KEY\" | heygen auth login\n" +
-						"Or set the HEYGEN_API_KEY environment variable.",
+						"Or set the " + authEnvVar + " environment variable.",
 				)
 			}
 

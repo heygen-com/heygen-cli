@@ -18,7 +18,7 @@ func newAuthStatusCmd(ctx *cmdContext) *cobra.Command {
 		Long: `Verifies the API key currently in use by calling the HeyGen API.
 
 The CLI resolves the active key in this order:
-  1. HEYGEN_API_KEY environment variable
+  1. ` + authEnvVar + ` environment variable
   2. ~/.heygen/credentials (set via 'heygen auth login')
 
 Use this command to confirm your auth setup is working before running other commands.`,
@@ -32,10 +32,7 @@ Use this command to confirm your auth setup is working before running other comm
 			if err != nil {
 				var cliErr *clierrors.CLIError
 				if errors.As(err, &cliErr) && cliErr.ExitCode == clierrors.ExitAuth {
-					cliErr.Hint = "Your API key is missing or invalid.\n" +
-						"  Set:  export HEYGEN_API_KEY=<your-key>\n" +
-						"  Or:   echo \"$KEY\" | heygen auth login\n" +
-						"  Get a key: https://app.heygen.com/settings/api"
+					cliErr.Hint = "Your API key is missing or invalid.\n  " + authFixHint
 				}
 				return err
 			}
