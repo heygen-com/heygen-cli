@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -35,7 +36,35 @@ The env var takes priority over stored credentials.`,
 				return err
 			}
 			if key == "" {
-				return clierrors.NewUsage("no API key provided")
+				isTTY := isStdinTTY(cmd.InOrStdin())
+				envKey := os.Getenv("HEYGEN_API_KEY")
+
+				if !isTTY && envKey != "" {
+					// Non-interactive call with no piped input but env var is set.
+					// Most likely an agent/CI checking that auth is set up.
+					// Surface that env var is being used; suggest persistence path.
+					msg := "HEYGEN_API_KEY is set in your environment — the CLI is using that.\n" +
+						"To save it to disk for future sessions:\n" +
+						"  echo \"$HEYGEN_API_KEY\" | heygen auth login\n" +
+						"Or pipe a different key."
+					fmt.Fprintln(cmd.ErrOrStderr(), msg)
+					data, _ := json.Marshal(map[string]string{
+						"message": "Using HEYGEN_API_KEY from environment. No file written.",
+						"source":  "env",
+					})
+					return ctx.formatter.Data(data, "", nil)
+				}
+
+				if isTTY {
+					return clierrors.NewUsage(
+						"no API key entered — type your key after the prompt, or paste it.",
+					)
+				}
+				return clierrors.NewUsage(
+					"no API key provided on stdin.\n" +
+						"Pipe your key:  echo \"$KEY\" | heygen auth login\n" +
+						"Or set the HEYGEN_API_KEY environment variable.",
+				)
 			}
 
 			store := &auth.FileCredentialStore{}
@@ -54,6 +83,14 @@ The env var takes priority over stored credentials.`,
 			return ctx.formatter.Data(data, "", nil)
 		},
 	}
+}
+
+// isStdinTTY reports whether the given reader is a terminal (TTY).
+func isStdinTTY(in io.Reader) bool {
+	if file, ok := in.(interface{ Fd() uintptr }); ok {
+		return term.IsTerminal(int(file.Fd()))
+	}
+	return false
 }
 
 func readAPIKey(in io.Reader, errOut io.Writer) (string, error) {

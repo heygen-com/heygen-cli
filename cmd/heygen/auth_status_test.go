@@ -61,6 +61,52 @@ func TestAuthStatus_InvalidKey(t *testing.T) {
 	}
 }
 
+// TestAuthStatus_AuthError_AddsHint verifies that a 401 from the API gets the
+// actionable auth hint injected by auth_status.go.
+func TestAuthStatus_AuthError_AddsHint(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/users/me": {
+			StatusCode: 401,
+			Body:       `{"error":{"message":"unauthorized"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "bad-key", "auth", "status")
+
+	if res.ExitCode != clierrors.ExitAuth {
+		t.Fatalf("ExitCode = %d, want %d", res.ExitCode, clierrors.ExitAuth)
+	}
+	if !strings.Contains(res.Stderr, "HEYGEN_API_KEY") {
+		t.Fatalf("stderr = %s, want HEYGEN_API_KEY in hint", res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "heygen auth login") {
+		t.Fatalf("stderr = %s, want heygen auth login in hint", res.Stderr)
+	}
+}
+
+// TestAuthStatus_NonAuthError_NoHintMutation verifies that non-auth errors are
+// not mutated by the auth hint injection in auth_status.go.
+func TestAuthStatus_NonAuthError_NoHintMutation(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/users/me": {
+			StatusCode: 500,
+			Body:       `{"error":{"message":"internal server error"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "auth", "status")
+
+	if res.ExitCode != clierrors.ExitGeneral {
+		t.Fatalf("ExitCode = %d, want %d", res.ExitCode, clierrors.ExitGeneral)
+	}
+	// The hint injected by auth_status.go should NOT appear for non-auth errors.
+	if strings.Contains(res.Stderr, "heygen auth login") {
+		t.Fatalf("stderr = %s, should not contain auth hint for non-auth error", res.Stderr)
+	}
+}
+
 func TestAuthStatus_NoKey(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 

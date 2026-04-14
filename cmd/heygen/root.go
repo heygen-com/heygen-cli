@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/heygen-com/heygen-cli/gen"
@@ -187,8 +188,16 @@ func newCommandGroup(use, short string) *cobra.Command {
 		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
+				var available []string
+				for _, sub := range cmd.Commands() {
+					if !sub.Hidden && sub.Name() != "help" {
+						available = append(available, sub.Name())
+					}
+				}
+				sort.Strings(available)
 				return clierrors.NewUsage(
-					fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath()))
+					fmt.Sprintf("unknown command %q for %q.\nAvailable subcommands: %s",
+						args[0], cmd.CommandPath(), strings.Join(available, ", ")))
 			}
 			return cmd.Help()
 		},
