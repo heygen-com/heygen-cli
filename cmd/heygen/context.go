@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/url"
 	"os"
 
@@ -70,6 +71,12 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 	}
 	apiKey, err := resolver.Resolve()
 	if err != nil {
+		// Enrich cold-start auth errors with the full auth guidance so
+		// first-time users see all three auth methods + the key URL.
+		var cliErr *clierrors.CLIError
+		if errors.As(err, &cliErr) && cliErr.ExitCode == clierrors.ExitAuth {
+			cliErr.Hint = authGuidance
+		}
 		return err
 	}
 

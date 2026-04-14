@@ -118,7 +118,11 @@ func TestAuthStatus_NoKey(t *testing.T) {
 	if !strings.Contains(res.Stderr, `"message":"no API key found"`) {
 		t.Fatalf("stderr = %s, want missing API key message", res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, `"hint":"Set HEYGEN_API_KEY env var or run: heygen auth login"`) {
-		t.Fatalf("stderr = %s, want auth hint", res.Stderr)
+	// context.go enriches cold-start auth errors with authGuidance.
+	if !strings.Contains(res.Stderr, "Three ways to provide your API key") {
+		t.Fatalf("stderr = %s, want auth guidance", res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "app.heygen.com/settings/api") {
+		t.Fatalf("stderr = %s, want key URL in hint", res.Stderr)
 	}
 }

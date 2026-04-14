@@ -28,42 +28,20 @@ func TestAuthLogin_EmptyStdin_NoEnvVar_NonTTY(t *testing.T) {
 }
 
 // TestAuthLogin_EmptyStdin_WithEnvVar_NonTTY verifies that when HEYGEN_API_KEY
-// is set and stdin is empty+non-TTY, the command exits 0, emits the env-var
-// message on stderr, and outputs success JSON on stdout without writing a file.
+// is set but stdin is empty+non-TTY, the command still returns exit 2 with a
+// helpful error. We don't silently exit 0 because Go can't distinguish "no
+// stdin" from "piped empty" (cat /dev/null), which would mask broken automation.
 func TestAuthLogin_EmptyStdin_WithEnvVar_NonTTY(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HEYGEN_CONFIG_DIR", dir)
-
-	// runCommandWithInput sets HEYGEN_API_KEY when apiKey is non-empty, but here
-	// we set it ourselves to simulate the env-var-present non-TTY scenario.
-	// Pass apiKey="" to runCommandWithInput to avoid double-setting; set it via
-	// t.Setenv directly before the call.
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	t.Setenv("HEYGEN_API_KEY", "env-test-key")
 
 	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader(""), "auth", "login")
 
-	if res.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	if res.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-
-	// Stderr should contain informational message about env var.
-	if !strings.Contains(res.Stderr, "HEYGEN_API_KEY") {
-		t.Fatalf("stderr = %q, want env var mention", res.Stderr)
-	}
-
-	// Stdout should be valid JSON with source="env".
-	var parsed map[string]string
-	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
-		t.Fatalf("stdout not valid JSON: %v\nstdout: %s", err, res.Stdout)
-	}
-	if parsed["source"] != "env" {
-		t.Fatalf("source = %q, want %q", parsed["source"], "env")
-	}
-
-	// No credentials file should have been written.
-	credPath := filepath.Join(dir, "credentials")
-	if _, err := os.Stat(credPath); !os.IsNotExist(err) {
-		t.Fatalf("credentials file should not exist, but found at %s", credPath)
+	if !strings.Contains(res.Stderr, "Pipe your key") {
+		t.Fatalf("stderr = %q, want pipe hint", res.Stderr)
 	}
 }
 
