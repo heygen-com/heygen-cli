@@ -146,22 +146,104 @@ func (f *HumanFormatter) renderPrimitiveList(items []any) error {
 }
 
 func (f *HumanFormatter) renderKeyValue(obj map[string]any) error {
-	keys := make([]string, 0, len(obj))
+	return renderNestedKeyValue(f.out, obj, 0)
+}
+
+const maxNestedDepth = 5
+
+func renderNestedKeyValue(w io.Writer, obj map[string]any, indent int) error {
+	prefix := strings.Repeat("  ", indent)
+	keys := sortedKeys(obj)
+
 	maxLabelWidth := 0
-	for key := range obj {
-		keys = append(keys, key)
+	for _, key := range keys {
 		label := humanizeKey(key)
-		if w := lipgloss.Width(label); w > maxLabelWidth {
-			maxLabelWidth = w
+		if lw := lipgloss.Width(label); lw > maxLabelWidth {
+			maxLabelWidth = lw
 		}
 	}
-	sort.Strings(keys)
 
 	for _, key := range keys {
 		label := humanizeKey(key)
 		padding := strings.Repeat(" ", max(0, maxLabelWidth-lipgloss.Width(label)))
-		if _, err := fmt.Fprintf(f.out, "%s:%s  %s\n", label, padding, formatCell(obj[key], key)); err != nil {
-			return err
+		value := obj[key]
+
+		if indent >= maxNestedDepth {
+			if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, formatCell(value, key)); err != nil {
+				return err
+			}
+			continue
+		}
+
+		switch v := value.(type) {
+		case map[string]any:
+			if len(v) == 0 {
+				if _, err := fmt.Fprintf(w, "%s%s:%s  (none)\n", prefix, label, padding); err != nil {
+					return err
+				}
+			} else {
+				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, label); err != nil {
+					return err
+				}
+				if err := renderNestedKeyValue(w, v, indent+1); err != nil {
+					return err
+				}
+			}
+		case []any:
+			if len(v) == 0 {
+				if _, err := fmt.Fprintf(w, "%s%s:%s  (none)\n", prefix, label, padding); err != nil {
+					return err
+				}
+			} else if isScalarArray(v) {
+				if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, formatArrayInline(v)); err != nil {
+					return err
+				}
+			} else {
+				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, label); err != nil {
+					return err
+				}
+				if err := renderArrayOfObjects(w, v, indent+1); err != nil {
+					return err
+				}
+			}
+		default:
+			formatted := formatCell(value, key)
+			if s, ok := value.(string); ok && strings.Contains(s, "\n") {
+				// Multiline string: re-indent continuation lines.
+				valueIndent := prefix + strings.Repeat(" ", lipgloss.Width(label)+len(":  ")+len(padding))
+				lines := strings.Split(formatted, "\n")
+				if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, lines[0]); err != nil {
+					return err
+				}
+				for _, line := range lines[1:] {
+					if _, err := fmt.Fprintf(w, "%s%s\n", valueIndent, line); err != nil {
+						return err
+					}
+				}
+			} else {
+				if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, formatted); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func renderArrayOfObjects(w io.Writer, items []any, indent int) error {
+	prefix := strings.Repeat("  ", indent)
+	for i, item := range items {
+		if obj, ok := item.(map[string]any); ok {
+			if _, err := fmt.Fprintf(w, "%s[%d]\n", prefix, i+1); err != nil {
+				return err
+			}
+			if err := renderNestedKeyValue(w, obj, indent+1); err != nil {
+				return err
+			}
+		} else {
+			if _, err := fmt.Fprintf(w, "%s[%d]  %s\n", prefix, i+1, formatValue(item)); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -249,6 +331,59 @@ func formatTableCell(v any, fieldName string) string {
 	return sanitizeForTable(formatCell(v, fieldName))
 }
 
+// isScalarArray returns true if every element is a non-nil scalar (string, float64, bool).
+func isScalarArray(v []any) bool {
+	for _, elem := range v {
+		switch elem.(type) {
+		case string, float64, bool:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// isFlatMap returns true if every value is a non-nil scalar (string, float64, bool).
+func isFlatMap(m map[string]any) bool {
+	for _, v := range m {
+		switch v.(type) {
+		case string, float64, bool:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// formatArrayInline renders a scalar array as comma-separated values.
+func formatArrayInline(v []any) string {
+	parts := make([]string, len(v))
+	for i, elem := range v {
+		parts[i] = formatValue(elem)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// formatMapInline renders a flat map as sorted key=value pairs.
+func formatMapInline(m map[string]any) string {
+	keys := sortedKeys(m)
+	parts := make([]string, len(keys))
+	for i, key := range keys {
+		parts[i] = key + "=" + formatValue(m[key])
+	}
+	return strings.Join(parts, ", ")
+}
+
+// sortedKeys returns the keys of a map sorted alphabetically.
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func formatValue(v any) string {
 	switch value := v.(type) {
 	case nil:
@@ -259,7 +394,25 @@ func formatValue(v any) string {
 		return strconv.FormatFloat(value, 'f', -1, 64)
 	case bool:
 		return strconv.FormatBool(value)
-	case []any, map[string]any:
+	case []any:
+		if len(value) == 0 {
+			return ""
+		}
+		if isScalarArray(value) {
+			return formatArrayInline(value)
+		}
+		data, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Sprint(value)
+		}
+		return string(data)
+	case map[string]any:
+		if len(value) == 0 {
+			return ""
+		}
+		if isFlatMap(value) {
+			return formatMapInline(value)
+		}
 		data, err := json.Marshal(value)
 		if err != nil {
 			return fmt.Sprint(value)
