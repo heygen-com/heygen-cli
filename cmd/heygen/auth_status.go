@@ -15,13 +15,7 @@ func newAuthStatusCmd(ctx *cmdContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Verify the active API key (env var or stored) and show account info",
-		Long: `Verifies the API key currently in use by calling the HeyGen API.
-
-The CLI resolves the active key in this order:
-  1. ` + authEnvVar + ` environment variable
-  2. ~/.heygen/credentials (set via 'heygen auth login')
-
-Use this command to confirm your auth setup is working before running other commands.`,
+		Long: "Verifies the API key currently in use by calling the HeyGen API.\n\n" + authGuidance,
 		Example: "heygen auth status",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -32,7 +26,7 @@ Use this command to confirm your auth setup is working before running other comm
 			if err != nil {
 				var cliErr *clierrors.CLIError
 				if errors.As(err, &cliErr) && cliErr.ExitCode == clierrors.ExitAuth {
-					cliErr.Hint = "Your API key is missing or invalid.\n  " + authFixHint
+					cliErr.Hint = "Your API key is missing or invalid.\n" + authGuidance
 				}
 				return err
 			}
