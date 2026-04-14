@@ -4,14 +4,15 @@ import "github.com/spf13/cobra"
 
 // authGuidance is the single source of truth for how to set up CLI auth.
 // Referenced by auth_login.go, auth_status.go, and the auth group help below.
-const authGuidance = `Two ways to provide your API key:
+const authGuidance = `Three ways to provide your API key:
   1. Environment variable:
        export HEYGEN_API_KEY=<your-key>
-  2. Stored credential file:
-       echo "$KEY" | heygen auth login    # piped
-       heygen auth login                  # interactive prompt
+  2. Pipe to auth login:
+       echo "$KEY" | heygen auth login
+  3. Interactive prompt:
+       heygen auth login
 
-When both are set, the env var takes priority.
+When both env var and stored credential are set, the env var takes priority.
 
 Get a key: https://app.heygen.com/settings/api`
 
