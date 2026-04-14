@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -383,6 +384,53 @@ func TestHumanFormatter_Data_KeyValue_NestedTimestampAndDuration(t *testing.T) {
 	}
 	if !strings.Contains(got, "2m 5s") {
 		t.Fatalf("durations inside nested objects should be formatted:\n%s", got)
+	}
+}
+
+func TestHumanFormatter_Data_KeyValue_HeterogeneousArray(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	input := json.RawMessage(`{"data":{"items":[null,"hello",42]}}`)
+	if err := f.Data(input, "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	// Heterogeneous arrays with null should fall back to compact JSON
+	if !strings.Contains(got, "null") {
+		t.Fatalf("heterogeneous arrays should preserve null in compact JSON:\n%s", got)
+	}
+	if strings.Contains(got, "[1]") {
+		t.Fatalf("heterogeneous arrays should not be expanded as numbered entries:\n%s", got)
+	}
+}
+
+func TestHumanFormatter_Data_KeyValue_DepthGuardUsesCompactJSON(t *testing.T) {
+	// Build a deeply nested object that exceeds maxNestedDepth (5).
+	// depth0 -> depth1 -> depth2 -> depth3 -> depth4 -> depth5 -> {leaf: "val", empty: []}
+	inner := map[string]any{"leaf": "val", "empty": []any{}}
+	obj := inner
+	for i := 0; i < 5; i++ {
+		obj = map[string]any{fmt.Sprintf("depth%d", 5-i): obj}
+	}
+
+	data, _ := json.Marshal(map[string]any{"data": obj})
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	if err := f.Data(json.RawMessage(data), "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	// At depth 5, individual fields are rendered with compactJSON.
+	// String values get JSON-quoted, empty arrays show as [].
+	if !strings.Contains(got, `"val"`) {
+		t.Fatalf("depth guard should render strings as compact JSON:\n%s", got)
+	}
+	if !strings.Contains(got, `[]`) {
+		t.Fatalf("depth guard should preserve empty arrays as [], not blank:\n%s", got)
 	}
 }
 

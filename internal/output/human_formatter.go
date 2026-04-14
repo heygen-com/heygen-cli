@@ -169,7 +169,7 @@ func renderNestedKeyValue(w io.Writer, obj map[string]any, indent int) error {
 		value := obj[key]
 
 		if indent >= maxNestedDepth {
-			if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, formatCell(value, key)); err != nil {
+			if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, compactJSON(value)); err != nil {
 				return err
 			}
 			continue
@@ -198,11 +198,16 @@ func renderNestedKeyValue(w io.Writer, obj map[string]any, indent int) error {
 				if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, formatArrayInline(v)); err != nil {
 					return err
 				}
-			} else {
+			} else if isObjectArray(v) {
 				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, label); err != nil {
 					return err
 				}
 				if err := renderArrayOfObjects(w, v, indent+1); err != nil {
+					return err
+				}
+			} else {
+				// Heterogeneous or mixed array: compact JSON fallback.
+				if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, compactJSON(v)); err != nil {
 					return err
 				}
 			}
@@ -329,6 +334,28 @@ func formatCell(v any, fieldName string) string {
 
 func formatTableCell(v any, fieldName string) string {
 	return sanitizeForTable(formatCell(v, fieldName))
+}
+
+// isObjectArray returns true if every element is a map[string]any.
+func isObjectArray(v []any) bool {
+	for _, elem := range v {
+		if _, ok := elem.(map[string]any); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// compactJSON marshals a value to compact JSON, returning "" for nil.
+func compactJSON(v any) string {
+	if v == nil {
+		return ""
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprint(v)
+	}
+	return string(data)
 }
 
 // isScalarArray returns true if every element is a non-nil scalar (string, float64, bool).
