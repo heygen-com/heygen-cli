@@ -149,7 +149,10 @@ func (f *HumanFormatter) renderKeyValue(obj map[string]any) error {
 	return renderNestedKeyValue(f.out, obj, 0)
 }
 
-const maxNestedDepth = 5
+const (
+	maxNestedDepth = 5
+	kvSeparator    = ":  " // label-value separator in key-value output
+)
 
 func renderNestedKeyValue(w io.Writer, obj map[string]any, indent int) error {
 	prefix := strings.Repeat("  ", indent)
@@ -215,7 +218,7 @@ func renderNestedKeyValue(w io.Writer, obj map[string]any, indent int) error {
 			formatted := formatCell(value, key)
 			if s, ok := value.(string); ok && strings.Contains(s, "\n") {
 				// Multiline string: re-indent continuation lines.
-				valueIndent := prefix + strings.Repeat(" ", lipgloss.Width(label)+len(":  ")+len(padding))
+				valueIndent := prefix + strings.Repeat(" ", lipgloss.Width(label)+len(kvSeparator)+len(padding))
 				lines := strings.Split(formatted, "\n")
 				if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, lines[0]); err != nil {
 					return err
@@ -239,6 +242,12 @@ func renderArrayOfObjects(w io.Writer, items []any, indent int) error {
 	prefix := strings.Repeat("  ", indent)
 	for i, item := range items {
 		if obj, ok := item.(map[string]any); ok {
+			// Blank line between entries with 3+ fields for scannability.
+			if i > 0 && len(obj) > 2 {
+				if _, err := fmt.Fprintln(w); err != nil {
+					return err
+				}
+			}
 			if _, err := fmt.Fprintf(w, "%s[%d]\n", prefix, i+1); err != nil {
 				return err
 			}
@@ -337,6 +346,7 @@ func formatTableCell(v any, fieldName string) string {
 }
 
 // isObjectArray returns true if every element is a map[string]any.
+// Returns true for empty slices (vacuous truth); callers check len first.
 func isObjectArray(v []any) bool {
 	for _, elem := range v {
 		if _, ok := elem.(map[string]any); !ok {
@@ -359,6 +369,7 @@ func compactJSON(v any) string {
 }
 
 // isScalarArray returns true if every element is a non-nil scalar (string, float64, bool).
+// Returns true for empty slices (vacuous truth); callers check len first.
 func isScalarArray(v []any) bool {
 	for _, elem := range v {
 		switch elem.(type) {
@@ -392,6 +403,7 @@ func formatArrayInline(v []any) string {
 }
 
 // formatMapInline renders a flat map as sorted key=value pairs.
+// Uses raw JSON keys (not humanizeKey) for compactness in table cells.
 func formatMapInline(m map[string]any) string {
 	keys := sortedKeys(m)
 	parts := make([]string, len(keys))
