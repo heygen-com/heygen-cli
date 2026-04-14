@@ -36,7 +36,7 @@ The env var takes priority over stored credentials.`,
 				return err
 			}
 			if key == "" {
-				isTTY := isStdinTTY(cmd.InOrStdin())
+				isTTY := stdinIsTerminalFunc()
 				envKey := os.Getenv("HEYGEN_API_KEY")
 
 				if !isTTY && envKey != "" {
@@ -85,13 +85,6 @@ The env var takes priority over stored credentials.`,
 	}
 }
 
-// isStdinTTY reports whether the given reader is a terminal (TTY).
-func isStdinTTY(in io.Reader) bool {
-	if file, ok := in.(interface{ Fd() uintptr }); ok {
-		return term.IsTerminal(int(file.Fd()))
-	}
-	return false
-}
 
 func readAPIKey(in io.Reader, errOut io.Writer) (string, error) {
 	if file, ok := in.(interface{ Fd() uintptr }); ok && term.IsTerminal(int(file.Fd())) {
