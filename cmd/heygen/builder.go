@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -54,7 +55,13 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 			defer restoreRequiredFlagAnnotations(cmd)
 
 			if show, schema := requestedSchema(cmd, spec); show {
-				_, err := fmt.Fprintln(cmd.OutOrStdout(), schema)
+				var buf bytes.Buffer
+				if err := json.Compact(&buf, []byte(schema)); err != nil {
+					// Fallback: print as-is if compact fails.
+					_, err = fmt.Fprintln(cmd.OutOrStdout(), schema)
+					return err
+				}
+				_, err := fmt.Fprintln(cmd.OutOrStdout(), buf.String())
 				return err
 			}
 

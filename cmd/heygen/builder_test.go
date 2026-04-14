@@ -44,6 +44,14 @@ var videoCreateWaitSpec = &command.Spec{
 	Examples:     []string{"heygen video create --wait"},
 }
 
+func compactSchema(s string) string {
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, []byte(s)); err != nil {
+		return s
+	}
+	return buf.String()
+}
+
 var videoCreateSchemaSpec = &command.Spec{
 	Group:          "video",
 	Name:           "create",
@@ -184,7 +192,7 @@ func TestGenBuilder_VideoCreate_RequestSchema(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if res.Stdout != videoCreateSchemaSpec.RequestSchema+"\n" {
+	if res.Stdout != compactSchema(videoCreateSchemaSpec.RequestSchema)+"\n" {
 		t.Fatalf("stdout = %q, want request schema", res.Stdout)
 	}
 	if res.Stderr != "" {
@@ -198,7 +206,7 @@ func TestGenBuilder_VideoGet_ResponseSchema(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if res.Stdout != videoGetSchemaSpec.ResponseSchema+"\n" {
+	if res.Stdout != compactSchema(videoGetSchemaSpec.ResponseSchema)+"\n" {
 		t.Fatalf("stdout = %q, want response schema", res.Stdout)
 	}
 }
@@ -220,7 +228,7 @@ func TestGenBuilder_VideoCreate_SchemaSkipsAuth(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if res.Stdout != videoCreateSchemaSpec.ResponseSchema+"\n" {
+	if res.Stdout != compactSchema(videoCreateSchemaSpec.ResponseSchema)+"\n" {
 		t.Fatalf("stdout = %q, want response schema", res.Stdout)
 	}
 }
@@ -231,7 +239,7 @@ func TestGenBuilder_SchemaBypassesRequiredFlags(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if res.Stdout != videoTranslateSchemaSpec.RequestSchema+"\n" {
+	if res.Stdout != compactSchema(videoTranslateSchemaSpec.RequestSchema)+"\n" {
 		t.Fatalf("stdout = %q, want request schema", res.Stdout)
 	}
 	if res.Stderr != "" {
@@ -245,7 +253,7 @@ func TestGenBuilder_SchemaBypassesArgs(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if res.Stdout != webhookEndpointUpdateSchemaSpec.RequestSchema+"\n" {
+	if res.Stdout != compactSchema(webhookEndpointUpdateSchemaSpec.RequestSchema)+"\n" {
 		t.Fatalf("stdout = %q, want request schema", res.Stdout)
 	}
 	if res.Stderr != "" {
