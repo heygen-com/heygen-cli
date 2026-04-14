@@ -7,13 +7,13 @@ func newAuthCmd(ctx *cmdContext) *cobra.Command {
 	cmd.Long = `Manage how the CLI authenticates with the HeyGen API.
 
 Two ways to provide your API key:
-  1. Environment variable (preferred for CI/agents/ephemeral shells):
+  1. Environment variable:
        export HEYGEN_API_KEY=<your-key>
-  2. Stored credential file (preferred for human users):
+  2. Stored credential file:
        echo "$KEY" | heygen auth login    # piped
        heygen auth login                  # interactive prompt
 
-The env var takes priority over the stored file when both are set.
+When both are set, the env var takes priority.
 
 Get a key: https://app.heygen.com/settings/api`
 	cmd.AddCommand(newAuthLoginCmd(ctx))
