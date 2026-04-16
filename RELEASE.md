@@ -31,18 +31,51 @@ gh workflow run dev-release.yml
 
 ## How to Cut a Stable Release
 
-1. Make sure `main` is ready for a stable cut.
-2. Trigger the GitHub Actions workflow:
+### Pre-release checklist
+
+1. **Review commits since last stable.** Check what's new and confirm nothing is half-finished:
+   ```bash
+   git log $(gh release view --json tagName -q .tagName)..origin/main --oneline
+   ```
+2. **Check open PRs.** Decide if any should merge first (e.g. pending codegen resyncs, small fixes):
+   ```bash
+   gh pr list --state open
+   ```
+3. **Confirm CI is green on main.** All checks should pass on the latest commit.
+4. **Pick the version number.** Check the last stable tag and bump according to the rules below:
+   - Patch (`v0.0.x`) for bug fixes, UX polish, codegen resyncs, and additive schema changes.
+   - Minor (`v0.x.0`) for new command groups or significant new capabilities.
+   ```bash
+   gh release list --limit 3
+   ```
+
+### Trigger the release
+
+From the CLI:
 
 ```bash
-gh workflow run release-stable.yml -f version=v0.1.0
+gh workflow run release-stable.yml -f version=v0.0.5
 ```
 
-3. The workflow validates the version, creates the tag on `main`, and
-   publishes the stable release artifacts via GoReleaser, then uploads the
-   installer, checksums, and platform archives to S3 for CDN-backed installs.
-   CDN propagation takes up to 1 minute for the version pointer and 5 minutes
-   for the install script.
+Or from the GitHub Actions UI: go to **Actions > Stable Release > Run workflow**, enter the version tag, and click **Run workflow**.
+
+### Post-release
+
+The workflow validates the version, creates the tag on `main`, and
+publishes the stable release artifacts via GoReleaser, then uploads the
+installer, checksums, and platform archives to S3 for CDN-backed installs.
+CDN propagation takes up to 1 minute for the version pointer and 5 minutes
+for the install script.
+
+5. **Verify the release was published:**
+   ```bash
+   gh release view v0.0.5
+   ```
+6. **Verify the install script picks up the new version** (after CDN propagation):
+   ```bash
+   curl -fsSL https://static.heygen.ai/cli/install.sh | bash
+   heygen --version
+   ```
 
 ## Version Scheme
 
