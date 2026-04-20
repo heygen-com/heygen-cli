@@ -15,6 +15,7 @@ func main() {
 	specPath := flag.String("spec", "", "Path to OpenAPI JSON spec")
 	outDir := flag.String("out", "gen/", "Output directory for generated files")
 	examplesPath := flag.String("examples", "", "Path to examples YAML file or directory")
+	strict := flag.Bool("strict", false, "Fail on missing examples (use in CI)")
 	flag.Parse()
 
 	if *specPath == "" {
@@ -50,9 +51,15 @@ func main() {
 	}
 
 	// Step 4: Validate that all commands have examples
-	if err := validateExamples(groups); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+	warnings := validateExamples(groups)
+	if len(warnings) > 0 {
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+		}
+		if *strict {
+			fmt.Fprintf(os.Stderr, "error: %d command(s) missing examples (strict mode)\n", len(warnings))
+			os.Exit(1)
+		}
 	}
 
 	// Step 5: Generate Go source files
@@ -62,16 +69,20 @@ func main() {
 	}
 
 	fmt.Printf("Generated %d command groups into %s\n", len(groups), *outDir)
+	if len(warnings) > 0 {
+		fmt.Fprintf(os.Stderr, "%d command(s) missing examples — add to codegen/examples/\n", len(warnings))
+	}
 }
 
-// validateExamples ensures every command has at least one example.
-func validateExamples(groups command.Groups) error {
+// validateExamples returns a warning for each command missing examples.
+func validateExamples(groups command.Groups) []string {
+	var warnings []string
 	for _, specs := range groups {
 		for _, spec := range specs {
 			if len(spec.Examples) == 0 {
-				return fmt.Errorf("missing examples for %s %s (add to codegen/examples/)", spec.Method, spec.Endpoint)
+				warnings = append(warnings, fmt.Sprintf("missing examples for %s %s (add to codegen/examples/)", spec.Method, spec.Endpoint))
 			}
 		}
 	}
-	return nil
+	return warnings
 }
