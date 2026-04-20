@@ -20,5 +20,5 @@ clean:
 
 generate:
 	@find gen/ -name '*.go' -delete 2>/dev/null || true
-	go run ./codegen/ -spec $(SPEC) -out gen/ -examples codegen/examples/
+	go run ./codegen/ -spec $(SPEC) -out gen/ -examples codegen/examples/ $(if $(filter 1,$(STRICT)),-strict)
 	gofmt -w gen/

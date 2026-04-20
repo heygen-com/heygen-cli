@@ -99,8 +99,19 @@ func TestValidateExamplesMissing(t *testing.T) {
 		"test": {{Method: "GET", Endpoint: "/v3/test"}},
 	}
 
-	err := validateExamples(groups)
-	if err == nil {
-		t.Error("expected error for missing examples")
+	warnings := validateExamples(groups)
+	if len(warnings) == 0 {
+		t.Error("expected warnings for missing examples")
+	}
+}
+
+func TestValidateExamplesPresent(t *testing.T) {
+	groups := command.Groups{
+		"test": {{Method: "GET", Endpoint: "/v3/test", Examples: []string{"heygen test list"}}},
+	}
+
+	warnings := validateExamples(groups)
+	if len(warnings) != 0 {
+		t.Errorf("expected no warnings, got %d: %v", len(warnings), warnings)
 	}
 }
