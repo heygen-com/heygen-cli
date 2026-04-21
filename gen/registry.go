@@ -40,6 +40,7 @@ var Groups = map[string][]*command.Spec{
 	"video-agent": {
 		VideoAgentCreate,
 		VideoAgentGet,
+		VideoAgentList,
 		VideoAgentResourcesGet,
 		VideoAgentSend,
 		VideoAgentStop,
