@@ -141,7 +141,7 @@ var WidgetList = &command.Spec{
 	Name:           "list",
 	Summary:        "List widgets",
 	Description:    "",
-	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"properties\": {},\n        \"required\": [],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"type\": \"string|null\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"properties\": {},\n        \"required\": [],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
 	Endpoint:       "/v3/widgets",
 	Method:         "GET",
 	BodyEncoding:   "",

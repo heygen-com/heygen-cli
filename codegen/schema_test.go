@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -86,6 +87,51 @@ func TestResolveSchema_NullableFields(t *testing.T) {
 	}
 	if got["description"] != "optional name" {
 		t.Fatalf("description = %v, want optional name", got["description"])
+	}
+}
+
+func TestResolveSchema_NullableTypeArray(t *testing.T) {
+	schema := &openapi3.Schema{
+		Type:        &openapi3.Types{"string", "null"},
+		Description: "cursor token",
+	}
+
+	got := resolveSchema(openapi3.NewSchemaRef("", schema), map[string]bool{})
+
+	if got["type"] != "string" {
+		t.Fatalf("type = %v, want string", got["type"])
+	}
+	if got["nullable"] != true {
+		t.Fatalf("nullable = %v, want true", got["nullable"])
+	}
+	if got["description"] != "cursor token" {
+		t.Fatalf("description = %v, want cursor token", got["description"])
+	}
+}
+
+func TestResolveSchema_ObjectWithNullableTypeArrayField(t *testing.T) {
+	root := openapi3.NewObjectSchema().
+		WithProperty("has_more", openapi3.NewBoolSchema()).
+		WithRequired([]string{"has_more"})
+	root.Properties["next_token"] = openapi3.NewSchemaRef("", &openapi3.Schema{
+		Type:        &openapi3.Types{"string", "null"},
+		Description: "Opaque cursor for the next page",
+	})
+
+	got := resolveSchema(openapi3.NewSchemaRef("", root), map[string]bool{})
+	properties := got["properties"].(map[string]any)
+	nextToken := properties["next_token"].(map[string]any)
+
+	if nextToken["type"] != "string" {
+		t.Fatalf("next_token.type = %v, want string", nextToken["type"])
+	}
+	if nextToken["nullable"] != true {
+		t.Fatalf("next_token.nullable = %v, want true", nextToken["nullable"])
+	}
+
+	j := schemaJSON(openapi3.NewSchemaRef("", root))
+	if strings.Contains(j, "string|null") {
+		t.Fatalf("schemaJSON contains invalid 'string|null':\n%s", j)
 	}
 }
 
