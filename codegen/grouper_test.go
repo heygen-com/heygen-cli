@@ -137,6 +137,27 @@ func TestGroupEndpoints_BodyFlagsSkipComplex(t *testing.T) {
 	}
 }
 
+func TestGroupEndpoints_BodyFlagsSkipHiddenFields(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	examples := loadTestExamples(t)
+	groups, _, err := GroupEndpoints(doc, examples)
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	for _, s := range groups["video"] {
+		if s.Name != "create" {
+			continue
+		}
+		for _, flag := range s.Flags {
+			if flag.JSONName == "watermark_s3_key" {
+				t.Error("x-cli-visible=false field 'watermark_s3_key' should not be a flag")
+			}
+		}
+		return
+	}
+	t.Error("video create not found")
+}
+
 func TestGroupEndpoints_Schemas(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)
