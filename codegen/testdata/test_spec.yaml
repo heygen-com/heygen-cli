@@ -77,6 +77,10 @@ paths:
                   description: Video quality (1-100)
                   minimum: 1
                   maximum: 100
+                watermark_s3_key:
+                  type: string
+                  description: Internal watermark asset key
+                  x-cli-visible: false
                 tags:
                   type: array
                   items:

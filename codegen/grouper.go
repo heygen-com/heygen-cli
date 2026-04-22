@@ -221,7 +221,7 @@ func buildSpec(
 		if schema := bodySchema(op, contentType); schema != nil {
 			for _, name := range sortedMapKeys(schema.Properties) {
 				propRef := schema.Properties[name]
-				if propRef == nil || propRef.Value == nil {
+				if propRef == nil || propRef.Value == nil || !isSchemaCliVisible(propRef) {
 					continue
 				}
 				spec.Flags = append(spec.Flags, command.FlagSpec{
@@ -242,7 +242,7 @@ func buildSpec(
 		}
 		for _, name := range sortedMapKeys(schema.Properties) {
 			propRef := schema.Properties[name]
-			if propRef == nil || propRef.Value == nil {
+			if propRef == nil || propRef.Value == nil || !isSchemaCliVisible(propRef) {
 				continue
 			}
 			prop := propRef.Value
@@ -337,6 +337,18 @@ func isCliVisible(op *openapi3.Operation) bool {
 		}
 	}
 	return true // default: visible
+}
+
+func isSchemaCliVisible(ref *openapi3.SchemaRef) bool {
+	if ref == nil || ref.Value == nil {
+		return true
+	}
+	if vis, ok := ref.Value.Extensions["x-cli-visible"]; ok {
+		if b, ok := vis.(bool); ok {
+			return b
+		}
+	}
+	return true
 }
 
 func isCliAction(op *openapi3.Operation) bool {

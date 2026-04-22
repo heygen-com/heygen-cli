@@ -5,6 +5,9 @@
     cmd: "heygen video-agent create --prompt 'Product launch' --avatar-id <avatar-id> --voice-id <voice-id> --wait"
   - desc: "Create with JSON body"
     cmd: "heygen video-agent create -d '{\"prompt\":\"Make a product demo\"}' --wait"
+"GET /v3/video-agents":
+  - desc: "List recent video-agent sessions"
+    cmd: "heygen video-agent list --limit 10"
 "GET /v3/video-agents/styles":
   - desc: "Browse available video styles"
     cmd: "heygen video-agent styles list"
