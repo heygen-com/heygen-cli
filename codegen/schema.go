@@ -97,8 +97,12 @@ func resolveSchemaValue(schema *openapi3.Schema, seen map[string]bool) map[strin
 			resolved["items"] = resolveSchema(schema.Items, seen)
 		}
 	default:
-		if schemaType := schemaTypeName(schema); schemaType != "" {
-			resolved["type"] = schemaType
+		typeName, hasNull := schemaTypeName(schema)
+		if typeName != "" {
+			resolved["type"] = typeName
+		}
+		if hasNull {
+			resolved["nullable"] = true
 		}
 	}
 
@@ -174,15 +178,20 @@ func isNullSchema(ref *openapi3.SchemaRef) bool {
 	return ref != nil && ref.Value != nil && ref.Value.Type != nil && ref.Value.Type.Is("null")
 }
 
-func schemaTypeName(schema *openapi3.Schema) string {
+func schemaTypeName(schema *openapi3.Schema) (typeName string, hasNull bool) {
 	if schema == nil || schema.Type == nil {
-		return ""
+		return "", false
 	}
-	types := schema.Type.Slice()
-	if len(types) == 0 {
-		return ""
+	for _, t := range schema.Type.Slice() {
+		if t == "null" {
+			hasNull = true
+			continue
+		}
+		if typeName == "" {
+			typeName = t
+		}
 	}
-	return strings.Join(types, "|")
+	return typeName, hasNull
 }
 
 func schemaNameFromRef(ref string) string {
