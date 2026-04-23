@@ -77,6 +77,7 @@ sufficient data for meaningful get/detail coverage.
 ./bin/heygen video-agent videos list <session-id>
 ./bin/heygen video-translate get <id>          # .data[0].id from video-translate list
 ./bin/heygen lipsync get <id>                  # .data[0].id from lipsync list
+./bin/heygen voice get <voice-id>              # .data[0].voice_id from voice list
 ```
 
 For `video-agent resources get`: first run `./bin/heygen video-agent get <session-id>`,

@@ -49,6 +49,7 @@ gh workflow run dev-release.yml
    ```bash
    gh release list --limit 3
    ```
+6. **Generate changelog.** Run `/changelog-cli v0.x.y` in Claude Code. Review the output and save it for the release notes.
 
 ### Trigger the release
 
