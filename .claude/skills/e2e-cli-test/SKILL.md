@@ -65,7 +65,9 @@ Save the JSON output from each -- Phase 3 will extract IDs from these results.
 
 For each command below, extract the required ID from the corresponding Phase 2
 list result. If a list returned an empty `.data` array, skip that detail command
-and mark it as SKIPPED (not FAIL).
+and mark it as SKIPPED (not FAIL). If more than half of the detail commands are
+skipped, mark the phase as WARN and print a warning that the account lacks
+sufficient data for meaningful get/detail coverage.
 
 ```bash
 ./bin/heygen video get <video-id>              # .data[0].id from video list
@@ -142,17 +144,18 @@ This phase must always clean up, even on failure.
 - If status reaches `failed` or never reaches `completed`, mark the phase as FAIL
 
 ```bash
-# Download the completed video
-./bin/heygen video download <video_id> --output-path /tmp/e2e-test-video.mp4
+# Download the completed video (use a unique temp path to avoid collisions)
+DOWNLOAD_PATH="/tmp/e2e-cli-test-$$-$(date +%s).mp4"
+./bin/heygen video download <video_id> --output-path "$DOWNLOAD_PATH" --force
 ```
 
 - Assert exit 0, stdout is valid JSON with a `.path` field
-- Assert the file exists at `/tmp/e2e-test-video.mp4` with non-zero size
+- Assert the file exists at `$DOWNLOAD_PATH` with non-zero size
 
 ```bash
 # Cleanup (unconditional -- always runs if video_id was extracted)
-./bin/heygen video delete <video_id>
-rm -f /tmp/e2e-test-video.mp4
+./bin/heygen video delete <video_id> --force
+rm -f "$DOWNLOAD_PATH"
 ```
 
 ### Step 9: Report
@@ -164,7 +167,7 @@ Phase                    Result
 -----                    ------
 1. Auth and account      PASS
 2. List commands         PASS (12/12)
-3. Get/detail commands   PASS (6/7, 1 skipped)
+3. Get/detail commands   PASS (6/7, 1 skipped)   # or WARN if >50% skipped
 4. --human output        PASS
 5. Schema introspection  PASS
 6. Error handling        PASS
