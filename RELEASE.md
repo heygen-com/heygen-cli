@@ -42,7 +42,8 @@ gh workflow run dev-release.yml
    gh pr list --state open
    ```
 3. **Confirm CI is green on main.** All checks should pass on the latest commit.
-4. **Pick the version number.** Check the last stable tag and bump according to the rules below:
+4. **Run E2E smoke test.** With `HEYGEN_API_KEY` set, run `/e2e-cli-test` in Claude Code from the repo root. Confirm all phases pass. This builds the binary and exercises it against the live API (costs a small number of credits).
+5. **Pick the version number.** Check the last stable tag and bump according to the rules below:
    - Patch (`v0.0.x`) for bug fixes, UX polish, codegen resyncs, and additive schema changes.
    - Minor (`v0.x.0`) for new command groups or significant new capabilities.
    ```bash

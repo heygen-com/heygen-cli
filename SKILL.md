@@ -72,6 +72,12 @@ heygen video get --response-schema
 - **stderr**: JSON error envelope on failure: `{"error":{"code":"...","message":"...","hint":"..."}}`
 - Do not pass `--human`. It produces unstructured text that cannot be parsed.
 
+## Pre-Release E2E Testing
+
+Run `/e2e-cli-test` in Claude Code before cutting a stable release. It builds the binary and exercises `./bin/heygen` against the live API across 7 phases: auth, list commands, get/detail commands, `--human` output, schema introspection, error handling, and the full create-poll-download-delete write path. Requires `HEYGEN_API_KEY` and spends a small number of credits.
+
+Phase 4 intentionally uses `--human` to validate table formatting. This is an exception to the "do not pass `--human`" rule in the Output Contract section above, which applies to agents consuming CLI output for downstream processing.
+
 ## Notes
 
 - The CLI retries transient errors (429, 5xx) automatically.
