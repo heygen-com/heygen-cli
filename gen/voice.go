@@ -4,6 +4,60 @@ package gen
 
 import "github.com/heygen-com/heygen-cli/internal/command"
 
+var VoiceCloneCreate = &command.Spec{
+	Group:          "voice",
+	Name:           "clone create",
+	Summary:        "Clone a Voice",
+	Description:    "Creates a voice clone from an audio file. Returns a voice_clone_id that can be polled via GET /v3/voices/{voice_clone_id} until the status is 'complete'. The resulting voice can be used with POST /v3/voices/speech and POST /v3/videos.",
+	RequestSchema:  "{\n  \"description\": \"Request body for POST /v3/voices/clone.\",\n  \"properties\": {\n    \"audio\": {\n      \"description\": \"Audio file for voice cloning. Provide as {type: 'url', url: '...'}, {type: 'asset_id', asset_id: '...'}, or {type: 'base64', media_type: '...', data: '...'}.\",\n      \"discriminator\": {\n        \"mapping\": {\n          \"asset_id\": \"#/components/schemas/AssetId\",\n          \"base64\": \"#/components/schemas/AssetBase64\",\n          \"url\": \"#/components/schemas/AssetUrl\"\n        },\n        \"propertyName\": \"type\"\n      },\n      \"oneOf\": [\n        {\n          \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n          \"properties\": {\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            },\n            \"url\": {\n              \"description\": \"Publicly accessible HTTPS URL for the asset\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"url\"\n          ],\n          \"type\": \"object\"\n        },\n        {\n          \"description\": \"Asset input via HeyGen asset ID from the asset upload endpoint.\",\n          \"properties\": {\n            \"asset_id\": {\n              \"description\": \"HeyGen asset ID from the asset upload endpoint\",\n              \"type\": \"string\"\n            },\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"asset_id\"\n          ],\n          \"type\": \"object\"\n        },\n        {\n          \"description\": \"Asset input via base64-encoded content.\",\n          \"properties\": {\n            \"data\": {\n              \"description\": \"Base64-encoded file content\",\n              \"type\": \"string\"\n            },\n            \"media_type\": {\n              \"description\": \"MIME type of the encoded content (e.g. \\\"image/png\\\")\",\n              \"type\": \"string\"\n            },\n            \"type\": {\n              \"description\": \"Input type discriminator\",\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"type\",\n            \"media_type\",\n            \"data\"\n          ],\n          \"type\": \"object\"\n        }\n      ]\n    },\n    \"language\": {\n      \"description\": \"Language hint for the voice (e.g., 'en', 'es'). Auto-detected if omitted.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"remove_background_noise\": {\n      \"default\": true,\n      \"description\": \"Remove background noise from the audio before cloning.\",\n      \"type\": \"boolean\"\n    },\n    \"voice_name\": {\n      \"description\": \"Display name for the cloned voice.\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"audio\",\n    \"voice_name\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for POST /v3/voices/clone.\",\n      \"properties\": {\n        \"voice_clone_id\": {\n          \"description\": \"Voice clone ID. Use GET /v3/voices/{voice_clone_id} to poll status.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"voice_clone_id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/voices/clone",
+	Method:         "POST",
+	BodyEncoding:   "json",
+	Examples: []string{
+		"# Clone a voice from a URL\n  heygen voice clone create --voice-name 'My Clone' -d '{\"audio\":{\"type\":\"url\",\"url\":\"https://example.com/sample.mp3\"}}'",
+		"# Clone from an uploaded asset\n  heygen voice clone create --voice-name 'My Clone' -d '{\"audio\":{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}}'",
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "language",
+			Type:     "string",
+			Default:  "",
+			Help:     "Language hint for the voice (e.g., 'en', 'es'). Auto-detected if omitted.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "language",
+		},
+		{
+			Name:     "remove-background-noise",
+			Type:     "bool",
+			Default:  "true",
+			Help:     "Remove background noise from the audio before cloning.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "remove_background_noise",
+		},
+		{
+			Name:     "voice-name",
+			Type:     "string",
+			Default:  "",
+			Help:     "Display name for the cloned voice.",
+			Required: true,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "voice_name",
+		},
+	},
+}
+
 var VoiceCreate = &command.Spec{
 	Group:          "voice",
 	Name:           "create",
@@ -70,12 +124,30 @@ var VoiceCreate = &command.Spec{
 	},
 }
 
+var VoiceGet = &command.Spec{
+	Group:          "voice",
+	Name:           "get",
+	Summary:        "Get Voice",
+	Description:    "Returns details for a specific voice, including clone workflow status when available. Use this to poll a voice clone until its status is 'complete'.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response payload for GET /v3/voices/{voice_id}.\",\n      \"properties\": {\n        \"created_at\": {\n          \"description\": \"Unix timestamp when the voice was created.\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"failure_message\": {\n          \"description\": \"Error description. Only present when status is 'failed'.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"gender\": {\n          \"description\": \"Gender of the voice (e.g., 'male', 'female'). Only present when the voice record exists.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"language\": {\n          \"description\": \"Primary language of the voice. Only present when the voice record exists.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"name\": {\n          \"description\": \"Display name of the voice. Only present when the voice record exists.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"preview_audio_url\": {\n          \"description\": \"URL to a short preview audio clip. Only present for completed voices.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"description\": \"Clone status. Only present for cloned voices.\",\n          \"enum\": [\n            \"processing\",\n            \"complete\",\n            \"failed\"\n          ],\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"support_interactive_avatar\": {\n          \"default\": false,\n          \"description\": \"Whether the voice supports interactive avatar streaming.\",\n          \"type\": \"boolean\"\n        },\n        \"support_pause\": {\n          \"description\": \"Whether the voice supports SSML pause/break tags.\",\n          \"type\": \"boolean\"\n        },\n        \"voice_id\": {\n          \"description\": \"Unique voice identifier.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"voice_id\",\n        \"support_pause\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/voices/{voice_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Examples: []string{
+		"# Get voice details\n  heygen voice get <voice-id>",
+		"# Poll a voice clone until complete\n  heygen voice get <voice-clone-id>",
+	},
+	Args: []command.ArgSpec{
+		{Name: "voice-id", Param: "voice_id", Help: ""},
+	},
+}
+
 var VoiceList = &command.Spec{
 	Group:          "voice",
 	Name:           "list",
 	Summary:        "List Voices",
 	Description:    "Returns a paginated list of voices, filterable by type, engine, language, and gender. Use engine=starfish for voices compatible with the TTS endpoint.",
-	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"description\": \"A single voice in the listing response.\",\n        \"properties\": {\n          \"gender\": {\n            \"description\": \"Gender of the voice.\",\n            \"type\": \"string\"\n          },\n          \"language\": {\n            \"description\": \"Primary language of the voice.\",\n            \"type\": \"string\"\n          },\n          \"name\": {\n            \"description\": \"Display name of the voice.\",\n            \"type\": \"string\"\n          },\n          \"preview_audio_url\": {\n            \"description\": \"URL to a short audio preview of the voice.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"support_locale\": {\n            \"description\": \"Whether the voice supports locale variants.\",\n            \"type\": \"boolean\"\n          },\n          \"support_pause\": {\n            \"description\": \"Whether the voice supports SSML pause/break tags.\",\n            \"type\": \"boolean\"\n          },\n          \"type\": {\n            \"enum\": [\n              \"public\",\n              \"private\"\n            ],\n            \"type\": \"string\"\n          },\n          \"voice_id\": {\n            \"description\": \"Unique voice identifier.\",\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"voice_id\",\n          \"name\",\n          \"language\",\n          \"gender\",\n          \"support_pause\",\n          \"support_locale\",\n          \"type\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"type\": \"string|null\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"description\": \"A single voice in the listing response.\",\n        \"properties\": {\n          \"gender\": {\n            \"description\": \"Gender of the voice.\",\n            \"type\": \"string\"\n          },\n          \"language\": {\n            \"description\": \"Primary language of the voice.\",\n            \"type\": \"string\"\n          },\n          \"name\": {\n            \"description\": \"Display name of the voice.\",\n            \"type\": \"string\"\n          },\n          \"preview_audio_url\": {\n            \"description\": \"URL to a short audio preview of the voice.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"support_locale\": {\n            \"description\": \"Whether the voice supports locale variants.\",\n            \"type\": \"boolean\"\n          },\n          \"support_pause\": {\n            \"description\": \"Whether the voice supports SSML pause/break tags.\",\n            \"type\": \"boolean\"\n          },\n          \"type\": {\n            \"enum\": [\n              \"public\",\n              \"private\"\n            ],\n            \"type\": \"string\"\n          },\n          \"voice_id\": {\n            \"description\": \"Unique voice identifier.\",\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"voice_id\",\n          \"name\",\n          \"language\",\n          \"gender\",\n          \"support_pause\",\n          \"support_locale\",\n          \"type\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
 	Endpoint:       "/v3/voices",
 	Method:         "GET",
 	BodyEncoding:   "",
