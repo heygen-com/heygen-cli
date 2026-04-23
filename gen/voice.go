@@ -14,6 +14,10 @@ var VoiceCloneCreate = &command.Spec{
 	Endpoint:       "/v3/voices/clone",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Clone a voice from a URL\n  heygen voice clone create --voice-name 'My Clone' -d '{\"audio\":{\"type\":\"url\",\"url\":\"https://example.com/sample.mp3\"}}'",
+		"# Clone from an uploaded asset\n  heygen voice clone create --voice-name 'My Clone' -d '{\"audio\":{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}}'",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "language",
@@ -129,6 +133,10 @@ var VoiceGet = &command.Spec{
 	Endpoint:       "/v3/voices/{voice_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Get voice details\n  heygen voice get <voice-id>",
+		"# Poll a voice clone until complete\n  heygen voice get <voice-clone-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "voice-id", Param: "voice_id", Help: ""},
 	},
