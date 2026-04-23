@@ -1,5 +1,5 @@
 ---
-name: changelog
+name: changelog-cli
 description: |
   Generate a user-facing changelog for the next stable release. Reads git log
   between the last stable tag and HEAD, categorizes changes, and outputs
