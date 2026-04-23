@@ -17,28 +17,41 @@ the last stable tag.
 ```bash
 # Find the last stable tag
 LAST_STABLE=$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
-
-# Show commits since that tag
-git log "${LAST_STABLE}..origin/main" --oneline
 ```
 
-If no stable tag exists, use the full history (`git log --oneline`).
+If `LAST_STABLE` is empty (first stable release), use the full history by
+omitting the range:
 
-If a version argument was provided (e.g., `/changelog v0.0.6`), use it as the
-heading. Otherwise, infer the next version by bumping the patch of `$LAST_STABLE`.
+```bash
+# If LAST_STABLE is set:
+git log "${LAST_STABLE}..origin/main" --oneline
+
+# If LAST_STABLE is empty (first release):
+git log origin/main --oneline
+```
+
+If a version argument was provided (e.g., `/changelog-cli v0.0.6`), use it as
+the heading. Otherwise, infer the next version by bumping the patch of
+`$LAST_STABLE` (or use `v0.1.0` if no stable tag exists).
 
 ## Step 2: Read the full commit details
 
+Use the same range logic from Step 1 (with or without `$LAST_STABLE`):
+
 ```bash
+# With a previous stable tag:
 git log "${LAST_STABLE}..origin/main" --format="### %h%n%s%n%n%b%n---"
+
+# First release (no stable tag):
+git log origin/main --format="### %h%n%s%n%n%b%n---"
 ```
 
 Also read the PR descriptions for any merged PRs in the range to get richer
 context on what changed and why:
 
 ```bash
-# Extract PR numbers from commit messages
-git log "${LAST_STABLE}..origin/main" --oneline | grep -oP '#\K[0-9]+' | sort -u
+# Extract PR numbers from commit messages (works on both GNU and BSD grep)
+git log ${LAST_STABLE:+"${LAST_STABLE}.."}origin/main --oneline | grep -o '#[0-9]\+' | tr -d '#' | sort -u
 ```
 
 For each PR number, read the PR body:
