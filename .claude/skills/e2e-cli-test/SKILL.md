@@ -39,6 +39,7 @@ If this fails, stop and report the build error. Nothing else can run.
 
 - Assert `auth status` exits 0
 - Assert `user me get` exits 0, stdout is valid JSON, and `jq -e '.data.username'` succeeds
+- If either command fails, stop and report the auth error. Every subsequent phase requires a valid key.
 
 ### Step 3: Phase 2 -- Read-only list commands
 
