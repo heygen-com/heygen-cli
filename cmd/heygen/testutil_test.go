@@ -98,15 +98,16 @@ func runCommandWithInput(t *testing.T, serverURL, apiKey string, stdin io.Reader
 		cmd.SetIn(stdin)
 	}
 
-	err := cmd.Execute()
+	executedCmd, err := cmd.ExecuteC()
 
 	var exitCode int
 	if err != nil {
 		// Render through formatter — same path as main()
-		// Mirror the classification logic from main() so tests
-		// see the same exit codes production emits.
+		// Mirror the classification and auth-hint logic from main() so
+		// tests see the same exit codes and hints production emits.
 		var cliErr *clierrors.CLIError
 		if errors.As(err, &cliErr) {
+			enrichAuthHint(cliErr, credSourceFromCmd(executedCmd))
 			formatter.Error(cliErr)
 			exitCode = cliErr.ExitCode
 		} else {

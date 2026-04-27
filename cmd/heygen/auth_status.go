@@ -1,13 +1,11 @@
 package main
 
 import (
-	"errors"
 	"net/url"
 
 	"github.com/heygen-com/heygen-cli/gen"
 	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/command"
-	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -24,10 +22,6 @@ func newAuthStatusCmd(ctx *cmdContext) *cobra.Command {
 				QueryParams: make(url.Values),
 			})
 			if err != nil {
-				var cliErr *clierrors.CLIError
-				if errors.As(err, &cliErr) && cliErr.ExitCode == clierrors.ExitAuth {
-					cliErr.Hint = "Your API key is missing or invalid.\n" + authGuidance
-				}
 				return err
 			}
 			return ctx.formatter.Data(result, client.APIDataField, nil)
