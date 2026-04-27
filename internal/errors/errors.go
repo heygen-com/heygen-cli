@@ -131,7 +131,7 @@ func hintForAPICode(code string) string {
 	case "voice_not_found":
 		return "List available voices: heygen voice list"
 	case "insufficient_credit":
-		return "Check your credit balance: heygen user me get\nBuy credits: https://app.heygen.com/settings/billing"
+		return "Check your credit balance: heygen user me get"
 	case "invalid_parameter":
 		return "Use --request-schema on the command to see expected fields"
 	case "rate_limited":
