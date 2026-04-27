@@ -19,7 +19,7 @@ type CLIError struct {
 	Hint      string // actionable fix: "Run heygen auth login"
 	RequestID string // from API X-Request-Id header (if applicable)
 	ExitCode  int    // process exit code (0/1/2/3/4)
-	Retryable *bool  // nil=unknown, true=transient, false=permanent (best-effort guidance)
+	Retryable *bool  // nil=unrecognized, true=transient, false=permanent
 }
 
 // Error implements the error interface.
@@ -126,12 +126,12 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 	}
 }
 
-// retryableForError returns best-effort retry guidance based on error code,
+// retryableForError classifies retry behavior based on error code,
 // HTTP status, and exit code. Code-based classification takes priority;
 // HTTP status is the fallback.
-//   - false: known permanent (wrong ID, expired key, insufficient funds)
-//   - true: known transient (rate limit, server error, timeout)
-//   - nil: unknown or context-dependent
+//   - false: permanent (wrong ID, expired key, insufficient funds)
+//   - true: transient (rate limit, server error, timeout)
+//   - nil: unrecognized code or ambiguous context
 func retryableForError(code string, statusCode int, exitCode int) *bool {
 	switch code {
 	case "video_not_found", "avatar_not_found", "voice_not_found",

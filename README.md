@@ -117,7 +117,7 @@ Every command supports `--help`.
 | Aspect | Behavior |
 |--------|----------|
 | **stdout** | Always JSON. Even `video download` — binary writes to disk; stdout emits `{"asset", "message", "path"}` so you can chain on `.path`. |
-| **stderr** | Structured envelope on error: `{"error": {"code", "message", "hint", "retryable"}}`. Stable `code` values for programmatic branching. `retryable` is best-effort: `true` (transient), `false` (permanent), or omitted (unknown). |
+| **stderr** | Structured envelope on error: `{"error": {"code", "message", "hint", "retryable"}}`. Stable `code` values for programmatic branching. When present, `retryable` is definitive: `true` (transient), `false` (permanent). Omitted when unrecognized. |
 | **Exit codes** | `0` ok · `1` API or network · `2` usage · `3` auth · `4` timeout under `--wait` (stdout contains partial resource for resume) |
 | **Request bodies** | Flags for simple inputs; `-d` for nested JSON (inline, file path, or `-` for stdin). Flags override matching fields. |
 | **Async jobs** | `--wait` blocks with exponential backoff; `--timeout` sets max (default 20m). 429s and 5xx retry automatically. |

@@ -80,7 +80,7 @@ Exit Codes:
 
 Error Envelope (stderr on failure):
   {"error": {"code": "...", "message": "...", "hint": "...", "retryable": true|false}}
-  retryable is best-effort: true (transient), false (permanent), or omitted (unknown).
+  When present, retryable is definitive. true (transient), false (permanent), omitted (unrecognized).
   Branch on retryable, not on specific code values.
 
 Tip: Use --request-schema on any command to see the expected JSON input fields.
