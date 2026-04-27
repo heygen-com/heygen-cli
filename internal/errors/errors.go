@@ -107,6 +107,9 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 	}
 
 	hint := hintForAPICode(code)
+	if code == "invalid_parameter" && apiErr.Param != nil && *apiErr.Param != "" {
+		hint = fmt.Sprintf("Invalid field %q. %s", *apiErr.Param, hint)
+	}
 
 	return &CLIError{
 		Code:      code,
@@ -127,6 +130,18 @@ func hintForAPICode(code string) string {
 		return "List your videos: heygen video list"
 	case "voice_not_found":
 		return "List available voices: heygen voice list"
+	case "insufficient_credit":
+		return "Check your credit balance: heygen user me get\nBuy credits: https://app.heygen.com/settings/billing"
+	case "invalid_parameter":
+		return "Use --request-schema on the command to see expected fields"
+	case "rate_limited":
+		return "The CLI retries rate-limited requests automatically. If this persists, reduce request frequency"
+	case "resource_not_found", "not_found":
+		return "The requested resource does not exist. Verify the ID is correct"
+	case "asset_not_available":
+		return "The asset may still be processing or was deleted"
+	case "timeout":
+		return "The operation may still be in progress. Check status with the corresponding get command"
 	}
 	return ""
 }
