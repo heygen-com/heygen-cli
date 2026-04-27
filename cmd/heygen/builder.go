@@ -165,11 +165,13 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 							if pc.HintCommand != "" {
 								hint = fmt.Sprintf("heygen %s %s", pc.HintCommand, timeoutErr.ResourceID)
 							}
+							notRetryable := false
 							return &clierrors.CLIError{
-								Code:     "timeout",
-								Message:  fmt.Sprintf("still processing after --wait of %s (not failed, just not done yet)", timeout),
-								Hint:     hint,
-								ExitCode: clierrors.ExitTimeout,
+								Code:      "timeout",
+								Message:   fmt.Sprintf("still processing after --wait of %s (not failed, just not done yet)", timeout),
+								Hint:      hint,
+								ExitCode:  clierrors.ExitTimeout,
+								Retryable: &notRetryable,
 							}
 						}
 						var failErr *client.ErrPollFailed

@@ -271,6 +271,15 @@ func TestFromAPIError_404_UnknownCode_RetryableNil(t *testing.T) {
 	}
 }
 
+func TestFromAPIError_GenericEmpty404_RetryableNil(t *testing.T) {
+	apiErr := &APIError{Message: "not found"}
+	cliErr := FromAPIError(404, apiErr, "")
+
+	if cliErr.Retryable != nil {
+		t.Errorf("Retryable = %v, want nil for generic 404 without API code", *cliErr.Retryable)
+	}
+}
+
 func TestFromAPIError_AuthError_NotRetryable(t *testing.T) {
 	apiErr := &APIError{Code: "forbidden", Message: "access denied"}
 	cliErr := FromAPIError(403, apiErr, "")
@@ -325,6 +334,9 @@ func TestConstructors(t *testing.T) {
 		}
 		if err.Hint != "set HEYGEN_API_KEY" {
 			t.Errorf("Hint = %q, want expected value", err.Hint)
+		}
+		if err.Retryable == nil || *err.Retryable != false {
+			t.Errorf("Retryable = %v, want false for auth errors", err.Retryable)
 		}
 	})
 

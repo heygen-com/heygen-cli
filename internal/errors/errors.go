@@ -61,10 +61,11 @@ func New(message string) *CLIError {
 // NewAuth creates a CLIError with ExitAuth.
 func NewAuth(message, hint string) *CLIError {
 	return &CLIError{
-		Code:     "auth_error",
-		Message:  message,
-		Hint:     hint,
-		ExitCode: ExitAuth,
+		Code:      "auth_error",
+		Message:   message,
+		Hint:      hint,
+		ExitCode:  ExitAuth,
+		Retryable: boolPtr(false),
 	}
 }
 
@@ -121,7 +122,7 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 		Hint:      hint,
 		RequestID: requestID,
 		ExitCode:  exitCode,
-		Retryable: retryableForError(code, statusCode, exitCode),
+		Retryable: retryableForError(apiErr.Code, statusCode, exitCode),
 	}
 }
 
