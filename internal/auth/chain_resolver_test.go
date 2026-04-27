@@ -2,6 +2,8 @@ package auth
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
@@ -103,5 +105,80 @@ func TestChainResolver_BrokenSource(t *testing.T) {
 	}
 	if cliErr.Message != "permission denied" {
 		t.Fatalf("Message = %q, want %q", cliErr.Message, "permission denied")
+	}
+}
+
+func TestResolveWithSource_EnvWins(t *testing.T) {
+	t.Setenv("HEYGEN_API_KEY", "env-key")
+	dir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", dir)
+	_ = os.WriteFile(filepath.Join(dir, "credentials"), []byte("file-key"), 0600)
+
+	r := &ChainCredentialResolver{
+		Resolvers: []CredentialResolver{
+			&EnvCredentialResolver{},
+			&FileCredentialResolver{},
+		},
+	}
+
+	result, err := r.ResolveWithSource()
+	if err != nil {
+		t.Fatalf("ResolveWithSource: %v", err)
+	}
+	if result.Key != "env-key" {
+		t.Fatalf("Key = %q, want %q", result.Key, "env-key")
+	}
+	if result.Source != SourceEnv {
+		t.Fatalf("Source = %q, want %q", result.Source, SourceEnv)
+	}
+}
+
+func TestResolveWithSource_FallsToFile(t *testing.T) {
+	t.Setenv("HEYGEN_API_KEY", "")
+	dir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", dir)
+	_ = os.WriteFile(filepath.Join(dir, "credentials"), []byte("file-key"), 0600)
+
+	r := &ChainCredentialResolver{
+		Resolvers: []CredentialResolver{
+			&EnvCredentialResolver{},
+			&FileCredentialResolver{},
+		},
+	}
+
+	result, err := r.ResolveWithSource()
+	if err != nil {
+		t.Fatalf("ResolveWithSource: %v", err)
+	}
+	if result.Key != "file-key" {
+		t.Fatalf("Key = %q, want %q", result.Key, "file-key")
+	}
+	if result.Source != SourceFile {
+		t.Fatalf("Source = %q, want %q", result.Source, SourceFile)
+	}
+}
+
+func TestResolveWithSource_NoneConfigured(t *testing.T) {
+	t.Setenv("HEYGEN_API_KEY", "")
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+
+	r := &ChainCredentialResolver{
+		Resolvers: []CredentialResolver{
+			&EnvCredentialResolver{},
+			&FileCredentialResolver{},
+		},
+	}
+
+	_, err := r.ResolveWithSource()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected *CLIError, got %T", err)
+	}
+	if cliErr.ExitCode != clierrors.ExitAuth {
+		t.Fatalf("ExitCode = %d, want %d", cliErr.ExitCode, clierrors.ExitAuth)
 	}
 }

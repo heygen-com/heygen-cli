@@ -29,6 +29,7 @@ func main() {
 	if err != nil {
 		var cliErr *clierrors.CLIError
 		if errors.As(err, &cliErr) {
+			enrichAuthHint(cliErr, credSourceFromCmd(executedCmd))
 			formatter.Error(cliErr)
 			exitCode = cliErr.ExitCode
 			errorCode = cliErr.Code

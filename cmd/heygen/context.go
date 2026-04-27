@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/url"
 	"os"
@@ -49,6 +50,19 @@ func schemaFlagEnabled(cmd *cobra.Command, name string) bool {
 	return err == nil && enabled
 }
 
+type credSourceKey struct{}
+
+// credSourceFromCmd retrieves the credential source stored on the command
+// context during initContext. Returns SourceUnknown if not set (e.g. skipAuth
+// commands or when credential resolution failed before storing).
+func credSourceFromCmd(cmd *cobra.Command) auth.CredentialSource {
+	if cmd == nil {
+		return auth.SourceUnknown
+	}
+	src, _ := cmd.Context().Value(credSourceKey{}).(auth.CredentialSource)
+	return src
+}
+
 // initContext sets up the config provider and, for commands that require
 // auth, resolves credentials and creates the HTTP client.
 func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
@@ -69,7 +83,7 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 			&auth.FileCredentialResolver{},
 		},
 	}
-	apiKey, err := resolver.Resolve()
+	result, err := resolver.ResolveWithSource()
 	if err != nil {
 		// Enrich the generic cold-start auth error ("no API key found")
 		// with the full auth guidance. Don't overwrite specific hints
@@ -80,13 +94,14 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 		}
 		return err
 	}
+	cmd.SetContext(context.WithValue(cmd.Context(), credSourceKey{}, result.Source))
 
 	baseURL := provider.BaseURL()
 	if u, err := url.Parse(baseURL); err == nil && u.Scheme == "http" && os.Getenv("HEYGEN_ALLOW_HTTP") == "" {
 		return clierrors.NewUsage("HEYGEN_API_BASE uses HTTP which transmits API keys in plaintext. Set HEYGEN_ALLOW_HTTP=1 to allow.")
 	}
 
-	ctx.client = client.New(apiKey,
+	ctx.client = client.New(result.Key,
 		client.WithBaseURL(baseURL),
 		client.WithUserAgent("heygen-cli/"+version),
 	)
