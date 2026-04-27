@@ -106,8 +106,8 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 		}
 	}
 
-	hint := hintForAPICode(code)
-	if code == "invalid_parameter" && apiErr.Param != nil && *apiErr.Param != "" {
+	hint := hintForAPICode(apiErr.Code)
+	if apiErr.Code == "invalid_parameter" && apiErr.Param != nil && *apiErr.Param != "" {
 		hint = fmt.Sprintf("Invalid field %q. %s", *apiErr.Param, hint)
 	}
 
@@ -125,11 +125,11 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 func hintForAPICode(code string) string {
 	switch code {
 	case "avatar_not_found":
-		return "List available avatars: heygen avatar list"
+		return "This avatar does not exist. Retrying the same ID is unlikely to help. List avatars: heygen avatar list"
 	case "video_not_found":
-		return "List your videos: heygen video list"
+		return "This resource does not exist. Retrying the same ID is unlikely to help. List your videos: heygen video list"
 	case "voice_not_found":
-		return "List available voices: heygen voice list"
+		return "This voice does not exist. Retrying the same ID is unlikely to help. List voices: heygen voice list"
 	case "insufficient_credit":
 		return "Check your credit balance: heygen user me get"
 	case "invalid_parameter":
@@ -137,7 +137,7 @@ func hintForAPICode(code string) string {
 	case "rate_limited":
 		return "The CLI retries rate-limited requests automatically. If this persists, reduce request frequency"
 	case "resource_not_found", "not_found":
-		return "The requested resource does not exist. Verify the ID is correct"
+		return "The requested resource does not exist. Retrying the same ID is unlikely to help"
 	case "asset_not_available":
 		return "The asset may still be processing or was deleted"
 	case "timeout":

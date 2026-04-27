@@ -189,6 +189,15 @@ func TestHintForAPICode_AllMappedCodes(t *testing.T) {
 	}
 }
 
+func TestFromAPIError_Generic404_NoPermanenceHint(t *testing.T) {
+	apiErr := &APIError{Message: "not found"}
+	cliErr := FromAPIError(404, apiErr, "")
+
+	if strings.Contains(cliErr.Hint, "unlikely to help") {
+		t.Errorf("Hint = %q, generic 404 without API code should not claim permanence", cliErr.Hint)
+	}
+}
+
 func TestFromAPIError_InvalidParam_WithParamName(t *testing.T) {
 	param := "avatar_id"
 	apiErr := &APIError{Code: "invalid_parameter", Message: "bad value", Param: &param}
