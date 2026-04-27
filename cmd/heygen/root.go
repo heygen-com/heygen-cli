@@ -78,6 +78,11 @@ Exit Codes:
   3   Authentication error (missing or invalid API key)
   4   Timeout (resource created but operation not yet complete)
 
+Error Envelope (stderr on failure):
+  {"error": {"code": "...", "message": "...", "hint": "...", "retryable": true|false}}
+  retryable is best-effort: true (transient), false (permanent), or omitted (unknown).
+  Branch on retryable, not on specific code values.
+
 Tip: Use --request-schema on any command to see the expected JSON input fields.
 Use "heygen update" to check for and install newer versions.
 `)
