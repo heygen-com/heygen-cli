@@ -245,6 +245,9 @@ func TestExecute_NetworkError(t *testing.T) {
 	if cliErr.Code != "network_error" {
 		t.Errorf("Code = %q, want %q", cliErr.Code, "network_error")
 	}
+	if cliErr.Hint == "" {
+		t.Error("Hint should be non-empty for network errors")
+	}
 }
 
 func TestExecute_RetryOn429(t *testing.T) {
