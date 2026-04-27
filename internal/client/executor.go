@@ -195,7 +195,7 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 		return nil, &clierrors.CLIError{
 			Code:     "network_error",
 			Message:  fmt.Sprintf("request failed: %v", err),
-			Hint:     "Check your internet connection. If HEYGEN_API_BASE is set, verify it is correct",
+			Hint:     "This is usually a temporary network issue. If it persists, check your connection",
 			ExitCode: clierrors.ExitGeneral,
 		}
 	}
