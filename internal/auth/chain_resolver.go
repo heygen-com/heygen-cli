@@ -55,6 +55,6 @@ func sourceForResolver(r CredentialResolver) CredentialSource {
 	case *FileCredentialResolver:
 		return SourceFile
 	default:
-		return SourceUnknown
+		return ""
 	}
 }

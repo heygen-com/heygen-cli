@@ -4,9 +4,8 @@ package auth
 type CredentialSource string
 
 const (
-	SourceEnv     CredentialSource = "env"
-	SourceFile    CredentialSource = "file"
-	SourceUnknown CredentialSource = ""
+	SourceEnv  CredentialSource = "env"
+	SourceFile CredentialSource = "file"
 )
 
 // CredentialResult pairs a resolved API key with its source.
