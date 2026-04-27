@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,7 +56,9 @@ func TestEnrichAuthHint_FileSource_401(t *testing.T) {
 	if !strings.Contains(res.Stderr, "heygen auth login") {
 		t.Fatalf("stderr should mention auth login for file source:\n%s", res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, filepath.Join(dir, "credentials")) {
+	pathJSON, _ := json.Marshal(filepath.Join(dir, "credentials"))
+	escapedPath := string(pathJSON[1 : len(pathJSON)-1])
+	if !strings.Contains(res.Stderr, escapedPath) {
 		t.Fatalf("stderr should mention the resolved credentials path:\n%s", res.Stderr)
 	}
 }
