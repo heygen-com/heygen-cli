@@ -278,6 +278,9 @@ func TestFromAPIError_GenericEmpty404_RetryableNil(t *testing.T) {
 	if cliErr.Retryable != nil {
 		t.Errorf("Retryable = %v, want nil for generic 404 without API code", *cliErr.Retryable)
 	}
+	if strings.Contains(cliErr.Hint, "unlikely to help") {
+		t.Errorf("Hint = %q, generic 404 should not contain permanence language", cliErr.Hint)
+	}
 }
 
 func TestFromAPIError_AuthError_NotRetryable(t *testing.T) {

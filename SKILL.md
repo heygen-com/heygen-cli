@@ -70,10 +70,11 @@ heygen video get --response-schema
 
 - **stdout**: JSON (always). This is the only output agents should consume.
 - **stderr**: JSON error envelope on failure: `{"error":{"code":"...","message":"...","hint":"...","retryable":true|false}}`
-  - `retryable` is **best-effort guidance** (not an API guarantee):
-    - `true`: transient, same request may succeed later (429, 5xx, network errors, timeouts)
-    - `false`: permanent, retrying the same request won't help (not-found, auth errors, insufficient credit)
+  - `retryable` is **best-effort guidance** (not an API guarantee). Branch on `retryable`, not on `code`:
+    - `true`: transient, same request may succeed later (429, 5xx, network errors)
+    - `false`: permanent, retrying the same request won't help (not-found with known code, auth errors, insufficient credit, `--wait` timeouts where the create already succeeded)
     - omitted: unknown or context-dependent. Treat as "do not retry automatically"
+  - `code: "timeout"` appears in multiple contexts with different `retryable` values. Always use the `retryable` field, not the code, to decide whether to retry.
 - Do not pass `--human`. It produces unstructured text that cannot be parsed.
 
 ## Notes

@@ -111,8 +111,8 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 		}
 	}
 
-	hint := hintForAPICode(code)
-	if code == "invalid_parameter" && apiErr.Param != nil && *apiErr.Param != "" {
+	hint := hintForAPICode(apiErr.Code)
+	if apiErr.Code == "invalid_parameter" && apiErr.Param != nil && *apiErr.Param != "" {
 		hint = fmt.Sprintf("Invalid field %q. %s", *apiErr.Param, hint)
 	}
 
