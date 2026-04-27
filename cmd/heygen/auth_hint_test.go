@@ -55,8 +55,8 @@ func TestEnrichAuthHint_FileSource_401(t *testing.T) {
 	if !strings.Contains(res.Stderr, "heygen auth login") {
 		t.Fatalf("stderr should mention auth login for file source:\n%s", res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "~/.heygen/credentials") {
-		t.Fatalf("stderr should mention credentials file:\n%s", res.Stderr)
+	if !strings.Contains(res.Stderr, filepath.Join(dir, "credentials")) {
+		t.Fatalf("stderr should mention the resolved credentials path:\n%s", res.Stderr)
 	}
 }
 
