@@ -19,6 +19,7 @@ type CLIError struct {
 	Hint      string // actionable fix: "Run heygen auth login"
 	RequestID string // from API X-Request-Id header (if applicable)
 	ExitCode  int    // process exit code (0/1/2/3/4)
+	Retryable *bool  // nil=unknown, true=transient, false=permanent (best-effort guidance)
 }
 
 // Error implements the error interface.
@@ -41,6 +42,9 @@ func (e *CLIError) ToErrorEnvelope() map[string]any {
 	}
 	if e.RequestID != "" {
 		inner["request_id"] = e.RequestID
+	}
+	if e.Retryable != nil {
+		inner["retryable"] = *e.Retryable
 	}
 	return map[string]any{"error": inner}
 }
@@ -117,19 +121,48 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 		Hint:      hint,
 		RequestID: requestID,
 		ExitCode:  exitCode,
+		Retryable: retryableForError(code, statusCode, exitCode),
 	}
 }
+
+// retryableForError returns best-effort retry guidance based on error code,
+// HTTP status, and exit code. Code-based classification takes priority;
+// HTTP status is the fallback.
+//   - false: known permanent (wrong ID, expired key, insufficient funds)
+//   - true: known transient (rate limit, server error, timeout)
+//   - nil: unknown or context-dependent
+func retryableForError(code string, statusCode int, exitCode int) *bool {
+	switch code {
+	case "video_not_found", "avatar_not_found", "voice_not_found",
+		"resource_not_found", "not_found", "insufficient_credit":
+		return boolPtr(false)
+	case "rate_limited", "timeout":
+		return boolPtr(true)
+	}
+	if exitCode == ExitAuth {
+		return boolPtr(false)
+	}
+	switch {
+	case statusCode == 429:
+		return boolPtr(true)
+	case statusCode >= 500:
+		return boolPtr(true)
+	}
+	return nil
+}
+
+func boolPtr(b bool) *bool { return &b }
 
 // hintForAPICode returns a CLI-specific actionable hint for known API error
 // codes. Returns "" if the code has no associated hint.
 func hintForAPICode(code string) string {
 	switch code {
 	case "avatar_not_found":
-		return "List available avatars: heygen avatar list"
+		return "This avatar does not exist. Retrying the same ID is unlikely to help. List avatars: heygen avatar list"
 	case "video_not_found":
-		return "List your videos: heygen video list"
+		return "This resource does not exist. Retrying the same ID is unlikely to help. List your videos: heygen video list"
 	case "voice_not_found":
-		return "List available voices: heygen voice list"
+		return "This voice does not exist. Retrying the same ID is unlikely to help. List voices: heygen voice list"
 	case "insufficient_credit":
 		return "Check your credit balance: heygen user me get"
 	case "invalid_parameter":
@@ -137,7 +170,7 @@ func hintForAPICode(code string) string {
 	case "rate_limited":
 		return "The CLI retries rate-limited requests automatically. If this persists, reduce request frequency"
 	case "resource_not_found", "not_found":
-		return "The requested resource does not exist. Verify the ID is correct"
+		return "The requested resource does not exist. Retrying the same ID is unlikely to help"
 	case "asset_not_available":
 		return "The asset may still be processing or was deleted"
 	case "timeout":

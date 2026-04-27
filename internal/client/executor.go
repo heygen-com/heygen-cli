@@ -192,11 +192,13 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 
 	resp, err := c.Do(req)
 	if err != nil {
+		retryable := true
 		return nil, &clierrors.CLIError{
-			Code:     "network_error",
-			Message:  fmt.Sprintf("request failed: %v", err),
-			Hint:     "This is usually a temporary network issue. If it persists, check your connection",
-			ExitCode: clierrors.ExitGeneral,
+			Code:      "network_error",
+			Message:   fmt.Sprintf("request failed: %v", err),
+			Hint:      "This is usually a temporary network issue. If it persists, check your connection",
+			ExitCode:  clierrors.ExitGeneral,
+			Retryable: &retryable,
 		}
 	}
 	defer resp.Body.Close()

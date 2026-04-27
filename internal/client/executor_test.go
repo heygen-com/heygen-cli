@@ -248,6 +248,9 @@ func TestExecute_NetworkError(t *testing.T) {
 	if cliErr.Hint == "" {
 		t.Error("Hint should be non-empty for network errors")
 	}
+	if cliErr.Retryable == nil || !*cliErr.Retryable {
+		t.Error("Retryable should be true for network errors")
+	}
 }
 
 func TestExecute_RetryOn429(t *testing.T) {

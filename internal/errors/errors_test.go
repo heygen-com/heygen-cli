@@ -79,6 +79,9 @@ func TestCLIError_ToErrorEnvelope_OmitsEmpty(t *testing.T) {
 	if _, ok := inner["request_id"]; ok {
 		t.Error("request_id should be omitted when empty")
 	}
+	if _, ok := inner["retryable"]; ok {
+		t.Error("retryable should be omitted when nil")
+	}
 }
 
 func TestFromAPIError_ExitCodes(t *testing.T) {
@@ -211,6 +214,99 @@ func TestFromAPIError_InvalidParam_NilParam(t *testing.T) {
 	}
 	if !strings.Contains(cliErr.Hint, "--request-schema") {
 		t.Errorf("Hint = %q, want --request-schema in hint", cliErr.Hint)
+	}
+}
+
+func TestFromAPIError_KnownPermanentCode_NotRetryable(t *testing.T) {
+	apiErr := &APIError{Code: "video_not_found", Message: "video not found"}
+	cliErr := FromAPIError(404, apiErr, "")
+
+	if cliErr.Retryable == nil {
+		t.Fatal("Retryable should be non-nil for video_not_found")
+	}
+	if *cliErr.Retryable != false {
+		t.Errorf("Retryable = %v, want false", *cliErr.Retryable)
+	}
+}
+
+func TestFromAPIError_500_Retryable(t *testing.T) {
+	apiErr := &APIError{Message: "internal server error"}
+	cliErr := FromAPIError(500, apiErr, "")
+
+	if cliErr.Retryable == nil {
+		t.Fatal("Retryable should be non-nil for 500")
+	}
+	if *cliErr.Retryable != true {
+		t.Errorf("Retryable = %v, want true", *cliErr.Retryable)
+	}
+}
+
+func TestFromAPIError_429_Retryable(t *testing.T) {
+	apiErr := &APIError{Message: "too many requests"}
+	cliErr := FromAPIError(429, apiErr, "")
+
+	if cliErr.Retryable == nil {
+		t.Fatal("Retryable should be non-nil for 429")
+	}
+	if *cliErr.Retryable != true {
+		t.Errorf("Retryable = %v, want true", *cliErr.Retryable)
+	}
+}
+
+func TestFromAPIError_400_RetryableNil(t *testing.T) {
+	apiErr := &APIError{Code: "validation_error", Message: "bad request"}
+	cliErr := FromAPIError(400, apiErr, "")
+
+	if cliErr.Retryable != nil {
+		t.Errorf("Retryable = %v, want nil for generic 400", *cliErr.Retryable)
+	}
+}
+
+func TestFromAPIError_404_UnknownCode_RetryableNil(t *testing.T) {
+	apiErr := &APIError{Code: "something_unusual", Message: "not found"}
+	cliErr := FromAPIError(404, apiErr, "")
+
+	if cliErr.Retryable != nil {
+		t.Errorf("Retryable = %v, want nil for unknown 404 code", *cliErr.Retryable)
+	}
+}
+
+func TestFromAPIError_AuthError_NotRetryable(t *testing.T) {
+	apiErr := &APIError{Code: "forbidden", Message: "access denied"}
+	cliErr := FromAPIError(403, apiErr, "")
+
+	if cliErr.Retryable == nil {
+		t.Fatal("Retryable should be non-nil for auth errors")
+	}
+	if *cliErr.Retryable != false {
+		t.Errorf("Retryable = %v, want false for auth errors", *cliErr.Retryable)
+	}
+}
+
+func TestToErrorEnvelope_IncludesRetryable(t *testing.T) {
+	retryable := false
+	err := &CLIError{Code: "video_not_found", Message: "not found", Retryable: &retryable}
+	envelope := err.ToErrorEnvelope()
+
+	data, marshalErr := json.Marshal(envelope)
+	if marshalErr != nil {
+		t.Fatalf("failed to marshal envelope: %v", marshalErr)
+	}
+	if !strings.Contains(string(data), `"retryable":false`) {
+		t.Errorf("envelope = %s, want retryable:false", string(data))
+	}
+}
+
+func TestToErrorEnvelope_OmitsRetryableWhenNil(t *testing.T) {
+	err := &CLIError{Code: "error", Message: "fail"}
+	envelope := err.ToErrorEnvelope()
+
+	data, marshalErr := json.Marshal(envelope)
+	if marshalErr != nil {
+		t.Fatalf("failed to marshal envelope: %v", marshalErr)
+	}
+	if strings.Contains(string(data), "retryable") {
+		t.Errorf("envelope = %s, should not contain retryable when nil", string(data))
 	}
 }
 

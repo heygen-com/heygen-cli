@@ -69,7 +69,11 @@ heygen video get --response-schema
 ## Output Contract
 
 - **stdout**: JSON (always). This is the only output agents should consume.
-- **stderr**: JSON error envelope on failure: `{"error":{"code":"...","message":"...","hint":"..."}}`
+- **stderr**: JSON error envelope on failure: `{"error":{"code":"...","message":"...","hint":"...","retryable":true|false}}`
+  - `retryable` is **best-effort guidance** (not an API guarantee):
+    - `true`: transient, same request may succeed later (429, 5xx, network errors, timeouts)
+    - `false`: permanent, retrying the same request won't help (not-found, auth errors, insufficient credit)
+    - omitted: unknown or context-dependent. Treat as "do not retry automatically"
 - Do not pass `--human`. It produces unstructured text that cannot be parsed.
 
 ## Notes
