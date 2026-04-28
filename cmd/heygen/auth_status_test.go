@@ -62,7 +62,7 @@ func TestAuthStatus_InvalidKey(t *testing.T) {
 }
 
 // TestAuthStatus_AuthError_AddsHint verifies that a 401 from the API gets the
-// actionable auth hint injected by auth_status.go.
+// source-aware auth hint from centralized enrichment in the error path.
 func TestAuthStatus_AuthError_AddsHint(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/users/me": {
@@ -72,21 +72,23 @@ func TestAuthStatus_AuthError_AddsHint(t *testing.T) {
 	})
 	defer srv.Close()
 
+	// runCommand passes apiKey via HEYGEN_API_KEY env var, so the hint
+	// should reference the environment variable source.
 	res := runCommand(t, srv.URL, "bad-key", "auth", "status")
 
 	if res.ExitCode != clierrors.ExitAuth {
 		t.Fatalf("ExitCode = %d, want %d", res.ExitCode, clierrors.ExitAuth)
 	}
-	if !strings.Contains(res.Stderr, "HEYGEN_API_KEY") {
-		t.Fatalf("stderr = %s, want HEYGEN_API_KEY in hint", res.Stderr)
+	if !strings.Contains(res.Stderr, "HEYGEN_API_KEY environment variable") {
+		t.Fatalf("stderr should mention env var source:\n%s", res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "heygen auth login") {
-		t.Fatalf("stderr = %s, want heygen auth login in hint", res.Stderr)
+	if !strings.Contains(res.Stderr, "app.heygen.com/settings/api") {
+		t.Fatalf("stderr should contain key generation URL:\n%s", res.Stderr)
 	}
 }
 
 // TestAuthStatus_NonAuthError_NoHintMutation verifies that non-auth errors are
-// not mutated by the auth hint injection in auth_status.go.
+// not mutated by the centralized auth hint enrichment.
 func TestAuthStatus_NonAuthError_NoHintMutation(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/users/me": {
