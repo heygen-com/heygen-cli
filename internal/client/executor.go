@@ -195,6 +195,7 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 		return nil, &clierrors.CLIError{
 			Code:     "network_error",
 			Message:  fmt.Sprintf("request failed: %v", err),
+			Hint:     "This is usually a temporary network issue. If it persists, check your connection",
 			ExitCode: clierrors.ExitGeneral,
 		}
 	}

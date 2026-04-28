@@ -160,6 +160,69 @@ func TestFromAPIError_UnknownCode_NoHint(t *testing.T) {
 	}
 }
 
+func TestHintForAPICode_AllMappedCodes(t *testing.T) {
+	codes := []struct {
+		code         string
+		wantContains string
+	}{
+		{"avatar_not_found", "heygen avatar list"},
+		{"video_not_found", "heygen video list"},
+		{"voice_not_found", "heygen voice list"},
+		{"insufficient_credit", "heygen user me get"},
+		{"invalid_parameter", "--request-schema"},
+		{"rate_limited", "retries rate-limited"},
+		{"resource_not_found", "does not exist"},
+		{"not_found", "does not exist"},
+		{"asset_not_available", "may still be processing"},
+		{"timeout", "may still be in progress"},
+	}
+	for _, tt := range codes {
+		t.Run(tt.code, func(t *testing.T) {
+			hint := hintForAPICode(tt.code)
+			if hint == "" {
+				t.Fatalf("hintForAPICode(%q) returned empty", tt.code)
+			}
+			if !strings.Contains(hint, tt.wantContains) {
+				t.Errorf("hint = %q, want it to contain %q", hint, tt.wantContains)
+			}
+		})
+	}
+}
+
+func TestFromAPIError_Generic404_NoPermanenceHint(t *testing.T) {
+	apiErr := &APIError{Message: "not found"}
+	cliErr := FromAPIError(404, apiErr, "")
+
+	if strings.Contains(cliErr.Hint, "unlikely to help") {
+		t.Errorf("Hint = %q, generic 404 without API code should not claim permanence", cliErr.Hint)
+	}
+}
+
+func TestFromAPIError_InvalidParam_WithParamName(t *testing.T) {
+	param := "avatar_id"
+	apiErr := &APIError{Code: "invalid_parameter", Message: "bad value", Param: &param}
+	cliErr := FromAPIError(400, apiErr, "")
+
+	if !strings.Contains(cliErr.Hint, "avatar_id") {
+		t.Errorf("Hint = %q, want param name in hint", cliErr.Hint)
+	}
+	if !strings.Contains(cliErr.Hint, "--request-schema") {
+		t.Errorf("Hint = %q, want --request-schema in hint", cliErr.Hint)
+	}
+}
+
+func TestFromAPIError_InvalidParam_NilParam(t *testing.T) {
+	apiErr := &APIError{Code: "invalid_parameter", Message: "bad value"}
+	cliErr := FromAPIError(400, apiErr, "")
+
+	if strings.Contains(cliErr.Hint, "Invalid field") {
+		t.Errorf("Hint = %q, should not mention field when param is nil", cliErr.Hint)
+	}
+	if !strings.Contains(cliErr.Hint, "--request-schema") {
+		t.Errorf("Hint = %q, want --request-schema in hint", cliErr.Hint)
+	}
+}
+
 func TestConstructors(t *testing.T) {
 	t.Run("New", func(t *testing.T) {
 		err := New("something broke")
