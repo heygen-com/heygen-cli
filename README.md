@@ -17,7 +17,9 @@ Full reference and examples: **[developers.heygen.com/cli](https://developers.he
 - **Bulk operations** — translate 100 videos in one shell loop
 - **Custom integrations** — wrap it in your own tool
 
-**See it in action:** [heygen-com/skills](https://github.com/heygen-com/skills) — one-line install for Claude Code, Codex, and other agents. Create your own avatar and generate a video in a single conversation.
+## Agent skills
+
+[heygen-com/skills](https://github.com/heygen-com/skills) — one-line install for Claude Code, Codex, and other agents. Create your own avatar and generate a video in a single conversation.
 
 ## Agent-first by design
 
