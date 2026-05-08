@@ -21,6 +21,9 @@ var Groups = map[string][]*command.Spec{
 		AvatarLooksList,
 		AvatarLooksUpdate,
 	},
+	"brand-kit": {
+		BrandKitList,
+	},
 	"lipsync": {
 		LipsyncCreate,
 		LipsyncDelete,
@@ -82,6 +85,7 @@ var Groups = map[string][]*command.Spec{
 var GroupDescriptions = map[string]string{
 	"asset":           "Upload files for use in video creation",
 	"avatar":          "List and manage avatars and looks",
+	"brand-kit":       "List brand kits for on-brand video generation",
 	"lipsync":         "Dub or replace audio on existing videos",
 	"user":            "Account information and billing",
 	"video":           "Create, list, retrieve, and delete videos",
