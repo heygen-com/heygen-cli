@@ -14,6 +14,9 @@ var BrandKitList = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Paginated:      true,
+	Examples: []string{
+		"# List brand kits\n  heygen brand-kit list",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "limit",
