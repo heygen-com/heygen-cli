@@ -27,7 +27,7 @@ func TestEnrichAuthHint_EnvSource_401(t *testing.T) {
 	if !strings.Contains(res.Stderr, "HEYGEN_API_KEY environment variable") {
 		t.Fatalf("stderr should mention env var source:\n%s", res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "app.heygen.com/settings/api") {
+	if !strings.Contains(res.Stderr, "app.heygen.com/settings?nav=API") {
 		t.Fatalf("stderr should contain key generation URL:\n%s", res.Stderr)
 	}
 }

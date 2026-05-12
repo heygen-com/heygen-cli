@@ -82,7 +82,7 @@ func TestAuthStatus_AuthError_AddsHint(t *testing.T) {
 	if !strings.Contains(res.Stderr, "HEYGEN_API_KEY environment variable") {
 		t.Fatalf("stderr should mention env var source:\n%s", res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "app.heygen.com/settings/api") {
+	if !strings.Contains(res.Stderr, "app.heygen.com/settings?nav=API") {
 		t.Fatalf("stderr should contain key generation URL:\n%s", res.Stderr)
 	}
 }
@@ -124,7 +124,7 @@ func TestAuthStatus_NoKey(t *testing.T) {
 	if !strings.Contains(res.Stderr, "Three ways to provide your API key") {
 		t.Fatalf("stderr = %s, want auth guidance", res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "app.heygen.com/settings/api") {
+	if !strings.Contains(res.Stderr, "app.heygen.com/settings?nav=API") {
 		t.Fatalf("stderr = %s, want key URL in hint", res.Stderr)
 	}
 }

@@ -1,10 +1,14 @@
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+
+	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
+)
 
 // authGuidance is the single source of truth for how to set up CLI auth.
 // Referenced by auth_login.go, auth_status.go, and the auth group help below.
-const authGuidance = `Three ways to provide your API key:
+var authGuidance = `Three ways to provide your API key:
   1. Environment variable (current shell only):
        export HEYGEN_API_KEY=<your-key>
   2. Pipe to auth login (saves to ~/.heygen/credentials):
@@ -14,7 +18,7 @@ const authGuidance = `Three ways to provide your API key:
 
 When both env var and stored credential are set, the env var takes priority.
 
-Get a key: https://app.heygen.com/settings/api`
+Get a key: ` + clierrors.APIKeySettingsURL
 
 func newAuthCmd(ctx *cmdContext) *cobra.Command {
 	cmd := newCommandGroup("auth", "Manage authentication")
