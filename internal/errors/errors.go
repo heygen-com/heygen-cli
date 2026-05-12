@@ -12,6 +12,8 @@ const (
 	ExitTimeout = 4
 )
 
+const APIKeySettingsURL = "https://app.heygen.com/settings?nav=API"
+
 // CLIError is the canonical error type for all CLI operations.
 type CLIError struct {
 	Code      string // machine-readable: "auth_error", "not_found", "network_error"
@@ -131,7 +133,7 @@ func hintForAPICode(code string) string {
 	case "voice_not_found":
 		return "This voice does not exist. Retrying the same ID is unlikely to help. List voices: heygen voice list"
 	case "insufficient_credit":
-		return "Check your credit balance: heygen user me get. Purchase API credits: https://app.heygen.com/settings?nav=API"
+		return "Check your credit balance: heygen user me get. Purchase API credits: " + APIKeySettingsURL
 	case "invalid_parameter":
 		return "Use --request-schema on the command to see expected fields"
 	case "rate_limited":
