@@ -51,6 +51,21 @@ var AvatarCreate = &command.Spec{
 	},
 }
 
+var AvatarDelete = &command.Spec{
+	Group:          "avatar",
+	Name:           "delete",
+	Summary:        "Delete Avatar Group",
+	Description:    "Permanently deletes an avatar group and all its associated looks. Cannot delete public or community groups.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for DELETE /v3/avatars/{group_id}.\",\n      \"properties\": {\n        \"id\": {\n          \"description\": \"ID of the deleted avatar group.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/avatars/{group_id}",
+	Method:         "DELETE",
+	BodyEncoding:   "",
+	Destructive:    true,
+	Args: []command.ArgSpec{
+		{Name: "group-id", Param: "group_id", Help: ""},
+	},
+}
+
 var AvatarGet = &command.Spec{
 	Group:          "avatar",
 	Name:           "get",
