@@ -15,8 +15,10 @@ var Groups = map[string][]*command.Spec{
 	"avatar": {
 		AvatarConsentCreate,
 		AvatarCreate,
+		AvatarDelete,
 		AvatarGet,
 		AvatarList,
+		AvatarLooksDelete,
 		AvatarLooksGet,
 		AvatarLooksList,
 		AvatarLooksUpdate,
