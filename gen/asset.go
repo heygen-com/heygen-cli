@@ -32,3 +32,18 @@ var AssetCreate = &command.Spec{
 		},
 	},
 }
+
+var AssetDelete = &command.Spec{
+	Group:          "asset",
+	Name:           "delete",
+	Summary:        "Delete Asset",
+	Description:    "Permanently deletes an asset. The asset must belong to the caller's workspace and not already be deleted.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for DELETE /v3/assets/{asset_id}.\",\n      \"properties\": {\n        \"id\": {\n          \"description\": \"ID of the deleted asset.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/assets/{asset_id}",
+	Method:         "DELETE",
+	BodyEncoding:   "",
+	Destructive:    true,
+	Args: []command.ArgSpec{
+		{Name: "asset-id", Param: "asset_id", Help: ""},
+	},
+}
