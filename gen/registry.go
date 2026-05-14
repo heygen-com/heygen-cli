@@ -11,12 +11,15 @@ func intPtr(v int) *int { return &v }
 var Groups = map[string][]*command.Spec{
 	"asset": {
 		AssetCreate,
+		AssetDelete,
 	},
 	"avatar": {
 		AvatarConsentCreate,
 		AvatarCreate,
+		AvatarDelete,
 		AvatarGet,
 		AvatarList,
+		AvatarLooksDelete,
 		AvatarLooksGet,
 		AvatarLooksList,
 		AvatarLooksUpdate,

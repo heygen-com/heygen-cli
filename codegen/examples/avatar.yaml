@@ -7,6 +7,9 @@
 "POST /v3/avatars":
   - desc: "See required fields for avatar creation"
     cmd: "heygen avatar create --request-schema"
+"DELETE /v3/avatars/{group_id}":
+  - desc: "Delete an avatar group and all its looks"
+    cmd: "heygen avatar delete <group-id>"
 "POST /v3/avatars/{group_id}/consent":
   - desc: "Submit avatar consent"
     cmd: "heygen avatar consent create <group-id>"
@@ -19,3 +22,6 @@
 "PATCH /v3/avatars/looks/{look_id}":
   - desc: "Rename a look"
     cmd: "heygen avatar looks update <look-id> --name 'New name'"
+"DELETE /v3/avatars/looks/{look_id}":
+  - desc: "Delete an avatar look"
+    cmd: "heygen avatar looks delete <look-id>"

@@ -51,6 +51,24 @@ var AvatarCreate = &command.Spec{
 	},
 }
 
+var AvatarDelete = &command.Spec{
+	Group:          "avatar",
+	Name:           "delete",
+	Summary:        "Delete Avatar Group",
+	Description:    "Permanently deletes an avatar group and all its associated looks. Cannot delete public or community groups.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for DELETE /v3/avatars/{group_id}.\",\n      \"properties\": {\n        \"id\": {\n          \"description\": \"ID of the deleted avatar group.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/avatars/{group_id}",
+	Method:         "DELETE",
+	BodyEncoding:   "",
+	Destructive:    true,
+	Examples: []string{
+		"# Delete an avatar group and all its looks\n  heygen avatar delete <group-id>",
+	},
+	Args: []command.ArgSpec{
+		{Name: "group-id", Param: "group_id", Help: ""},
+	},
+}
+
 var AvatarGet = &command.Spec{
 	Group:          "avatar",
 	Name:           "get",
@@ -118,6 +136,24 @@ var AvatarList = &command.Spec{
 			Source:   "query",
 			JSONName: "token",
 		},
+	},
+}
+
+var AvatarLooksDelete = &command.Spec{
+	Group:          "avatar",
+	Name:           "looks delete",
+	Summary:        "Delete Avatar Look",
+	Description:    "Deletes an avatar look and its backing resource. Supported types: photo_avatar, digital_twin, and kit-based looks. Studio avatar (model_index) types cannot be deleted via the API. Deleting the last look in a group does not auto-delete the parent group.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for DELETE /v3/avatars/looks/{look_id}.\",\n      \"properties\": {\n        \"id\": {\n          \"description\": \"ID of the deleted avatar look.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/avatars/looks/{look_id}",
+	Method:         "DELETE",
+	BodyEncoding:   "",
+	Destructive:    true,
+	Examples: []string{
+		"# Delete an avatar look\n  heygen avatar looks delete <look-id>",
+	},
+	Args: []command.ArgSpec{
+		{Name: "look-id", Param: "look_id", Help: ""},
 	},
 }
 
