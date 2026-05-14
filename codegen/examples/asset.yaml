@@ -1,3 +1,6 @@
 "POST /v3/assets":
   - desc: "Upload a file for use in video creation"
     cmd: "heygen asset create --file ./video.mp4"
+"DELETE /v3/assets/{asset_id}":
+  - desc: "Delete an asset"
+    cmd: "heygen asset delete <asset-id>"

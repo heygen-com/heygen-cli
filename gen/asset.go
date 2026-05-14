@@ -43,6 +43,9 @@ var AssetDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Examples: []string{
+		"# Delete an asset\n  heygen asset delete <asset-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "asset-id", Param: "asset_id", Help: ""},
 	},
