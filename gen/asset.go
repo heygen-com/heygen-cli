@@ -50,3 +50,20 @@ var AssetDelete = &command.Spec{
 		{Name: "asset-id", Param: "asset_id", Help: ""},
 	},
 }
+
+var AssetGet = &command.Spec{
+	Group:          "asset",
+	Name:           "get",
+	Summary:        "Get Asset",
+	Description:    "Returns metadata for an asset in the caller's workspace — including owner, upload timestamp, file type, and a publicly accessible URL.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response payload for GET /v3/assets/{asset_id}.\",\n      \"properties\": {\n        \"folder_id\": {\n          \"description\": \"Identifier of the folder the asset is stored in. Null if the asset is at the space root.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"id\": {\n          \"description\": \"Unique asset identifier.\",\n          \"type\": \"string\"\n        },\n        \"name\": {\n          \"description\": \"Display name of the asset.\",\n          \"type\": \"string\"\n        },\n        \"owner\": {\n          \"description\": \"Username of the asset owner.\",\n          \"type\": \"string\"\n        },\n        \"space_id\": {\n          \"description\": \"Identifier of the space the asset belongs to.\",\n          \"type\": \"string\"\n        },\n        \"type\": {\n          \"description\": \"Asset file type (e.g. 'image', 'video', 'audio', 'font').\",\n          \"type\": \"string\"\n        },\n        \"uploaded_at\": {\n          \"description\": \"Unix timestamp (seconds) of when the asset was uploaded.\",\n          \"type\": \"integer\"\n        },\n        \"url\": {\n          \"description\": \"Publicly accessible URL for the asset. Null if no URL can be generated.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\",\n        \"name\",\n        \"type\",\n        \"owner\",\n        \"space_id\",\n        \"uploaded_at\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/assets/{asset_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Examples: []string{
+		"# Get metadata for an asset\n  heygen asset get <asset-id>",
+	},
+	Args: []command.ArgSpec{
+		{Name: "asset-id", Param: "asset_id", Help: ""},
+	},
+}

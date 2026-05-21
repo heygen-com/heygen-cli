@@ -12,6 +12,7 @@ var Groups = map[string][]*command.Spec{
 	"asset": {
 		AssetCreate,
 		AssetDelete,
+		AssetGet,
 	},
 	"avatar": {
 		AvatarConsentCreate,
