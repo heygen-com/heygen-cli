@@ -60,6 +60,9 @@ var AssetGet = &command.Spec{
 	Endpoint:       "/v3/assets/{asset_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Get metadata for an asset\n  heygen asset get <asset-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "asset-id", Param: "asset_id", Help: ""},
 	},
