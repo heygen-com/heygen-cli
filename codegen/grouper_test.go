@@ -158,6 +158,103 @@ func TestGroupEndpoints_BodyFlagsSkipHiddenFields(t *testing.T) {
 	t.Error("video create not found")
 }
 
+// TestGroupEndpoints_BodyFlagsRespectXCliDefault locks in the per-surface default
+// override. Background: ``aspect_ratio`` defaults to ``16:9`` over the HTTP API
+// (existing callers rely on it), but agent-driven CLI/MCP flows are better off
+// defaulting to ``auto`` so the output canvas tracks the source orientation.
+// EF authors signal this via ``json_schema_extra={"x-cli-default": "auto"}``,
+// which lands in the spec next to the API ``default``. Codegen must surface the
+// override, not the API value.
+//
+// The test spec mirrors that shape on the ``aspect_ratio`` field plus a control
+// field (``fps``) that has only ``default`` so we don't accidentally break the
+// fallback path.
+func TestGroupEndpoints_BodyFlagsRespectXCliDefault(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	examples := loadTestExamples(t)
+	groups, _, err := GroupEndpoints(doc, examples)
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	var sawOverride, sawFallback bool
+	for _, s := range groups["video"] {
+		if s.Name != "create" {
+			continue
+		}
+		for _, flag := range s.Flags {
+			switch flag.JSONName {
+			case "aspect_ratio":
+				sawOverride = true
+				if flag.Default != "auto" {
+					t.Errorf("aspect_ratio: x-cli-default should win over default; got Default=%q, want %q", flag.Default, "auto")
+				}
+			case "fps":
+				sawFallback = true
+				if flag.Default != "30" {
+					t.Errorf("fps: with no x-cli-default the schema default should be used; got Default=%q, want %q", flag.Default, "30")
+				}
+			}
+		}
+		if !sawOverride {
+			t.Error("aspect_ratio flag not found on video create")
+		}
+		if !sawFallback {
+			t.Error("fps flag (fallback control) not found on video create")
+		}
+		return
+	}
+	t.Error("video create not found")
+}
+
+// TestSchemaCliDefault locks the precedence rules on the helper itself so a
+// future refactor that splits or inlines it can't silently flip behavior.
+func TestSchemaCliDefault(t *testing.T) {
+	cases := []struct {
+		name      string
+		schema    *openapi3.Schema
+		wantValue interface{}
+		wantOk    bool
+	}{
+		{"nil schema", nil, nil, false},
+		{"no default, no extension", &openapi3.Schema{}, nil, false},
+		{
+			"default only",
+			&openapi3.Schema{Default: "16:9"},
+			"16:9",
+			true,
+		},
+		{
+			"x-cli-default overrides default",
+			&openapi3.Schema{Default: "16:9", Extensions: map[string]interface{}{"x-cli-default": "auto"}},
+			"auto",
+			true,
+		},
+		{
+			"x-cli-default with no default",
+			&openapi3.Schema{Extensions: map[string]interface{}{"x-cli-default": "auto"}},
+			"auto",
+			true,
+		},
+		{
+			"x-mcp-default is ignored — that's the MCP codegen's concern",
+			&openapi3.Schema{Default: "16:9", Extensions: map[string]interface{}{"x-mcp-default": "auto"}},
+			"16:9",
+			true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := schemaCliDefault(tc.schema)
+			if ok != tc.wantOk {
+				t.Fatalf("ok mismatch: got %v, want %v", ok, tc.wantOk)
+			}
+			if got != tc.wantValue {
+				t.Errorf("value mismatch: got %v, want %v", got, tc.wantValue)
+			}
+		})
+	}
+}
+
 func TestGroupEndpoints_Schemas(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)

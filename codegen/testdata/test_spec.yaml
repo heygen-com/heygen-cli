@@ -77,6 +77,16 @@ paths:
                   description: Video quality (1-100)
                   minimum: 1
                   maximum: 100
+                fps:
+                  type: integer
+                  description: Frames per second
+                  default: 30
+                aspect_ratio:
+                  type: string
+                  description: Output aspect ratio
+                  enum: ["16:9", "9:16", auto]
+                  default: "16:9"
+                  x-cli-default: auto
                 watermark_s3_key:
                   type: string
                   description: Internal watermark asset key
