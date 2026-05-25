@@ -188,10 +188,23 @@ func TestGroupEndpoints_BodyFlagsRespectXCliDefault(t *testing.T) {
 				if flag.Default != "auto" {
 					t.Errorf("aspect_ratio: x-cli-default should win over default; got Default=%q, want %q", flag.Default, "auto")
 				}
+				// ForceSend must be true so BuildInvocation materializes the
+				// CLI default into the request body when the user omits the
+				// flag — otherwise the server applies its own default ("16:9")
+				// and the CLI's "auto" is a help-text-only fiction.
+				if !flag.ForceSend {
+					t.Error("aspect_ratio: ForceSend should be true for x-cli-default-sourced flags")
+				}
 			case "fps":
 				sawFallback = true
 				if flag.Default != "30" {
 					t.Errorf("fps: with no x-cli-default the schema default should be used; got Default=%q, want %q", flag.Default, "30")
+				}
+				// Ordinary OpenAPI defaults keep the existing omit-unless-changed
+				// behavior — the CLI shouldn't start echoing every server default
+				// back. Only x-cli-default flips ForceSend.
+				if flag.ForceSend {
+					t.Error("fps: ForceSend must stay false for ordinary schema defaults")
 				}
 			}
 		}
@@ -208,25 +221,32 @@ func TestGroupEndpoints_BodyFlagsRespectXCliDefault(t *testing.T) {
 
 // TestSchemaCliDefault locks the precedence rules on the helper itself so a
 // future refactor that splits or inlines it can't silently flip behavior.
+//
+// fromExtension is the signal that downstream codegen uses to set
+// FlagSpec.ForceSend — true only when the value came from x-cli-default, not
+// from an ordinary OpenAPI default.
 func TestSchemaCliDefault(t *testing.T) {
 	cases := []struct {
-		name      string
-		schema    *openapi3.Schema
-		wantValue interface{}
-		wantOk    bool
+		name              string
+		schema            *openapi3.Schema
+		wantValue         interface{}
+		wantOk            bool
+		wantFromExtension bool
 	}{
-		{"nil schema", nil, nil, false},
-		{"no default, no extension", &openapi3.Schema{}, nil, false},
+		{"nil schema", nil, nil, false, false},
+		{"no default, no extension", &openapi3.Schema{}, nil, false, false},
 		{
 			"default only",
 			&openapi3.Schema{Default: "16:9"},
 			"16:9",
 			true,
+			false,
 		},
 		{
 			"x-cli-default overrides default",
 			&openapi3.Schema{Default: "16:9", Extensions: map[string]interface{}{"x-cli-default": "auto"}},
 			"auto",
+			true,
 			true,
 		},
 		{
@@ -234,22 +254,27 @@ func TestSchemaCliDefault(t *testing.T) {
 			&openapi3.Schema{Extensions: map[string]interface{}{"x-cli-default": "auto"}},
 			"auto",
 			true,
+			true,
 		},
 		{
 			"x-mcp-default is ignored — that's the MCP codegen's concern",
 			&openapi3.Schema{Default: "16:9", Extensions: map[string]interface{}{"x-mcp-default": "auto"}},
 			"16:9",
 			true,
+			false,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := schemaCliDefault(tc.schema)
+			got, ok, fromExt := schemaCliDefault(tc.schema)
 			if ok != tc.wantOk {
 				t.Fatalf("ok mismatch: got %v, want %v", ok, tc.wantOk)
 			}
 			if got != tc.wantValue {
 				t.Errorf("value mismatch: got %v, want %v", got, tc.wantValue)
+			}
+			if fromExt != tc.wantFromExtension {
+				t.Errorf("fromExtension mismatch: got %v, want %v", fromExt, tc.wantFromExtension)
 			}
 		})
 	}

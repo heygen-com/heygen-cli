@@ -11,6 +11,11 @@ import (
 
 // helperCmd creates a Cobra command with flags registered from the spec,
 // then simulates flag parsing with the given args.
+//
+// The flag.Default field is honored for string types so ForceSend semantics
+// can be exercised in tests without pulling in the cmd/heygen builder. The
+// rest of the registration mirrors registerFlag (cmd/heygen/builder.go) at
+// the level of detail these tests need.
 func helperCmd(t *testing.T, spec *Spec, args []string) *cobra.Command {
 	t.Helper()
 	cmd := &cobra.Command{Use: "test", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
@@ -19,13 +24,13 @@ func helperCmd(t *testing.T, spec *Spec, args []string) *cobra.Command {
 		case "int":
 			cmd.Flags().Int(f.Name, 0, f.Help)
 		case "bool":
-			cmd.Flags().Bool(f.Name, false, f.Help)
+			cmd.Flags().Bool(f.Name, f.Default == "true", f.Help)
 		case "float64":
 			cmd.Flags().Float64(f.Name, 0, f.Help)
 		case "string-slice":
 			cmd.Flags().StringSlice(f.Name, nil, f.Help)
 		default:
-			cmd.Flags().String(f.Name, "", f.Help)
+			cmd.Flags().String(f.Name, f.Default, f.Help)
 		}
 	}
 	cmd.SetArgs(args)
@@ -314,5 +319,120 @@ func TestBuildInvocation_StringSliceEnumValid(t *testing.T) {
 	events, ok := inv.Body["events"].([]string)
 	if !ok || len(events) != 2 {
 		t.Fatalf("Body[events] = %#v, want 2 validated string-slice values", inv.Body["events"])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ForceSend — CLI-specific default that must reach the server even when the
+// user doesn't pass the flag.
+//
+// Motivation: aspect_ratio's API default is "16:9" but the CLI's effective
+// default is "auto" via x-cli-default. Without ForceSend, BuildInvocation
+// skips any flag the user didn't change, the request goes out with no
+// aspect_ratio, and the API applies "16:9" — making "auto" a help-text-only
+// fiction. ForceSend keeps the gate open so the body actually carries "auto".
+// ---------------------------------------------------------------------------
+
+func TestBuildInvocation_ForceSendWritesBodyDefaultWhenFlagOmitted(t *testing.T) {
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "aspect-ratio", Type: "string", Source: "body", JSONName: "aspect_ratio", Default: "auto", ForceSend: true},
+		},
+	}
+	cmd := helperCmd(t, spec, nil) // user omits --aspect-ratio
+
+	inv, err := spec.BuildInvocation(cmd, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inv.Body == nil {
+		t.Fatal("Body should be populated by ForceSend flag")
+	}
+	if inv.Body["aspect_ratio"] != "auto" {
+		t.Errorf("Body[aspect_ratio] = %v, want %q", inv.Body["aspect_ratio"], "auto")
+	}
+}
+
+func TestBuildInvocation_ForceSendUserValueWins(t *testing.T) {
+	// User-supplied value must still win over the ForceSend default; ForceSend
+	// only matters when the user is silent.
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "aspect-ratio", Type: "string", Source: "body", JSONName: "aspect_ratio", Default: "auto", ForceSend: true},
+		},
+	}
+	cmd := helperCmd(t, spec, []string{"--aspect-ratio", "9:16"})
+
+	inv, err := spec.BuildInvocation(cmd, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inv.Body["aspect_ratio"] != "9:16" {
+		t.Errorf("Body[aspect_ratio] = %v, want %q (user value should win)", inv.Body["aspect_ratio"], "9:16")
+	}
+}
+
+func TestBuildInvocation_ForceSendForQueryParam(t *testing.T) {
+	// Symmetry check: ForceSend works for query params too, not just body.
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "scope", Type: "string", Source: "query", JSONName: "scope", Default: "user", ForceSend: true},
+		},
+	}
+	cmd := helperCmd(t, spec, nil)
+
+	inv, err := spec.BuildInvocation(cmd, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := inv.QueryParams.Get("scope"); got != "user" {
+		t.Errorf("QueryParams[scope] = %q, want %q", got, "user")
+	}
+}
+
+func TestBuildInvocation_NonForceSendDefaultStaysOmitted(t *testing.T) {
+	// Regression guard: ordinary OpenAPI defaults (no x-cli-default) must keep
+	// the existing omit-unless-changed behavior. Otherwise the CLI would start
+	// echoing every server default back to the server on every request.
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "fps", Type: "int", Source: "body", JSONName: "fps", Default: "30", ForceSend: false},
+		},
+	}
+	cmd := helperCmd(t, spec, nil)
+
+	inv, err := spec.BuildInvocation(cmd, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inv.Body != nil {
+		if _, present := inv.Body["fps"]; present {
+			t.Errorf("Body should not carry fps when the user omitted it; got Body=%v", inv.Body)
+		}
+	}
+}
+
+func TestBuildInvocation_ForceSendValidatesAgainstEnum(t *testing.T) {
+	// The ForceSend default must itself satisfy the enum constraint. A bad
+	// codegen output (default value outside enum) should fail validation, not
+	// silently ship an invalid request. This is a defense against future
+	// codegen bugs where the x-cli-default value doesn't match the enum.
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{
+				Name:      "aspect-ratio",
+				Type:      "string",
+				Source:    "body",
+				JSONName:  "aspect_ratio",
+				Default:   "bogus",
+				ForceSend: true,
+				Enum:      []string{"16:9", "9:16", "auto"},
+			},
+		},
+	}
+	cmd := helperCmd(t, spec, nil)
+
+	if _, err := spec.BuildInvocation(cmd, nil, nil); err == nil {
+		t.Fatal("expected enum validation error for ForceSend default outside enum, got nil")
 	}
 }

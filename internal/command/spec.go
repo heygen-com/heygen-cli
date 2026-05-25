@@ -94,6 +94,21 @@ type FlagSpec struct {
 	Max      *int     // from OpenAPI maximum (nil if not defined)
 	Source   string   // "query", "body", or "file"
 	JSONName string   // original API parameter/field name ("folder_id")
+
+	// ForceSend tells BuildInvocation to materialize the flag's Default into
+	// the request even when the user didn't pass the flag.
+	//
+	// Set by codegen ONLY when the schema property carries x-cli-default in
+	// the OpenAPI spec — i.e. an explicit, CLI-specific default that diverges
+	// from the server's default. Ordinary OpenAPI ``default`` values keep the
+	// existing omit-unless-changed semantics, so the CLI does not start echoing
+	// every server default back in every request.
+	//
+	// Example: aspect_ratio's API default is "16:9" but x-cli-default is "auto".
+	// Without ForceSend, omitting --aspect-ratio would send no aspect_ratio at
+	// all, and the API would apply "16:9" — making the CLI's "auto" default a
+	// help-text-only fiction.
+	ForceSend bool
 }
 
 // PollConfig defines how --wait polling works for async commands.
@@ -154,9 +169,16 @@ func (s *Spec) BuildInvocation(cmd *cobra.Command, args []string, data map[strin
 		inv.PathParams[arg.Param] = args[i] //nolint:gosec // G602: i is bounded by range over s.Args and len(args) guard above
 	}
 
-	// Step 3: Flags — only if explicitly set by the user
+	// Step 3: Flags — explicitly set by the user, OR carrying a CLI-specific
+	// default (ForceSend) that must reach the server even when omitted.
+	//
+	// The two cases are intentionally treated identically once the gate passes:
+	// in both, the value comes from Cobra's flag store (set by registerFlag to
+	// flag.Default when the user didn't pass the flag), so a user-supplied
+	// value naturally wins over a default. ForceSend just keeps the gate open
+	// when the user stayed silent.
 	for _, flag := range s.Flags {
-		if !cmd.Flags().Changed(flag.Name) {
+		if !cmd.Flags().Changed(flag.Name) && !flag.ForceSend {
 			continue
 		}
 
