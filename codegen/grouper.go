@@ -208,8 +208,9 @@ func buildSpec(
 			flag.Enum = schemaEnum(s)
 			flag.Min = floatToIntPtr(s.Min)
 			flag.Max = floatToIntPtr(s.Max)
-			if s.Default != nil {
-				flag.Default = formatDefault(s.Default)
+			if d, ok, fromExt := schemaCliDefault(s); ok {
+				flag.Default = formatDefault(d)
+				flag.SendDefaultWhenOmitted = fromExt
 			}
 		}
 		spec.Flags = append(spec.Flags, flag)
@@ -260,8 +261,9 @@ func buildSpec(
 				Source:   "body",
 				JSONName: name,
 			}
-			if prop.Default != nil {
-				flag.Default = formatDefault(prop.Default)
+			if d, ok, fromExt := schemaCliDefault(prop); ok {
+				flag.Default = formatDefault(d)
+				flag.SendDefaultWhenOmitted = fromExt
 			}
 			spec.Flags = append(spec.Flags, flag)
 		}
@@ -358,6 +360,37 @@ func isCliAction(op *openapi3.Operation) bool {
 		}
 	}
 	return false
+}
+
+// schemaCliDefault returns the effective default value for a CLI flag.
+//
+// Some fields legitimately need a different default in the CLI than in the HTTP
+// API. ``aspect_ratio`` is the canonical example: the API defaults to ``16:9``
+// for backwards compatibility, but agent-driven CLI/MCP flows are better off
+// defaulting to ``auto`` so the canvas tracks the source orientation. Authors
+// signal this from the EF Pydantic field via
+// ``json_schema_extra={"x-cli-default": "auto"}``; the value lands verbatim on
+// the schema property in the OpenAPI spec.
+//
+// Precedence: ``x-cli-default`` (if present) wins over ``default``. Returns
+// (value, ok, fromExtension). ``fromExtension`` is true only when the value
+// came from ``x-cli-default``; the codegen uses it to flip
+// ``FlagSpec.SendDefaultWhenOmitted`` so the CLI default is actually written
+// into the request body when the user omits the flag (non-destructively —
+// see the field doc). Ordinary OpenAPI ``default`` values keep the existing
+// omit-unless-changed behavior — the CLI shouldn't echo every server default
+// back to the server.
+func schemaCliDefault(s *openapi3.Schema) (value interface{}, ok bool, fromExtension bool) {
+	if s == nil {
+		return nil, false, false
+	}
+	if v, ok := s.Extensions["x-cli-default"]; ok {
+		return v, true, true
+	}
+	if s.Default != nil {
+		return s.Default, true, false
+	}
+	return nil, false, false
 }
 
 func detectContentType(op *openapi3.Operation) string {

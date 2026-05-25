@@ -94,6 +94,26 @@ type FlagSpec struct {
 	Max      *int     // from OpenAPI maximum (nil if not defined)
 	Source   string   // "query", "body", or "file"
 	JSONName string   // original API parameter/field name ("folder_id")
+
+	// SendDefaultWhenOmitted tells BuildInvocation to materialize the flag's
+	// Default into the request even when the user didn't pass the flag —
+	// but only as a non-destructive fill. If a value for this field already
+	// exists in the body (typically because the user supplied it via
+	// -d/--data JSON), the existing value is preserved.
+	//
+	// Set by codegen ONLY when the schema property carries x-cli-default in
+	// the OpenAPI spec — i.e. an explicit, CLI-specific default that diverges
+	// from the server's default. Ordinary OpenAPI ``default`` values keep the
+	// existing omit-unless-changed semantics, so the CLI does not start echoing
+	// every server default back in every request.
+	//
+	// Example: aspect_ratio's API default is "16:9" but x-cli-default is "auto".
+	// Without SendDefaultWhenOmitted, omitting --aspect-ratio would send no
+	// aspect_ratio at all, and the API would apply "16:9" — making the CLI's
+	// "auto" default a help-text-only fiction. With the non-destructive
+	// semantics, ``--data {"aspect_ratio":"16:9"}`` still wins when the flag
+	// itself is omitted.
+	SendDefaultWhenOmitted bool
 }
 
 // PollConfig defines how --wait polling works for async commands.
@@ -154,10 +174,34 @@ func (s *Spec) BuildInvocation(cmd *cobra.Command, args []string, data map[strin
 		inv.PathParams[arg.Param] = args[i] //nolint:gosec // G602: i is bounded by range over s.Args and len(args) guard above
 	}
 
-	// Step 3: Flags — only if explicitly set by the user
+	// Step 3: Flags — explicitly set by the user, OR carrying a CLI-specific
+	// default (SendDefaultWhenOmitted) that must reach the server even when
+	// the flag is omitted.
+	//
+	// The user-changed and default-fill paths are intentionally similar once
+	// the gate passes: in both, the value comes from Cobra's flag store (set
+	// by registerFlag to flag.Default when the user didn't pass the flag), so
+	// a user-supplied flag value naturally wins over a default. The
+	// SendDefaultWhenOmitted branch carves out one additional non-destructive
+	// rule: if -d/--data already provided a value for this body field, that
+	// explicit user value wins over the CLI default. Without that guard,
+	// ``--data {"aspect_ratio":"16:9"}`` with --aspect-ratio omitted would
+	// silently rewrite "16:9" to "auto", which is worse than the bug we're
+	// fixing.
 	for _, flag := range s.Flags {
-		if !cmd.Flags().Changed(flag.Name) {
+		changed := cmd.Flags().Changed(flag.Name)
+		if !changed && !flag.SendDefaultWhenOmitted {
 			continue
+		}
+
+		// Non-destructive default fill: when the user didn't pass the flag
+		// and the default would have overwritten an explicit -d/--data value
+		// for the same JSON field, skip writing. Only applies to body
+		// fields; query params and file uploads don't share with --data.
+		if !changed && flag.SendDefaultWhenOmitted && flag.Source == "body" && inv.Body != nil {
+			if _, exists := inv.Body[flag.JSONName]; exists {
+				continue
+			}
 		}
 
 		if err := validateFlag(cmd, flag); err != nil {
