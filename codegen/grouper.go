@@ -210,7 +210,7 @@ func buildSpec(
 			flag.Max = floatToIntPtr(s.Max)
 			if d, ok, fromExt := schemaCliDefault(s); ok {
 				flag.Default = formatDefault(d)
-				flag.ForceSend = fromExt
+				flag.SendDefaultWhenOmitted = fromExt
 			}
 		}
 		spec.Flags = append(spec.Flags, flag)
@@ -263,7 +263,7 @@ func buildSpec(
 			}
 			if d, ok, fromExt := schemaCliDefault(prop); ok {
 				flag.Default = formatDefault(d)
-				flag.ForceSend = fromExt
+				flag.SendDefaultWhenOmitted = fromExt
 			}
 			spec.Flags = append(spec.Flags, flag)
 		}
@@ -374,9 +374,10 @@ func isCliAction(op *openapi3.Operation) bool {
 //
 // Precedence: ``x-cli-default`` (if present) wins over ``default``. Returns
 // (value, ok, fromExtension). ``fromExtension`` is true only when the value
-// came from ``x-cli-default``; the codegen uses it to flip FlagSpec.ForceSend
-// so the CLI default is actually written into the request body when the user
-// omits the flag. Ordinary OpenAPI ``default`` values keep the existing
+// came from ``x-cli-default``; the codegen uses it to flip
+// ``FlagSpec.SendDefaultWhenOmitted`` so the CLI default is actually written
+// into the request body when the user omits the flag (non-destructively —
+// see the field doc). Ordinary OpenAPI ``default`` values keep the existing
 // omit-unless-changed behavior — the CLI shouldn't echo every server default
 // back to the server.
 func schemaCliDefault(s *openapi3.Schema) (value interface{}, ok bool, fromExtension bool) {

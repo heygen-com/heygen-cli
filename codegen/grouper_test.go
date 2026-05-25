@@ -188,12 +188,13 @@ func TestGroupEndpoints_BodyFlagsRespectXCliDefault(t *testing.T) {
 				if flag.Default != "auto" {
 					t.Errorf("aspect_ratio: x-cli-default should win over default; got Default=%q, want %q", flag.Default, "auto")
 				}
-				// ForceSend must be true so BuildInvocation materializes the
-				// CLI default into the request body when the user omits the
-				// flag — otherwise the server applies its own default ("16:9")
-				// and the CLI's "auto" is a help-text-only fiction.
-				if !flag.ForceSend {
-					t.Error("aspect_ratio: ForceSend should be true for x-cli-default-sourced flags")
+				// SendDefaultWhenOmitted must be true so BuildInvocation
+				// materializes the CLI default into the request body when the
+				// user omits the flag — otherwise the server applies its own
+				// default ("16:9") and the CLI's "auto" is a help-text-only
+				// fiction.
+				if !flag.SendDefaultWhenOmitted {
+					t.Error("aspect_ratio: SendDefaultWhenOmitted should be true for x-cli-default-sourced flags")
 				}
 			case "fps":
 				sawFallback = true
@@ -202,9 +203,9 @@ func TestGroupEndpoints_BodyFlagsRespectXCliDefault(t *testing.T) {
 				}
 				// Ordinary OpenAPI defaults keep the existing omit-unless-changed
 				// behavior — the CLI shouldn't start echoing every server default
-				// back. Only x-cli-default flips ForceSend.
-				if flag.ForceSend {
-					t.Error("fps: ForceSend must stay false for ordinary schema defaults")
+				// back. Only x-cli-default flips SendDefaultWhenOmitted.
+				if flag.SendDefaultWhenOmitted {
+					t.Error("fps: SendDefaultWhenOmitted must stay false for ordinary schema defaults")
 				}
 			}
 		}
@@ -223,7 +224,7 @@ func TestGroupEndpoints_BodyFlagsRespectXCliDefault(t *testing.T) {
 // future refactor that splits or inlines it can't silently flip behavior.
 //
 // fromExtension is the signal that downstream codegen uses to set
-// FlagSpec.ForceSend — true only when the value came from x-cli-default, not
+// FlagSpec.SendDefaultWhenOmitted — true only when the value came from x-cli-default, not
 // from an ordinary OpenAPI default.
 func TestSchemaCliDefault(t *testing.T) {
 	cases := []struct {

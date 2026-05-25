@@ -54,8 +54,8 @@ var {{pascalCase .Group}}{{pascalCase .Name}} = &command.Spec{
 			Max:      {{intPtrLiteral .Max}},
 			Source:   {{quote .Source}},
 			JSONName: {{quote .JSONName}},
-{{- if .ForceSend}}
-			ForceSend: true,
+{{- if .SendDefaultWhenOmitted}}
+			SendDefaultWhenOmitted: true,
 {{- end}}
 		},
 {{- end}}

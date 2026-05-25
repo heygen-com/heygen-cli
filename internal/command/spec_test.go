@@ -12,7 +12,7 @@ import (
 // helperCmd creates a Cobra command with flags registered from the spec,
 // then simulates flag parsing with the given args.
 //
-// The flag.Default field is honored for string types so ForceSend semantics
+// The flag.Default field is honored for string types so SendDefaultWhenOmitted semantics
 // can be exercised in tests without pulling in the cmd/heygen builder. The
 // rest of the registration mirrors registerFlag (cmd/heygen/builder.go) at
 // the level of detail these tests need.
@@ -323,20 +323,24 @@ func TestBuildInvocation_StringSliceEnumValid(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// ForceSend — CLI-specific default that must reach the server even when the
-// user doesn't pass the flag.
+// SendDefaultWhenOmitted — CLI-specific default that must reach the server
+// even when the user doesn't pass the flag.
 //
 // Motivation: aspect_ratio's API default is "16:9" but the CLI's effective
-// default is "auto" via x-cli-default. Without ForceSend, BuildInvocation
+// default is "auto" via x-cli-default. Without this gate, BuildInvocation
 // skips any flag the user didn't change, the request goes out with no
 // aspect_ratio, and the API applies "16:9" — making "auto" a help-text-only
-// fiction. ForceSend keeps the gate open so the body actually carries "auto".
+// fiction. The gate keeps it open so the body actually carries "auto".
+//
+// Non-destructive: when the user explicitly provides the same field via
+// -d/--data JSON, that value wins. Otherwise the default fill could silently
+// rewrite an explicit user value, which is worse than the bug being fixed.
 // ---------------------------------------------------------------------------
 
-func TestBuildInvocation_ForceSendWritesBodyDefaultWhenFlagOmitted(t *testing.T) {
+func TestBuildInvocation_SendDefaultWhenOmittedWritesBodyDefault(t *testing.T) {
 	spec := &Spec{
 		Flags: []FlagSpec{
-			{Name: "aspect-ratio", Type: "string", Source: "body", JSONName: "aspect_ratio", Default: "auto", ForceSend: true},
+			{Name: "aspect-ratio", Type: "string", Source: "body", JSONName: "aspect_ratio", Default: "auto", SendDefaultWhenOmitted: true},
 		},
 	}
 	cmd := helperCmd(t, spec, nil) // user omits --aspect-ratio
@@ -346,19 +350,19 @@ func TestBuildInvocation_ForceSendWritesBodyDefaultWhenFlagOmitted(t *testing.T)
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if inv.Body == nil {
-		t.Fatal("Body should be populated by ForceSend flag")
+		t.Fatal("Body should be populated by SendDefaultWhenOmitted flag")
 	}
 	if inv.Body["aspect_ratio"] != "auto" {
 		t.Errorf("Body[aspect_ratio] = %v, want %q", inv.Body["aspect_ratio"], "auto")
 	}
 }
 
-func TestBuildInvocation_ForceSendUserValueWins(t *testing.T) {
-	// User-supplied value must still win over the ForceSend default; ForceSend
-	// only matters when the user is silent.
+func TestBuildInvocation_SendDefaultWhenOmittedUserValueWins(t *testing.T) {
+	// User-supplied flag value must still win over the default; the gate only
+	// matters when the user is silent.
 	spec := &Spec{
 		Flags: []FlagSpec{
-			{Name: "aspect-ratio", Type: "string", Source: "body", JSONName: "aspect_ratio", Default: "auto", ForceSend: true},
+			{Name: "aspect-ratio", Type: "string", Source: "body", JSONName: "aspect_ratio", Default: "auto", SendDefaultWhenOmitted: true},
 		},
 	}
 	cmd := helperCmd(t, spec, []string{"--aspect-ratio", "9:16"})
@@ -372,11 +376,86 @@ func TestBuildInvocation_ForceSendUserValueWins(t *testing.T) {
 	}
 }
 
-func TestBuildInvocation_ForceSendForQueryParam(t *testing.T) {
-	// Symmetry check: ForceSend works for query params too, not just body.
+func TestBuildInvocation_SendDefaultWhenOmittedDoesNotOverrideDataJSON(t *testing.T) {
+	// Edge case: --data JSON provides aspect_ratio explicitly, --aspect-ratio
+	// is omitted. Without the non-destructive guard, the CLI default "auto"
+	// would silently overwrite the user's explicit "16:9" — which is worse
+	// than the original bug. The guard must preserve the --data value.
 	spec := &Spec{
 		Flags: []FlagSpec{
-			{Name: "scope", Type: "string", Source: "query", JSONName: "scope", Default: "user", ForceSend: true},
+			{Name: "aspect-ratio", Type: "string", Source: "body", JSONName: "aspect_ratio", Default: "auto", SendDefaultWhenOmitted: true},
+		},
+	}
+	cmd := helperCmd(t, spec, nil)
+
+	data := map[string]any{"aspect_ratio": "16:9", "title": "My Video"}
+	inv, err := spec.BuildInvocation(cmd, nil, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inv.Body["aspect_ratio"] != "16:9" {
+		t.Errorf("Body[aspect_ratio] = %v, want %q (--data must win over silent SendDefaultWhenOmitted)", inv.Body["aspect_ratio"], "16:9")
+	}
+	// title from --data must still be preserved (sanity check that the guard
+	// is field-scoped, not blanket).
+	if inv.Body["title"] != "My Video" {
+		t.Errorf("Body[title] = %v, want %q", inv.Body["title"], "My Video")
+	}
+}
+
+func TestBuildInvocation_SendDefaultWhenOmittedFillsMissingDataField(t *testing.T) {
+	// Companion to the previous test: --data is present but doesn't include
+	// aspect_ratio. The default fill must still apply for that missing field
+	// while other --data fields are preserved.
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "aspect-ratio", Type: "string", Source: "body", JSONName: "aspect_ratio", Default: "auto", SendDefaultWhenOmitted: true},
+		},
+	}
+	cmd := helperCmd(t, spec, nil)
+
+	data := map[string]any{"title": "My Video"}
+	inv, err := spec.BuildInvocation(cmd, nil, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inv.Body["aspect_ratio"] != "auto" {
+		t.Errorf("Body[aspect_ratio] = %v, want %q (default fill should apply when --data omits the field)", inv.Body["aspect_ratio"], "auto")
+	}
+	if inv.Body["title"] != "My Video" {
+		t.Errorf("Body[title] = %v, want %q", inv.Body["title"], "My Video")
+	}
+}
+
+func TestBuildInvocation_SendDefaultWhenOmittedExplicitFlagOverridesDataJSON(t *testing.T) {
+	// Three-way precedence: explicit flag > --data > CLI default. When the
+	// user passes both --data with aspect_ratio and an explicit
+	// --aspect-ratio, the flag wins (this matches the existing
+	// TestBuildInvocation_FlagOverridesData semantics, kept here to lock the
+	// interaction with SendDefaultWhenOmitted).
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "aspect-ratio", Type: "string", Source: "body", JSONName: "aspect_ratio", Default: "auto", SendDefaultWhenOmitted: true},
+		},
+	}
+	cmd := helperCmd(t, spec, []string{"--aspect-ratio", "9:16"})
+
+	data := map[string]any{"aspect_ratio": "16:9"}
+	inv, err := spec.BuildInvocation(cmd, nil, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inv.Body["aspect_ratio"] != "9:16" {
+		t.Errorf("Body[aspect_ratio] = %v, want %q (explicit flag should win)", inv.Body["aspect_ratio"], "9:16")
+	}
+}
+
+func TestBuildInvocation_SendDefaultWhenOmittedForQueryParam(t *testing.T) {
+	// Symmetry check: the gate works for query params too. --data doesn't
+	// apply to query params, so there's no overwrite concern there.
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "scope", Type: "string", Source: "query", JSONName: "scope", Default: "user", SendDefaultWhenOmitted: true},
 		},
 	}
 	cmd := helperCmd(t, spec, nil)
@@ -390,13 +469,13 @@ func TestBuildInvocation_ForceSendForQueryParam(t *testing.T) {
 	}
 }
 
-func TestBuildInvocation_NonForceSendDefaultStaysOmitted(t *testing.T) {
+func TestBuildInvocation_OrdinaryDefaultStaysOmitted(t *testing.T) {
 	// Regression guard: ordinary OpenAPI defaults (no x-cli-default) must keep
 	// the existing omit-unless-changed behavior. Otherwise the CLI would start
 	// echoing every server default back to the server on every request.
 	spec := &Spec{
 		Flags: []FlagSpec{
-			{Name: "fps", Type: "int", Source: "body", JSONName: "fps", Default: "30", ForceSend: false},
+			{Name: "fps", Type: "int", Source: "body", JSONName: "fps", Default: "30", SendDefaultWhenOmitted: false},
 		},
 	}
 	cmd := helperCmd(t, spec, nil)
@@ -412,27 +491,27 @@ func TestBuildInvocation_NonForceSendDefaultStaysOmitted(t *testing.T) {
 	}
 }
 
-func TestBuildInvocation_ForceSendValidatesAgainstEnum(t *testing.T) {
-	// The ForceSend default must itself satisfy the enum constraint. A bad
-	// codegen output (default value outside enum) should fail validation, not
-	// silently ship an invalid request. This is a defense against future
-	// codegen bugs where the x-cli-default value doesn't match the enum.
+func TestBuildInvocation_SendDefaultWhenOmittedValidatesAgainstEnum(t *testing.T) {
+	// The default value must itself satisfy the enum constraint. A bad
+	// codegen output (default outside enum) should fail validation, not
+	// silently ship an invalid request. This defends against a future codegen
+	// bug where x-cli-default doesn't match the declared enum.
 	spec := &Spec{
 		Flags: []FlagSpec{
 			{
-				Name:      "aspect-ratio",
-				Type:      "string",
-				Source:    "body",
-				JSONName:  "aspect_ratio",
-				Default:   "bogus",
-				ForceSend: true,
-				Enum:      []string{"16:9", "9:16", "auto"},
+				Name:                   "aspect-ratio",
+				Type:                   "string",
+				Source:                 "body",
+				JSONName:               "aspect_ratio",
+				Default:                "bogus",
+				SendDefaultWhenOmitted: true,
+				Enum:                   []string{"16:9", "9:16", "auto"},
 			},
 		},
 	}
 	cmd := helperCmd(t, spec, nil)
 
 	if _, err := spec.BuildInvocation(cmd, nil, nil); err == nil {
-		t.Fatal("expected enum validation error for ForceSend default outside enum, got nil")
+		t.Fatal("expected enum validation error for default outside enum, got nil")
 	}
 }
