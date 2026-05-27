@@ -8,6 +8,23 @@ import (
 	"testing"
 )
 
+// storedAPIKey reads the credentials file and returns its api_key. The
+// file is written in the JSON format (`{ "api_key": "..." }`).
+func storedAPIKey(t *testing.T, dir string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, "credentials"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var creds struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.Unmarshal(data, &creds); err != nil {
+		t.Fatalf("credentials file is not valid JSON: %v\ncontents: %s", err, data)
+	}
+	return creds.APIKey
+}
+
 // TestAuthLogin_EmptyStdin_NoEnvVar_NonTTY verifies that a non-TTY empty stdin
 // with no HEYGEN_API_KEY set returns exit 2 with the pipe-hint message.
 func TestAuthLogin_EmptyStdin_NoEnvVar_NonTTY(t *testing.T) {
@@ -57,12 +74,8 @@ func TestAuthLogin_PipedKey_StillWorks(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "credentials"))
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if string(data) != "real-key\n" {
-		t.Fatalf("credentials = %q, want %q", string(data), "real-key\n")
+	if got := storedAPIKey(t, dir); got != "real-key" {
+		t.Fatalf("stored api_key = %q, want %q", got, "real-key")
 	}
 }
 
@@ -83,12 +96,8 @@ func TestAuthLogin_Success(t *testing.T) {
 		t.Fatalf("expected success message, got %v", parsed)
 	}
 
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HEYGEN_CONFIG_DIR"), "credentials"))
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if string(data) != "test-key-123\n" {
-		t.Fatalf("credentials = %q, want %q", string(data), "test-key-123\n")
+	if got := storedAPIKey(t, os.Getenv("HEYGEN_CONFIG_DIR")); got != "test-key-123" {
+		t.Fatalf("stored api_key = %q, want %q", got, "test-key-123")
 	}
 }
 
@@ -115,12 +124,8 @@ func TestAuthLogin_OverwriteExisting(t *testing.T) {
 		t.Fatalf("second login failed: %#v", second)
 	}
 
-	data, err := os.ReadFile(filepath.Join(os.Getenv("HEYGEN_CONFIG_DIR"), "credentials"))
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if string(data) != "second-key\n" {
-		t.Fatalf("credentials = %q, want %q", string(data), "second-key\n")
+	if got := storedAPIKey(t, os.Getenv("HEYGEN_CONFIG_DIR")); got != "second-key" {
+		t.Fatalf("stored api_key = %q, want %q", got, "second-key")
 	}
 }
 
