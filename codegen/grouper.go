@@ -73,6 +73,12 @@ var nameOverrides = map[string]string{
 	// GET /v3/video-agents/{session_id}/videos returns a list of videos, not a
 	// single resource. The default heuristic sees {session_id} and uses "get".
 	"GET /v3/video-agents/{session_id}/videos": "list",
+	// Brand kits and brand glossaries share the "Brand" tag, so both land in the
+	// "brand" group and both default to the terminal verb "list", a conflict.
+	// Nest each under a resource sub-group so they read as distinct list commands:
+	// "heygen brand kits list" and "heygen brand glossaries list".
+	"GET /v3/brand-kits":       "kits list",
+	"GET /v3/brand-glossaries": "glossaries list",
 }
 
 func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDescriptions, error) {
