@@ -59,6 +59,8 @@ Save the JSON output from each -- Phase 3 will extract IDs from these results.
 ./bin/heygen webhook endpoints list
 ./bin/heygen webhook event-types list
 ./bin/heygen webhook events list
+./bin/heygen brand kits list --limit 1
+./bin/heygen brand glossaries list --limit 1
 ```
 
 ### Step 4: Phase 3 -- Read-only get/detail commands

@@ -1,0 +1,6 @@
+"GET /v3/brand-kits":
+  - desc: "List brand kits"
+    cmd: "heygen brand kits list"
+"GET /v3/brand-glossaries":
+  - desc: "List brand glossaries"
+    cmd: "heygen brand glossaries list"
