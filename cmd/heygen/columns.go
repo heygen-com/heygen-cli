@@ -56,6 +56,17 @@ var DefaultColumns = map[string][]command.Column{
 		{Header: "Status", Field: "status"},
 		{Header: "Created", Field: "created_at"},
 	},
+	"brand/kits list": {
+		{Header: "ID", Field: "brand_kit_id"},
+		{Header: "Name", Field: "name"},
+		{Header: "Logo", Field: "logo_url"},
+	},
+	"brand/glossaries list": {
+		{Header: "ID", Field: "brand_glossary_id"},
+		{Header: "Name", Field: "name"},
+		{Header: "Created", Field: "created_at"},
+		{Header: "Updated", Field: "updated_at"},
+	},
 }
 
 func defaultColumnsForSpec(spec *command.Spec) []command.Column {
