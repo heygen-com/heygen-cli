@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/heygen-com/heygen-cli/gen"
 	"github.com/heygen-com/heygen-cli/internal/command"
 	"github.com/spf13/cobra"
 )
@@ -40,7 +41,17 @@ type Alias struct {
 // DeprecatedAliases is the registry of backward-compatible command aliases.
 // Add an entry when a spec-driven rename changes a command path that shipped
 // in a stable release.
-var DeprecatedAliases []Alias
+var DeprecatedAliases = []Alias{
+	{
+		// "heygen brand-kit list" shipped through v0.0.11. EF 6ced9812 retagged
+		// /v3/brand-kits from "Brand Kit" to "Brand", consolidating it with brand
+		// glossaries under the "brand" group as "heygen brand kits list".
+		OldParentPath: []string{"brand-kit"},
+		Spec:          gen.BrandKitsList,
+		NewPath:       "brand kits list",
+		RemoveBy:      "v0.1.0",
+	},
+}
 
 func (a Alias) deprecationNotice() string {
 	msg := fmt.Sprintf("use %q instead", "heygen "+a.NewPath)
