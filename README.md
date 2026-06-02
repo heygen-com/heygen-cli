@@ -108,6 +108,7 @@ Mirrors the [HeyGen v3 API](https://developers.heygen.com). Pattern: `heygen <no
 | `video` | Create, list, get, delete, download videos |
 | `avatar` | List and manage avatars and looks |
 | `voice` | List voices, design voices, generate speech |
+| `audio` | Search the background-music catalog |
 | `video-translate` | Translate videos into other languages |
 | `lipsync` | Dub or replace audio on existing videos |
 | `webhook` | Manage webhook endpoints and events |

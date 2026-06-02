@@ -14,6 +14,9 @@ var Groups = map[string][]*command.Spec{
 		AssetDelete,
 		AssetGet,
 	},
+	"audio": {
+		AudioSoundsList,
+	},
 	"avatar": {
 		AvatarConsentCreate,
 		AvatarCreate,
@@ -89,6 +92,7 @@ var Groups = map[string][]*command.Spec{
 // GroupDescriptions maps group name → help text from OpenAPI tag descriptions.
 var GroupDescriptions = map[string]string{
 	"asset":           "Upload files for use in video creation",
+	"audio":           "Search the background-music and sound-effects catalog",
 	"avatar":          "List and manage avatars and looks",
 	"brand":           "Brand-related resources — brand kits (colors, fonts, logos) and brand glossaries (custom term translations)",
 	"lipsync":         "Dub or replace audio on existing videos",

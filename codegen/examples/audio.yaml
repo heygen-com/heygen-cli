@@ -1,0 +1,7 @@
+"GET /v3/audio/sounds":
+  - desc: "Search background music by description"
+    cmd: "heygen audio sounds list --query 'upbeat lofi hip-hop'"
+  - desc: "Tighten the similarity threshold and cap results"
+    cmd: "heygen audio sounds list --query 'tense cinematic riser' --min-score 0.8 --limit 5"
+  - desc: "Fetch the next page using the cursor from a prior response"
+    cmd: "heygen audio sounds list --query 'calm ambient piano' --token <next_token>"
