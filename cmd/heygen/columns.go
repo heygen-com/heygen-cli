@@ -29,6 +29,12 @@ var DefaultColumns = map[string][]command.Column{
 		{Header: "Language", Field: "language"},
 		{Header: "Gender", Field: "gender"},
 	},
+	"audio/sounds list": {
+		{Header: "ID", Field: "id"},
+		{Header: "Name", Field: "name"},
+		{Header: "Duration", Field: "duration"},
+		{Header: "Score", Field: "score"},
+	},
 	"video-translate/list": {
 		{Header: "ID", Field: "id"},
 		{Header: "Language", Field: "output_language"},

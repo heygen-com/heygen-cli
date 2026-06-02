@@ -51,6 +51,7 @@ Save the JSON output from each -- Phase 3 will extract IDs from these results.
 ./bin/heygen avatar list --limit 1
 ./bin/heygen avatar looks list --limit 1
 ./bin/heygen voice list --limit 1
+./bin/heygen audio sounds list --query "calm ambient piano" --limit 1
 ./bin/heygen video-translate list --limit 1
 ./bin/heygen video-translate languages list
 ./bin/heygen video-agent list --limit 1

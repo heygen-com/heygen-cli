@@ -187,6 +187,39 @@ func TestBuildInvocation_MinMaxValidation(t *testing.T) {
 	}
 }
 
+func TestBuildInvocation_FloatMinMaxValidation(t *testing.T) {
+	min, max := 0, 1
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "min-score", Type: "float64", Source: "query", JSONName: "min_score", Min: &min, Max: &max},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		val     string
+		wantErr bool
+	}{
+		{"below min", "-0.5", true},
+		{"above max", "2", true},
+		{"at min", "0", false},
+		{"at max", "1", false},
+		{"fractional in range", "0.7", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := helperCmd(t, spec, []string{"--min-score", tt.val})
+			_, err := spec.BuildInvocation(cmd, nil, nil)
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestBuildInvocation_DataBase(t *testing.T) {
 	spec := &Spec{
 		Flags: []FlagSpec{

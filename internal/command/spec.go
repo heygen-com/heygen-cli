@@ -257,6 +257,18 @@ func validateFlag(cmd *cobra.Command, flag FlagSpec) error {
 		}
 	}
 
+	if flag.Type == "float64" && (flag.Min != nil || flag.Max != nil) {
+		val, _ := cmd.Flags().GetFloat64(flag.Name)
+		if flag.Min != nil && val < float64(*flag.Min) {
+			return clierrors.NewUsage(
+				fmt.Sprintf("--%s must be at least %d, got %v", flag.Name, *flag.Min, val))
+		}
+		if flag.Max != nil && val > float64(*flag.Max) {
+			return clierrors.NewUsage(
+				fmt.Sprintf("--%s must be at most %d, got %v", flag.Name, *flag.Max, val))
+		}
+	}
+
 	return nil
 }
 

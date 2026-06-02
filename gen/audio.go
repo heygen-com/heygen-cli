@@ -17,7 +17,7 @@ var AudioSoundsList = &command.Spec{
 	Examples: []string{
 		"# Search background music by description\n  heygen audio sounds list --query 'upbeat lofi hip-hop'",
 		"# Tighten the similarity threshold and cap results\n  heygen audio sounds list --query 'tense cinematic riser' --min-score 0.8 --limit 5",
-		"# Page through all matches\n  heygen audio sounds list --query 'calm ambient piano' --all",
+		"# Fetch the next page using the cursor from a prior response\n  heygen audio sounds list --query 'calm ambient piano' --token <next_token>",
 	},
 	Flags: []command.FlagSpec{
 		{
