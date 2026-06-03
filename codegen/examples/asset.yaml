@@ -7,3 +7,13 @@
 "DELETE /v3/assets/{asset_id}":
   - desc: "Delete an asset"
     cmd: "heygen asset delete <asset-id>"
+"POST /v3/assets/direct-uploads":
+  - desc: "Request a presigned URL to upload a file directly to S3"
+    cmd: "heygen asset direct-uploads create --filename video.mp4 --content-type video/mp4 --size-bytes 10485760"
+  - desc: "Request a presigned upload and pin the expected SHA-256 checksum"
+    cmd: "heygen asset direct-uploads create --filename clip.png --content-type image/png --size-bytes 204800 --checksum-sha-256 <base64-sha256>"
+"POST /v3/assets/{asset_id}/complete":
+  - desc: "Finalize a direct upload so the asset becomes usable"
+    cmd: "heygen asset complete create <asset-id>"
+  - desc: "Finalize a direct upload and verify the stored checksum"
+    cmd: "heygen asset complete create <asset-id> --checksum-sha-256 <base64-sha256>"

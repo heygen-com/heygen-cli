@@ -14,6 +14,10 @@ var AssetCompleteCreate = &command.Spec{
 	Endpoint:       "/v3/assets/{asset_id}/complete",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Finalize a direct upload so the asset becomes usable\n  heygen asset complete create <asset-id>",
+		"# Finalize a direct upload and verify the stored checksum\n  heygen asset complete create <asset-id> --checksum-sha-256 <base64-sha256>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "asset-id", Param: "asset_id", Help: ""},
 	},
@@ -90,6 +94,10 @@ var AssetDirectUploadsCreate = &command.Spec{
 	Endpoint:       "/v3/assets/direct-uploads",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Request a presigned URL to upload a file directly to S3\n  heygen asset direct-uploads create --filename video.mp4 --content-type video/mp4 --size-bytes 10485760",
+		"# Request a presigned upload and pin the expected SHA-256 checksum\n  heygen asset direct-uploads create --filename clip.png --content-type image/png --size-bytes 204800 --checksum-sha-256 <base64-sha256>",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "checksum-sha-256",
