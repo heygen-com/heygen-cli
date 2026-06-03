@@ -4,6 +4,35 @@ package gen
 
 import "github.com/heygen-com/heygen-cli/internal/command"
 
+var AssetCompleteCreate = &command.Spec{
+	Group:          "asset",
+	Name:           "complete create",
+	Summary:        "Complete Asset Upload",
+	Description:    "Finalize a direct-to-S3 upload into a reusable asset. Call after the upload PUT returns 200. Idempotent: repeated calls return the same finalized asset.",
+	RequestSchema:  "{\n  \"description\": \"Finalize a presigned upload (POST /v3/assets/{asset_id}/complete).\",\n  \"properties\": {\n    \"checksum_sha256\": {\n      \"description\": \"Optional SHA256 (hex) cross-check.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Result of finalizing an upload.\",\n      \"properties\": {\n        \"asset_id\": {\n          \"description\": \"The reusable asset identifier.\",\n          \"type\": \"string\"\n        },\n        \"mime_type\": {\n          \"description\": \"MIME type detected from the stored bytes.\",\n          \"type\": \"string\"\n        },\n        \"size_bytes\": {\n          \"description\": \"Size of the stored object in bytes.\",\n          \"type\": \"integer\"\n        },\n        \"status\": {\n          \"description\": \"Asset status, e.g. 'processing'.\",\n          \"type\": \"string\"\n        },\n        \"url\": {\n          \"description\": \"Public URL of the finalized asset.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"asset_id\",\n        \"url\",\n        \"mime_type\",\n        \"size_bytes\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/assets/{asset_id}/complete",
+	Method:         "POST",
+	BodyEncoding:   "json",
+	Args: []command.ArgSpec{
+		{Name: "asset-id", Param: "asset_id", Help: ""},
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "checksum-sha-256",
+			Type:     "string",
+			Default:  "",
+			Help:     "Optional SHA256 (hex) cross-check.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "checksum_sha256",
+		},
+	},
+}
+
 var AssetCreate = &command.Spec{
 	Group:          "asset",
 	Name:           "create",
@@ -48,6 +77,68 @@ var AssetDelete = &command.Spec{
 	},
 	Args: []command.ArgSpec{
 		{Name: "asset-id", Param: "asset_id", Help: ""},
+	},
+}
+
+var AssetDirectUploadsCreate = &command.Spec{
+	Group:          "asset",
+	Name:           "direct-uploads create",
+	Summary:        "Create Asset Upload",
+	Description:    "Begin a direct-to-S3 upload. Returns an asset_id and a presigned upload_url; PUT the file bytes to upload_url, then call POST /v3/assets/{asset_id}/complete. Unlike POST /v3/assets (which proxies the bytes), this never sends the file through the API.",
+	RequestSchema:  "{\n  \"description\": \"Request to begin a presigned direct-to-S3 upload (POST /v3/assets/direct-uploads).\",\n  \"properties\": {\n    \"checksum_sha256\": {\n      \"description\": \"Optional SHA256 of the file as hex. When provided, S3 enforces it on upload.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"content_type\": {\n      \"description\": \"Declared MIME type (e.g. 'video/mp4'). Verified against the stored bytes at completion.\",\n      \"type\": \"string\"\n    },\n    \"filename\": {\n      \"description\": \"Original filename for reference/metadata. The stored object's extension is derived from content_type.\",\n      \"type\": \"string\"\n    },\n    \"size_bytes\": {\n      \"description\": \"Exact byte size of the file. Signed into the upload URL so it cannot be exceeded.\",\n      \"type\": \"integer\"\n    }\n  },\n  \"required\": [\n    \"filename\",\n    \"content_type\",\n    \"size_bytes\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Presigned upload instructions.\",\n      \"properties\": {\n        \"asset_id\": {\n          \"description\": \"Reusable asset identifier. Becomes usable after POST /v3/assets/{asset_id}/complete.\",\n          \"type\": \"string\"\n        },\n        \"expires_in_seconds\": {\n          \"description\": \"Seconds until the upload URL expires.\",\n          \"type\": \"integer\"\n        },\n        \"max_bytes\": {\n          \"description\": \"Maximum allowed upload size in bytes.\",\n          \"type\": \"integer\"\n        },\n        \"status\": {\n          \"description\": \"Upload lifecycle status. Always 'pending_upload' here.\",\n          \"type\": \"string\"\n        },\n        \"upload_headers\": {\n          \"description\": \"Headers that must be sent verbatim on the PUT request.\",\n          \"properties\": {},\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"upload_url\": {\n          \"description\": \"Presigned S3 URL. PUT the raw file bytes here.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"asset_id\",\n        \"upload_url\",\n        \"upload_headers\",\n        \"expires_in_seconds\",\n        \"max_bytes\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/assets/direct-uploads",
+	Method:         "POST",
+	BodyEncoding:   "json",
+	Flags: []command.FlagSpec{
+		{
+			Name:     "checksum-sha-256",
+			Type:     "string",
+			Default:  "",
+			Help:     "Optional SHA256 of the file as hex. When provided, S3 enforces it on upload.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "checksum_sha256",
+		},
+		{
+			Name:     "content-type",
+			Type:     "string",
+			Default:  "",
+			Help:     "Declared MIME type (e.g. 'video/mp4'). Verified against the stored bytes at completion.",
+			Required: true,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "content_type",
+		},
+		{
+			Name:     "filename",
+			Type:     "string",
+			Default:  "",
+			Help:     "Original filename for reference/metadata. The stored object's extension is derived from content_type.",
+			Required: true,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "filename",
+		},
+		{
+			Name:     "size-bytes",
+			Type:     "int",
+			Default:  "",
+			Help:     "Exact byte size of the file. Signed into the upload URL so it cannot be exceeded.",
+			Required: true,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "size_bytes",
+		},
 	},
 }
 

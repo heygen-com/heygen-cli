@@ -10,8 +10,10 @@ func intPtr(v int) *int { return &v }
 // Used by the command builder to register generated commands.
 var Groups = map[string][]*command.Spec{
 	"asset": {
+		AssetCompleteCreate,
 		AssetCreate,
 		AssetDelete,
+		AssetDirectUploadsCreate,
 		AssetGet,
 	},
 	"audio": {
