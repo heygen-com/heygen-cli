@@ -281,6 +281,52 @@ func TestSchemaCliDefault(t *testing.T) {
 	}
 }
 
+// TestSchemaCliHelp verifies the x-cli-description override precedence: the
+// extension (when present and a string) wins over the HTTP API description;
+// otherwise the description is used unchanged.
+func TestSchemaCliHelp(t *testing.T) {
+	cases := []struct {
+		name   string
+		schema *openapi3.Schema
+		want   string
+	}{
+		{"nil schema", nil, ""},
+		{"no description, no extension", &openapi3.Schema{}, ""},
+		{
+			"description only",
+			&openapi3.Schema{Description: "Defaults to 16:9"},
+			"Defaults to 16:9",
+		},
+		{
+			"x-cli-description overrides description",
+			&openapi3.Schema{Description: "Defaults to 16:9", Extensions: map[string]interface{}{"x-cli-description": "Defaults to auto"}},
+			"Defaults to auto",
+		},
+		{
+			"x-cli-description with no description",
+			&openapi3.Schema{Extensions: map[string]interface{}{"x-cli-description": "Defaults to auto"}},
+			"Defaults to auto",
+		},
+		{
+			"non-string x-cli-description falls back to description",
+			&openapi3.Schema{Description: "Defaults to 16:9", Extensions: map[string]interface{}{"x-cli-description": 42}},
+			"Defaults to 16:9",
+		},
+		{
+			"x-mcp-description is ignored — that's the MCP codegen's concern",
+			&openapi3.Schema{Description: "Defaults to 16:9", Extensions: map[string]interface{}{"x-mcp-description": "Defaults to auto"}},
+			"Defaults to 16:9",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := schemaCliHelp(tc.schema); got != tc.want {
+				t.Errorf("schemaCliHelp mismatch: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestGroupEndpoints_Schemas(t *testing.T) {
 	doc := loadGroupTestSpec(t)
 	examples := loadTestExamples(t)

@@ -57,6 +57,15 @@ This reads the spec, generates command definitions in `gen/`, and formats the ou
 
 Every command must have usage examples. If a new endpoint lacks examples, codegen fails. Add examples to `codegen/examples/{group}.yaml`.
 
+### CLI-specific OpenAPI extensions
+
+The codegen honors a small set of `x-cli-*` vendor extensions that the API team sets in the source spec (in EF, via Pydantic `json_schema_extra`). They let a field behave differently on the CLI surface than on the raw HTTP API:
+
+- `x-cli-visible` (operation or schema property, bool) — when `false`, the command or flag is omitted from the CLI.
+- `x-cli-action` (operation, bool) — when `true`, the path's terminal literal is treated as the verb (no `create`/`get` appended).
+- `x-cli-default` (schema property) — overrides the HTTP `default` for the CLI flag default, and marks the value to be sent even when the user omits the flag.
+- `x-cli-description` (schema property, string) — overrides the HTTP `description` as the flag's help text. Use this when the API description is misleading for CLI users (e.g. it cites the HTTP default `16:9` while the CLI default is `auto` via `x-cli-default`). When absent, the flag falls back to the HTTP `description` (current behavior). The override applies only to flag help; the `--request-schema`/`--response-schema` output stays faithful to the raw API `description`.
+
 ## Adding Hand-Written Enhancements
 
 Generated commands are pure data. To add behavior on top:

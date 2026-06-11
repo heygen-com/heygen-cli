@@ -292,7 +292,8 @@
               {"type": "null"}
             ],
             "default": null,
-            "description": "Widget color"
+            "description": "Widget color. Defaults to red.",
+            "x-cli-description": "Widget color. Defaults to auto (CLI override)."
           },
           "count": {
             "type": "integer",

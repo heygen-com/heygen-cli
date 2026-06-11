@@ -214,6 +214,9 @@ func buildSpec(
 			flag.Enum = schemaEnum(s)
 			flag.Min = floatToIntPtr(s.Min)
 			flag.Max = floatToIntPtr(s.Max)
+			if help := schemaCliHelp(s); help != "" {
+				flag.Help = help
+			}
 			if d, ok, fromExt := schemaCliDefault(s); ok {
 				flag.Default = formatDefault(d)
 				flag.SendDefaultWhenOmitted = fromExt
@@ -234,7 +237,7 @@ func buildSpec(
 				spec.Flags = append(spec.Flags, command.FlagSpec{
 					Name:     strcase.ToKebab(name),
 					Type:     "string",
-					Help:     propRef.Value.Description,
+					Help:     schemaCliHelp(propRef.Value),
 					Required: true,
 					Source:   "file",
 					JSONName: name,
@@ -259,7 +262,7 @@ func buildSpec(
 			flag := command.FlagSpec{
 				Name:     strcase.ToKebab(name),
 				Type:     schemaToFlagType(propRef),
-				Help:     prop.Description,
+				Help:     schemaCliHelp(prop),
 				Required: required[name],
 				Enum:     schemaEnum(prop),
 				Min:      floatToIntPtr(prop.Min),
@@ -397,6 +400,33 @@ func schemaCliDefault(s *openapi3.Schema) (value interface{}, ok bool, fromExten
 		return s.Default, true, false
 	}
 	return nil, false, false
+}
+
+// schemaCliHelp returns the help text for a CLI flag derived from a schema
+// property.
+//
+// Like ``x-cli-default``, some fields need surface-specific help text in the
+// CLI. ``aspect_ratio`` is the canonical example: the HTTP API ``description``
+// says "Defaults to 16:9" for backwards compatibility, but the CLI default is
+// ``auto`` (via ``x-cli-default``), so reusing the API ``description`` verbatim
+// misleads humans and agents reading ``--help``. Authors signal the CLI-facing
+// wording from the EF Pydantic field via
+// ``json_schema_extra={"x-cli-description": "..."}``; the value lands verbatim
+// on the schema property in the OpenAPI spec.
+//
+// Precedence: ``x-cli-description`` (if present) wins over ``description``.
+// When absent, the HTTP API ``description`` is used unchanged (current
+// behavior).
+func schemaCliHelp(s *openapi3.Schema) string {
+	if s == nil {
+		return ""
+	}
+	if v, ok := s.Extensions["x-cli-description"]; ok {
+		if str, ok := v.(string); ok {
+			return str
+		}
+	}
+	return s.Description
 }
 
 func detectContentType(op *openapi3.Operation) string {
