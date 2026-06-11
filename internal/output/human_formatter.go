@@ -146,7 +146,36 @@ func (f *HumanFormatter) renderPrimitiveList(items []any) error {
 }
 
 func (f *HumanFormatter) renderKeyValue(obj map[string]any) error {
-	return renderNestedKeyValue(f.out, obj, 0)
+	rows := flattenObject(obj, "", 0)
+
+	maxLabelWidth := 0
+	for _, r := range rows {
+		if lw := lipgloss.Width(r.key); lw > maxLabelWidth {
+			maxLabelWidth = lw
+		}
+	}
+
+	for _, r := range rows {
+		padding := strings.Repeat(" ", max(0, maxLabelWidth-lipgloss.Width(r.key)))
+		if strings.Contains(r.value, "\n") {
+			// Multiline string: align continuation lines under the value column.
+			valueIndent := strings.Repeat(" ", lipgloss.Width(r.key)+len(kvSeparator)+len(padding))
+			lines := strings.Split(r.value, "\n")
+			if _, err := fmt.Fprintf(f.out, "%s:%s  %s\n", r.key, padding, lines[0]); err != nil {
+				return err
+			}
+			for _, line := range lines[1:] {
+				if _, err := fmt.Fprintf(f.out, "%s%s\n", valueIndent, line); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if _, err := fmt.Fprintf(f.out, "%s:%s  %s\n", r.key, padding, r.value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 const (
@@ -154,113 +183,75 @@ const (
 	kvSeparator    = ":  " // label-value separator in key-value output
 )
 
-func renderNestedKeyValue(w io.Writer, obj map[string]any, indent int) error {
-	prefix := strings.Repeat("  ", indent)
-	keys := sortedKeys(obj)
-
-	maxLabelWidth := 0
-	for _, key := range keys {
-		label := humanizeKey(key)
-		if lw := lipgloss.Width(label); lw > maxLabelWidth {
-			maxLabelWidth = lw
-		}
-	}
-
-	for _, key := range keys {
-		label := humanizeKey(key)
-		padding := strings.Repeat(" ", max(0, maxLabelWidth-lipgloss.Width(label)))
-		value := obj[key]
-
-		if indent >= maxNestedDepth {
-			if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, compactJSON(value)); err != nil {
-				return err
-			}
-			continue
-		}
-
-		switch v := value.(type) {
-		case map[string]any:
-			if len(v) == 0 {
-				if _, err := fmt.Fprintf(w, "%s%s:%s  (none)\n", prefix, label, padding); err != nil {
-					return err
-				}
-			} else {
-				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, label); err != nil {
-					return err
-				}
-				if err := renderNestedKeyValue(w, v, indent+1); err != nil {
-					return err
-				}
-			}
-		case []any:
-			if len(v) == 0 {
-				if _, err := fmt.Fprintf(w, "%s%s:%s  (none)\n", prefix, label, padding); err != nil {
-					return err
-				}
-			} else if isScalarArray(v) {
-				if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, formatArrayInline(v)); err != nil {
-					return err
-				}
-			} else if isObjectArray(v) {
-				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, label); err != nil {
-					return err
-				}
-				if err := renderArrayOfObjects(w, v, indent+1); err != nil {
-					return err
-				}
-			} else {
-				// Heterogeneous or mixed array: compact JSON fallback.
-				if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, compactJSON(v)); err != nil {
-					return err
-				}
-			}
-		default:
-			formatted := formatCell(value, key)
-			if s, ok := value.(string); ok && strings.Contains(s, "\n") {
-				// Multiline string: re-indent continuation lines.
-				valueIndent := prefix + strings.Repeat(" ", lipgloss.Width(label)+len(kvSeparator)+len(padding))
-				lines := strings.Split(formatted, "\n")
-				if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, lines[0]); err != nil {
-					return err
-				}
-				for _, line := range lines[1:] {
-					if _, err := fmt.Fprintf(w, "%s%s\n", valueIndent, line); err != nil {
-						return err
-					}
-				}
-			} else {
-				if _, err := fmt.Fprintf(w, "%s%s:%s  %s\n", prefix, label, padding, formatted); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
+// kvRow is one rendered line in the flattened key-value output: a dotted key
+// path and its pre-formatted scalar value.
+type kvRow struct {
+	key   string
+	value string
 }
 
-func renderArrayOfObjects(w io.Writer, items []any, indent int) error {
-	prefix := strings.Repeat("  ", indent)
-	for i, item := range items {
-		if obj, ok := item.(map[string]any); ok {
-			// Blank line between entries with 3+ fields for scannability.
-			if i > 0 && len(obj) > 2 {
-				if _, err := fmt.Fprintln(w); err != nil {
-					return err
-				}
-			}
-			if _, err := fmt.Fprintf(w, "%s[%d]\n", prefix, i+1); err != nil {
-				return err
-			}
-			if err := renderNestedKeyValue(w, obj, indent+1); err != nil {
-				return err
-			}
-		} else {
-			if _, err := fmt.Fprintf(w, "%s[%d]  %s\n", prefix, i+1, formatValue(item)); err != nil {
-				return err
-			}
-		}
+// joinKey joins a parent dotted-key prefix with a child segment.
+func joinKey(prefix, segment string) string {
+	if prefix == "" {
+		return segment
 	}
-	return nil
+	return prefix + "." + segment
+}
+
+// flattenObject recursively flattens a JSON object into dotted-key rows, in
+// sorted-key order. Nested objects become "parent.child" keys.
+func flattenObject(obj map[string]any, prefix string, depth int) []kvRow {
+	var rows []kvRow
+	for _, key := range sortedKeys(obj) {
+		rows = append(rows, flattenValue(joinKey(prefix, key), obj[key], key, depth)...)
+	}
+	return rows
+}
+
+// flattenValue flattens a single value under the given dotted key. fieldName is
+// the leaf field name (used for timestamp/duration heuristics in formatCell).
+//
+// Behavior by value type:
+//   - nested object: flattened into "key.child" rows; empty object -> "(none)".
+//   - scalar array: joined inline, comma-separated.
+//   - array of objects: each element flattened under an index, e.g.
+//     "messages.0.role", "messages.1.role".
+//   - heterogeneous/mixed array (e.g. containing null): compact JSON fallback.
+//   - empty array: "(none)".
+//   - scalars: formatted via formatCell (timestamps, durations, multiline).
+//
+// Beyond maxNestedDepth, the remaining value is emitted as compact JSON rather
+// than flattened further, guarding against pathologically deep payloads.
+func flattenValue(key string, value any, fieldName string, depth int) []kvRow {
+	if depth >= maxNestedDepth {
+		return []kvRow{{key: key, value: compactJSON(value)}}
+	}
+
+	switch v := value.(type) {
+	case map[string]any:
+		if len(v) == 0 {
+			return []kvRow{{key: key, value: "(none)"}}
+		}
+		return flattenObject(v, key, depth+1)
+	case []any:
+		if len(v) == 0 {
+			return []kvRow{{key: key, value: "(none)"}}
+		}
+		if isScalarArray(v) {
+			return []kvRow{{key: key, value: formatArrayInline(v)}}
+		}
+		if isObjectArray(v) {
+			var rows []kvRow
+			for i, elem := range v {
+				rows = append(rows, flattenObject(elem.(map[string]any), joinKey(key, strconv.Itoa(i)), depth+1)...)
+			}
+			return rows
+		}
+		// Heterogeneous or mixed array (e.g. contains null): compact JSON fallback.
+		return []kvRow{{key: key, value: compactJSON(v)}}
+	default:
+		return []kvRow{{key: key, value: formatCell(value, fieldName)}}
+	}
 }
 
 func autoColumnsFor(row map[string]any) []command.Column {

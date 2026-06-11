@@ -72,11 +72,11 @@ func TestHumanFormatter_Data_KeyValue(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	if !strings.Contains(got, "Id:") || !strings.Contains(got, "vid_123") {
-		t.Fatalf("missing id field in output:\n%s", got)
-	}
-	if !strings.Contains(got, "Meta:\n") || !strings.Contains(got, "Kind:") || !strings.Contains(got, "demo") {
-		t.Fatalf("nested objects should render as indented sub-section:\n%s", got)
+	want := "id:         vid_123\n" +
+		"meta.kind:  demo\n" +
+		"status:     completed\n"
+	if got != want {
+		t.Fatalf("flattened key-value output mismatch:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestHumanFormatter_Data_DurationFormatting(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	if !strings.Contains(got, "Duration:  18s") {
+	if !strings.Contains(got, "duration:  18s") {
 		t.Fatalf("duration was not formatted as seconds:\n%s", got)
 	}
 }
@@ -140,7 +140,7 @@ func TestHumanFormatter_Data_RegularFloatUnaffected(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	if !strings.Contains(got, "Score:  3.14") {
+	if !strings.Contains(got, "score:  3.14") {
 		t.Fatalf("regular float should remain unchanged:\n%s", got)
 	}
 }
@@ -192,14 +192,11 @@ func TestHumanFormatter_Data_KeyValue_NestedObject(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	if !strings.Contains(got, "Error:\n") {
-		t.Fatalf("nested object should start a sub-section:\n%s", got)
-	}
-	if !strings.Contains(got, "  Code:") || !strings.Contains(got, "not_found") {
-		t.Fatalf("nested object fields should be indented:\n%s", got)
-	}
-	if !strings.Contains(got, "  Message:") || !strings.Contains(got, "Video not found") {
-		t.Fatalf("nested object fields should be indented:\n%s", got)
+	want := "error.code:     not_found\n" +
+		"error.message:  Video not found\n" +
+		"id:             vid_1\n"
+	if got != want {
+		t.Fatalf("nested object should flatten into dotted keys:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -213,17 +210,12 @@ func TestHumanFormatter_Data_KeyValue_DeepNesting(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	if !strings.Contains(got, "Wallet:\n") {
-		t.Fatalf("top-level nested object should start a sub-section:\n%s", got)
-	}
-	if !strings.Contains(got, "  Auto Reload:\n") {
-		t.Fatalf("second-level nested object should start a sub-section:\n%s", got)
-	}
-	if !strings.Contains(got, "    Enabled:") || !strings.Contains(got, "true") {
-		t.Fatalf("third-level fields should be double-indented:\n%s", got)
-	}
-	if !strings.Contains(got, "  Currency:") || !strings.Contains(got, "usd") {
-		t.Fatalf("second-level scalar fields should be indented:\n%s", got)
+	want := "wallet.auto_reload.amount_usd:  50\n" +
+		"wallet.auto_reload.enabled:     true\n" +
+		"wallet.currency:                usd\n" +
+		"wallet.remaining_balance:       150\n"
+	if got != want {
+		t.Fatalf("deeply nested objects should flatten into dotted keys:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -237,14 +229,12 @@ func TestHumanFormatter_Data_KeyValue_ArrayOfObjects(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	if !strings.Contains(got, "Messages:\n") {
-		t.Fatalf("array of objects should start a sub-section:\n%s", got)
-	}
-	if !strings.Contains(got, "[1]") || !strings.Contains(got, "[2]") {
-		t.Fatalf("array entries should be numbered:\n%s", got)
-	}
-	if !strings.Contains(got, "Role:") || !strings.Contains(got, "user") {
-		t.Fatalf("object fields should be rendered:\n%s", got)
+	want := "messages.0.content:  hello\n" +
+		"messages.0.role:     user\n" +
+		"messages.1.content:  hi\n" +
+		"messages.1.role:     model\n"
+	if got != want {
+		t.Fatalf("array of objects should flatten with indexed dotted keys:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -431,6 +421,43 @@ func TestHumanFormatter_Data_KeyValue_DepthGuardUsesCompactJSON(t *testing.T) {
 	}
 	if !strings.Contains(got, `[]`) {
 		t.Fatalf("depth guard should preserve empty arrays as [], not blank:\n%s", got)
+	}
+}
+
+func TestHumanFormatter_Data_KeyValue_NullValuesInNestedObject(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	input := json.RawMessage(`{"data":{"a":null,"b":"val","nested":{"x":null,"y":1}}}`)
+	if err := f.Data(input, "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	// Null leaves render as an empty value (matching formatValue(nil)).
+	want := "a:         \n" +
+		"b:         val\n" +
+		"nested.x:  \n" +
+		"nested.y:  1\n"
+	if got != want {
+		t.Fatalf("null values should flatten to empty cells:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestHumanFormatter_Data_KeyValue_EmptyNestedObjectIsNone(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	input := json.RawMessage(`{"data":{"id":"x","settings":{}}}`)
+	if err := f.Data(input, "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	want := "id:        x\n" +
+		"settings:  (none)\n"
+	if got != want {
+		t.Fatalf("empty nested object should render as (none):\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
