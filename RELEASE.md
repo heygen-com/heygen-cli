@@ -29,6 +29,35 @@ gh workflow run dev-release.yml
 4. Verify a new prerelease was published for the computed dev tag.
 5. Share the installer command or release link with internal users as needed.
 
+## Automated Weekly Stable Release
+
+A scheduled workflow (`.github/workflows/weekly-stable-release.yml`) cuts a
+stable release automatically so the cadence no longer depends on someone
+remembering to trigger it.
+
+- **Trigger / schedule:** Cron every Monday at 09:00 UTC. It can also be run on
+  demand via **Actions > Weekly Stable Release > Run workflow**
+  (`workflow_dispatch`), which runs the same detect-and-dispatch logic.
+- **Skip behavior:** It finds the latest stable tag (`vX.Y.Z`) and counts
+  commits on `main` since that tag. If there are **no new commits**, the run
+  logs why and exits cleanly without releasing — empty weeks are skipped, not
+  failed.
+- **Versioning:** When there are new commits, it computes the next version by
+  **patch-bumping** the latest stable tag (e.g. `v0.0.11` → `v0.0.12`), matching
+  the dev-release auto-derivation. Patch is the default because the weekly
+  driver (codegen resyncs, fixes, additive schema changes) is a patch bump.
+  Minor/major bumps (new command groups, breaking changes) remain a **manual**
+  stable release — see the rules below.
+- **Reuse / safety:** The weekly workflow does not build or sign anything. It
+  delegates to `release-stable.yml` via `workflow_dispatch` with the computed
+  version, so the build/sign/publish path lives in exactly one place. It is
+  idempotent: if the computed tag already exists (e.g. a manual release raced
+  it), it skips instead of double-releasing, and `release-stable.yml`
+  re-validates the tag as a second guard.
+
+To ship a minor/major bump, or to release off-schedule, cut a manual stable
+release as described below.
+
 ## How to Cut a Stable Release
 
 ### Pre-release checklist
