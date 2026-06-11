@@ -45,6 +45,17 @@ You only need a HeyGen API key — see [Authenticate](#authenticate) below.
 heygen update            # install the latest version
 ```
 
+## Shell completion
+
+Tab-completion for commands, subcommands, and flags is available for bash, zsh, fish, and PowerShell:
+
+```bash
+source <(heygen completion zsh)     # current shell (bash/zsh/fish)
+heygen completion zsh > "${fpath[1]}/_heygen"   # persist (zsh; adjust path per shell)
+```
+
+Run `heygen completion --help` for per-shell install instructions.
+
 ## Authenticate
 
 Choose one of the three options below. The first two are agent- and CI-friendly; the third is for humans.
