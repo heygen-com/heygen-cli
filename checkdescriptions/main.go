@@ -8,7 +8,9 @@
 // arrive that nobody has reframed yet. This tool finds those: it scans every
 // generated command's Summary, Description, flag help, and schema-field
 // descriptions for divergence markers, and reports any flagged text whose
-// command has no matching override.
+// specific location (summary, description, flag, or field) has no matching
+// override — so a partial override never hides new HTTP-framed text elsewhere
+// on the same command.
 //
 // It is ADVISORY: it prints a report and ALWAYS exits 0, so it never fails CI.
 // Run it via `make check-descriptions` after a resync; author overrides in
@@ -49,12 +51,12 @@ var markers = []struct {
 
 // finding is one flagged piece of generated text on one command.
 type finding struct {
-	command  string // human command path, e.g. "video-agent create"
-	endpoint string
-	method   string
-	location string // "summary", "description", "flag --x", "field y"
-	markers  []string
-	overlay  bool // an override exists for this command's (endpoint, method)
+	command    string // human command path, e.g. "video-agent create"
+	endpoint   string
+	method     string
+	location   string // "summary", "description", "flag --x", "request/response field y"
+	markers    []string
+	overridden bool // THIS specific location is covered by an override entry
 }
 
 func main() {
@@ -62,33 +64,44 @@ func main() {
 
 	for _, groupName := range sortedKeys(gen.Groups) {
 		for _, spec := range gen.Groups[groupName] {
-			_, hasOverlay := clidesc.ForSpec(spec)
+			// o is the zero Override when none exists; nil-map lookups below are
+			// safe and return false.
+			o, _ := clidesc.ForSpec(spec)
 			cmdPath := strings.TrimSpace(groupName + " " + spec.Name)
 
-			add := func(location, text string) {
+			// overridden means THIS specific location (not merely the command)
+			// is covered by an override entry, so a remaining marker there is
+			// intentional (e.g. an override that legitimately mentions a manual
+			// S3 "PUT") rather than an unaddressed gap. Suppressing per-location
+			// means a partial override no longer hides new HTTP-framed text in a
+			// command's uncovered summary/description/flags/fields.
+			add := func(location, text string, overridden bool) {
 				if hits := scan(text); len(hits) > 0 {
 					findings = append(findings, finding{
-						command:  cmdPath,
-						endpoint: spec.Endpoint,
-						method:   spec.Method,
-						location: location,
-						markers:  hits,
-						overlay:  hasOverlay,
+						command:    cmdPath,
+						endpoint:   spec.Endpoint,
+						method:     spec.Method,
+						location:   location,
+						markers:    hits,
+						overridden: overridden,
 					})
 				}
 			}
 
 			// Inspect the text the CLI shows AFTER the overlay is applied, so a
-			// reframed command does not get re-flagged for text the overlay
-			// already fixed. This is the true "does the live CLI surface still
-			// read as HTTP?" signal.
-			add("summary", clidesc.Summary(spec))
-			add("description", clidesc.Description(spec))
+			// reframed location is not re-flagged for text the overlay already
+			// fixed. This is the true "does the live CLI surface still read as
+			// HTTP?" signal.
+			add("summary", clidesc.Summary(spec), o.Summary != "")
+			add("description", clidesc.Description(spec), o.Description != "")
 			for _, f := range spec.Flags {
-				add("flag --"+f.Name, clidesc.FlagHelp(spec, f))
+				_, ok := o.Flags[f.Name]
+				add("flag --"+f.Name, clidesc.FlagHelp(spec, f), ok)
 			}
 			for loc, text := range schemaFieldDescriptions(spec) {
-				add(loc, text)
+				field := loc[strings.LastIndex(loc, " ")+1:]
+				_, ok := o.Fields[field]
+				add(loc, text, ok)
 			}
 		}
 	}
@@ -160,7 +173,7 @@ func walk(node any, fn func(name, desc string)) {
 func report(findings []finding) {
 	var flagged []finding
 	for _, f := range findings {
-		if !f.overlay {
+		if !f.overridden {
 			flagged = append(flagged, f)
 		}
 	}
@@ -182,12 +195,12 @@ func report(findings []finding) {
 	fmt.Fprintln(out, "Advisory: HTTP-framed descriptions in the generated CLI surface")
 	fmt.Fprintln(out, "================================================================")
 	fmt.Fprintf(out, "Scanned generated commands for markers: HTTP verbs, /vN/ paths, poll words.\n")
-	fmt.Fprintf(out, "Total marker hits: %d  |  on commands WITHOUT an override: %d\n\n", len(findings), len(flagged))
+	fmt.Fprintf(out, "Total marker hits: %d  |  at locations WITHOUT an override: %d\n\n", len(findings), len(flagged))
 
 	if len(flagged) == 0 {
 		fmt.Fprintln(out, "No un-overridden HTTP-framed text found. Nothing to author.")
 	} else {
-		fmt.Fprintln(out, "The following commands have HTTP-framed text and NO override.")
+		fmt.Fprintln(out, "The following command locations have HTTP-framed text and NO override.")
 		fmt.Fprintln(out, "Review each; if it reads badly for a CLI user, add an entry to")
 		fmt.Fprintln(out, "internal/clidesc (keyed by endpoint+method):")
 		fmt.Fprintln(out)
@@ -198,11 +211,12 @@ func report(findings []finding) {
 		}
 	}
 
-	// Informational: marker hits on commands that DO have an override, so a
-	// reviewer can confirm the overlay covers the right locations.
+	// Informational: marker hits at locations already covered by an override
+	// (the override text itself mentions HTTP, e.g. a legitimate manual S3
+	// "PUT"), so a reviewer can confirm the overlay covers the right locations.
 	overlaid := len(findings) - len(flagged)
 	if overlaid > 0 {
-		fmt.Fprintf(out, "\n%d marker hit(s) are on commands that already have an override (informational; not action items).\n", overlaid)
+		fmt.Fprintf(out, "\n%d marker hit(s) are at locations already covered by an override (informational; not action items).\n", overlaid)
 	}
 
 	fmt.Fprintln(out, "\nAdvisory only — exiting 0.")
