@@ -54,6 +54,11 @@ remembering to trigger it.
   idempotent: if the computed tag already exists (e.g. a manual release raced
   it), it skips instead of double-releasing, and `release-stable.yml`
   re-validates the tag as a second guard.
+- **Monotonic versions:** `release-stable.yml` refuses any version that is not
+  strictly greater than the current latest stable tag. This keeps the `stable`
+  pointer from moving backward if a stale or queued release (e.g. a weekly patch
+  bump dispatched just before a manual minor/major release) tries to publish a
+  lower version.
 
 To ship a minor/major bump, or to release off-schedule, cut a manual stable
 release as described below.
