@@ -98,7 +98,19 @@ heygen video download <video-id>
 
 Add `--human` to any command for a readable layout. Set `HEYGEN_OUTPUT=human` to make it the default.
 
-In `--human` mode, list responses render as a table and single-object responses render as aligned key-value rows. Nested objects are flattened into dotted keys (e.g. `wallet.auto_reload.enabled: false`); arrays of scalars are joined inline (`a, b, c`) and arrays of objects are indexed (`messages.0.role`). JSON output (the default) is never altered.
+In `--human` mode, list responses render as a table and single-object responses render as an indented, humanized layout (similar to `kubectl describe`). Keys are humanized per segment (`auto_reload` → `Auto Reload`); nested objects indent under a `Label:` header, scalar siblings align locally within each block, arrays of scalars join inline (`a, b, c`), and arrays of objects render as YAML-style `- ` sequence items. Empty objects, empty arrays, and nulls show as `(none)`. For example:
+
+```
+Status:  completed
+Wallet:
+  Auto Reload:
+    Enabled:  false
+  Currency:           usd
+  Remaining Balance:  476.78
+Tags:  alpha, beta
+```
+
+`--human` is a readable layout for terminals and may change between releases; scripts and agents should consume the default JSON output, which is stable. JSON output (the default) is never altered.
 
 ## Commands
 

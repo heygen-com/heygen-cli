@@ -72,11 +72,14 @@ func TestHumanFormatter_Data_KeyValue(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	want := "id:         vid_123\n" +
-		"meta.kind:  demo\n" +
-		"status:     completed\n"
+	// Nested objects render as an indented "Label:" header block; top-level
+	// scalars align locally, the nested scalar aligns within its own block.
+	want := "Id:      vid_123\n" +
+		"Meta:\n" +
+		"  Kind:  demo\n" +
+		"Status:  completed\n"
 	if got != want {
-		t.Fatalf("flattened key-value output mismatch:\ngot:\n%s\nwant:\n%s", got, want)
+		t.Fatalf("indented key-value output mismatch:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -125,7 +128,7 @@ func TestHumanFormatter_Data_DurationFormatting(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	if !strings.Contains(got, "duration:  18s") {
+	if !strings.Contains(got, "Duration:  18s") {
 		t.Fatalf("duration was not formatted as seconds:\n%s", got)
 	}
 }
@@ -140,7 +143,7 @@ func TestHumanFormatter_Data_RegularFloatUnaffected(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	if !strings.Contains(got, "score:  3.14") {
+	if !strings.Contains(got, "Score:  3.14") {
 		t.Fatalf("regular float should remain unchanged:\n%s", got)
 	}
 }
@@ -192,11 +195,14 @@ func TestHumanFormatter_Data_KeyValue_NestedObject(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	want := "error.code:     not_found\n" +
-		"error.message:  Video not found\n" +
-		"id:             vid_1\n"
+	// Nested object renders as a humanized "Error:" header with its children
+	// indented and aligned locally; the top-level Id is a sibling scalar.
+	want := "Error:\n" +
+		"  Code:     not_found\n" +
+		"  Message:  Video not found\n" +
+		"Id:  vid_1\n"
 	if got != want {
-		t.Fatalf("nested object should flatten into dotted keys:\ngot:\n%s\nwant:\n%s", got, want)
+		t.Fatalf("nested object should render as an indented block:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -210,12 +216,17 @@ func TestHumanFormatter_Data_KeyValue_DeepNesting(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	want := "wallet.auto_reload.amount_usd:  50\n" +
-		"wallet.auto_reload.enabled:     true\n" +
-		"wallet.currency:                usd\n" +
-		"wallet.remaining_balance:       150\n"
+	// Each nesting level indents 2 spaces and aligns its scalar siblings
+	// locally: Currency/Remaining Balance align under Wallet; Amount Usd/Enabled
+	// align within Auto Reload.
+	want := "Wallet:\n" +
+		"  Auto Reload:\n" +
+		"    Amount Usd:  50\n" +
+		"    Enabled:     true\n" +
+		"  Currency:           usd\n" +
+		"  Remaining Balance:  150\n"
 	if got != want {
-		t.Fatalf("deeply nested objects should flatten into dotted keys:\ngot:\n%s\nwant:\n%s", got, want)
+		t.Fatalf("deeply nested objects should render as indented blocks:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -229,12 +240,15 @@ func TestHumanFormatter_Data_KeyValue_ArrayOfObjects(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	want := "messages.0.content:  hello\n" +
-		"messages.0.role:     user\n" +
-		"messages.1.content:  hi\n" +
-		"messages.1.role:     model\n"
+	// Array of objects renders as a YAML sequence: each element's first field
+	// carries the "- " marker, remaining fields align under it.
+	want := "Messages:\n" +
+		"  - Content:  hello\n" +
+		"    Role:     user\n" +
+		"  - Content:  hi\n" +
+		"    Role:     model\n"
 	if got != want {
-		t.Fatalf("array of objects should flatten with indexed dotted keys:\ngot:\n%s\nwant:\n%s", got, want)
+		t.Fatalf("array of objects should render as a YAML sequence:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -248,13 +262,13 @@ func TestHumanFormatter_Data_KeyValue_ArrayOfObjects_EmptyElement(t *testing.T) 
 	}
 
 	got := stripANSI(out.String())
-	// An empty object element must render as (none) at its index, not be
-	// dropped (which would leave a confusing gap, e.g. only messages.1.*).
-	if !strings.Contains(got, "messages.0") || !strings.Contains(got, "(none)") {
-		t.Fatalf("empty object element must render as (none), not be dropped:\n%s", got)
-	}
-	if !strings.Contains(got, "messages.1.role") {
-		t.Fatalf("non-empty sibling element should still flatten:\n%s", got)
+	// An empty object element must render as a "- (none)" sequence item, not be
+	// dropped (which would leave a confusing gap between siblings).
+	want := "Messages:\n" +
+		"  - (none)\n" +
+		"  - Role:  model\n"
+	if got != want {
+		t.Fatalf("empty object element must render as a (none) sequence item:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -471,13 +485,16 @@ func TestHumanFormatter_Data_KeyValue_NullValuesInNestedObject(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	// Null leaves render as an empty value (matching formatValue(nil)).
-	want := "a:         \n" +
-		"b:         val\n" +
-		"nested.x:  \n" +
-		"nested.y:  1\n"
+	// Null leaves render as (none), consistent with empty objects/arrays and
+	// unambiguous versus an empty string; the nested object renders as an
+	// indented block with its own local alignment.
+	want := "A:  (none)\n" +
+		"B:  val\n" +
+		"Nested:\n" +
+		"  X:  (none)\n" +
+		"  Y:  1\n"
 	if got != want {
-		t.Fatalf("null values should flatten to empty cells:\ngot:\n%s\nwant:\n%s", got, want)
+		t.Fatalf("null values should render as (none):\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -491,8 +508,10 @@ func TestHumanFormatter_Data_KeyValue_EmptyNestedObjectIsNone(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	want := "id:        x\n" +
-		"settings:  (none)\n"
+	// An empty nested object renders inline as (none), so it aligns with the
+	// sibling scalar Id at this level.
+	want := "Id:        x\n" +
+		"Settings:  (none)\n"
 	if got != want {
 		t.Fatalf("empty nested object should render as (none):\ngot:\n%s\nwant:\n%s", got, want)
 	}

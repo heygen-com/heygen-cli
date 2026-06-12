@@ -351,7 +351,7 @@ func TestGeneratedRoot_HumanGetOutput(t *testing.T) {
 	}
 
 	got := stripGeneratedRootANSI(res.Stdout)
-	if !strings.Contains(got, "id:") || !strings.Contains(got, "abc123") || !strings.Contains(got, "status:") {
+	if !strings.Contains(got, "Id:") || !strings.Contains(got, "abc123") || !strings.Contains(got, "Status:") {
 		t.Fatalf("expected human key-value output:\n%s", got)
 	}
 }

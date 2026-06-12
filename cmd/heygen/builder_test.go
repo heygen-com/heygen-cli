@@ -605,7 +605,7 @@ func TestGenBuilder_VideoCreate_Wait_Human_NonTTYFallback(t *testing.T) {
 	if !strings.Contains(res.Stderr, "Polling: status=processing") {
 		t.Fatalf("stderr = %s, want plain-text non-TTY progress", res.Stderr)
 	}
-	if !strings.Contains(res.Stdout, "status:") {
+	if !strings.Contains(res.Stdout, "Status:") {
 		t.Fatalf("stdout = %s, want human-formatted output", res.Stdout)
 	}
 }

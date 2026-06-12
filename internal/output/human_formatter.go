@@ -145,123 +145,189 @@ func (f *HumanFormatter) renderPrimitiveList(items []any) error {
 	return f.renderTable(rows, []command.Column{{Header: "Value", Field: "value"}})
 }
 
+// renderKeyValue renders a single JSON object as an indented, humanized,
+// kubectl-describe-like layout. Each nesting level indents 2 spaces, labels are
+// humanized per key segment, and scalar siblings within one block are
+// value-aligned to the longest scalar label at that level.
 func (f *HumanFormatter) renderKeyValue(obj map[string]any) error {
-	rows := flattenObject(obj, "", 0)
+	return f.renderObject(obj, 0, false)
+}
 
-	maxLabelWidth := 0
-	for _, r := range rows {
-		if lw := lipgloss.Width(r.key); lw > maxLabelWidth {
-			maxLabelWidth = lw
+const (
+	maxNestedDepth = 5
+	indentUnit     = "  " // one indentation level (2 spaces)
+	labelValueGap  = "  " // gap between a label's colon and its value
+	seqMarker      = "- " // YAML-style array-of-objects sequence-item prefix
+)
+
+// renderObject renders the direct children of obj at the given depth.
+//
+// firstFieldInline signals that the caller has already written the line prefix
+// (indent + a "- " sequence marker) and positioned the cursor for the FIRST
+// field, so that field must be emitted without its own indent. Subsequent
+// fields are emitted with the normal depth indent (which lines them up under
+// the marker). Pass false for ordinary objects.
+func (f *HumanFormatter) renderObject(obj map[string]any, depth int, firstFieldInline bool) error {
+	indent := strings.Repeat(indentUnit, depth)
+	keys := sortedKeys(obj)
+
+	// Per-level alignment: align inline (scalar/leaf) siblings to the longest
+	// such label. Nested-object and array-of-object children render as headers
+	// and do not participate in the value column.
+	labelWidth := 0
+	for _, key := range keys {
+		if isInlineValue(obj[key], depth) {
+			if w := lipgloss.Width(humanizeKey(key)); w > labelWidth {
+				labelWidth = w
+			}
 		}
 	}
 
-	for _, r := range rows {
-		padding := strings.Repeat(" ", max(0, maxLabelWidth-lipgloss.Width(r.key)))
-		if strings.Contains(r.value, "\n") {
-			// Multiline string: align continuation lines under the value column.
-			valueIndent := strings.Repeat(" ", lipgloss.Width(r.key)+len(kvSeparator)+len(padding))
-			lines := strings.Split(r.value, "\n")
-			if _, err := fmt.Fprintf(f.out, "%s:%s  %s\n", r.key, padding, lines[0]); err != nil {
-				return err
+	// For sequence items, the caller wrote "<indent>- " and the first field
+	// continues on that line (no own indent); subsequent fields indent by the
+	// marker width so they align under the first field.
+	markerSpaces := strings.Repeat(" ", len(seqMarker))
+
+	for i, key := range keys {
+		label := humanizeKey(key)
+		fieldIndent := indent
+		markerPad := 0
+		if firstFieldInline {
+			if i == 0 {
+				// First field: caller already positioned the cursor after "- ".
+				fieldIndent = ""
+				markerPad = len(indent) + len(seqMarker)
+			} else {
+				fieldIndent = indent + markerSpaces
 			}
-			for _, line := range lines[1:] {
-				if _, err := fmt.Fprintf(f.out, "%s%s\n", valueIndent, line); err != nil {
-					return err
-				}
-			}
-			continue
 		}
-		if _, err := fmt.Fprintf(f.out, "%s:%s  %s\n", r.key, padding, r.value); err != nil {
+		if err := f.renderField(fieldIndent, label, key, obj[key], depth, labelWidth, markerPad); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-const (
-	maxNestedDepth = 5
-	kvSeparator    = ":  " // label-value separator in key-value output
-)
-
-// kvRow is one rendered line in the flattened key-value output: a dotted key
-// path and its pre-formatted scalar value.
-type kvRow struct {
-	key   string
-	value string
-}
-
-// joinKey joins a parent dotted-key prefix with a child segment.
-func joinKey(prefix, segment string) string {
-	if prefix == "" {
-		return segment
-	}
-	return prefix + "." + segment
-}
-
-// flattenObject recursively flattens a JSON object into dotted-key rows, in
-// sorted-key order. Nested objects become "parent.child" keys.
-func flattenObject(obj map[string]any, prefix string, depth int) []kvRow {
-	var rows []kvRow
-	for _, key := range sortedKeys(obj) {
-		rows = append(rows, flattenValue(joinKey(prefix, key), obj[key], key, depth)...)
-	}
-	return rows
-}
-
-// flattenValue flattens a single value under the given dotted key. fieldName is
-// the leaf field name (used for timestamp/duration heuristics in formatCell).
-//
-// Behavior by value type:
-//   - nested object: flattened into "key.child" rows; empty object -> "(none)".
-//   - scalar array: joined inline, comma-separated.
-//   - array of objects: each element flattened under an index, e.g.
-//     "messages.0.role", "messages.1.role".
-//   - heterogeneous/mixed array (e.g. containing null): compact JSON fallback.
-//   - empty array: "(none)".
-//   - scalars: formatted via formatCell (timestamps, durations, multiline).
-//
-// Beyond maxNestedDepth, the remaining value is emitted as compact JSON rather
-// than flattened further, guarding against pathologically deep payloads.
-func flattenValue(key string, value any, fieldName string, depth int) []kvRow {
+// isInlineValue reports whether value renders inline (on the same line as its
+// label) rather than as a "Label:" header followed by an indented block.
+// Inline values participate in per-level value alignment; headers do not.
+func isInlineValue(value any, depth int) bool {
 	if depth >= maxNestedDepth {
-		return []kvRow{{key: key, value: compactJSON(value)}}
+		return true
+	}
+	switch v := value.(type) {
+	case map[string]any:
+		return len(v) == 0
+	case []any:
+		if len(v) == 0 {
+			return true
+		}
+		if isHomogeneousScalarArray(v) {
+			return true
+		}
+		// Non-empty array of objects renders as a header + sequence items.
+		return !isObjectArray(v)
+	default:
+		return true
+	}
+}
+
+// renderField renders one key/value pair. label is the humanized display key;
+// rawKey is the original JSON key (used for the timestamp/duration heuristics
+// in formatCell). labelWidth is the per-level scalar label width used for value
+// alignment; extraPad is any sequence-item prefix width on the first line.
+func (f *HumanFormatter) renderField(indent, label, rawKey string, value any, depth, labelWidth, extraPad int) error {
+	if depth >= maxNestedDepth {
+		return f.writeInline(indent, label, compactJSON(value), labelWidth, extraPad)
 	}
 
 	switch v := value.(type) {
+	case nil:
+		// Explicit null renders as (none), consistent with empty objects/arrays
+		// and unambiguous versus an empty string.
+		return f.writeInline(indent, label, "(none)", labelWidth, extraPad)
 	case map[string]any:
 		if len(v) == 0 {
-			return []kvRow{{key: key, value: "(none)"}}
+			return f.writeInline(indent, label, "(none)", labelWidth, extraPad)
 		}
-		return flattenObject(v, key, depth+1)
+		if _, err := fmt.Fprintf(f.out, "%s%s:\n", indent, label); err != nil {
+			return err
+		}
+		return f.renderObject(v, depth+1, false)
 	case []any:
 		if len(v) == 0 {
-			return []kvRow{{key: key, value: "(none)"}}
+			return f.writeInline(indent, label, "(none)", labelWidth, extraPad)
 		}
 		if isHomogeneousScalarArray(v) {
-			return []kvRow{{key: key, value: formatArrayInline(v)}}
+			return f.writeInline(indent, label, formatArrayInline(v), labelWidth, extraPad)
 		}
 		if isObjectArray(v) {
-			var rows []kvRow
-			for i, elem := range v {
-				elemKey := joinKey(key, strconv.Itoa(i))
-				elemMap := elem.(map[string]any)
-				// An empty object element renders as "(none)" so the index is
-				// not silently dropped (which would create confusing gaps).
-				if len(elemMap) == 0 {
-					rows = append(rows, kvRow{key: elemKey, value: "(none)"})
-					continue
-				}
-				rows = append(rows, flattenObject(elemMap, elemKey, depth+1)...)
+			if _, err := fmt.Fprintf(f.out, "%s%s:\n", indent, label); err != nil {
+				return err
 			}
-			return rows
+			return f.renderObjectArray(v, depth+1)
 		}
 		// Mixed-type scalar array, array containing null, or otherwise
 		// heterogeneous array: compact JSON fallback (preserves type fidelity
 		// that an ambiguous inline join would lose).
-		return []kvRow{{key: key, value: compactJSON(v)}}
+		return f.writeInline(indent, label, compactJSON(v), labelWidth, extraPad)
 	default:
-		return []kvRow{{key: key, value: formatCell(value, fieldName)}}
+		return f.writeInline(indent, label, formatCell(value, rawKey), labelWidth, extraPad)
 	}
+}
+
+// renderObjectArray renders a non-empty array of objects as a YAML sequence:
+// each element's first field line is prefixed with "- " at the given indent,
+// and the element's remaining fields align under it.
+func (f *HumanFormatter) renderObjectArray(elems []any, depth int) error {
+	indent := strings.Repeat(indentUnit, depth)
+	for _, elem := range elems {
+		elemMap, _ := elem.(map[string]any)
+		// An empty object element renders as "- (none)" so it is not silently
+		// dropped (which would create confusing gaps between siblings).
+		if len(elemMap) == 0 {
+			if _, err := fmt.Fprintf(f.out, "%s%s(none)\n", indent, seqMarker); err != nil {
+				return err
+			}
+			continue
+		}
+		// Emit the "- " marker, then render the element's fields. The first
+		// field continues on the marker line; subsequent fields indent under it.
+		if _, err := fmt.Fprintf(f.out, "%s%s", indent, seqMarker); err != nil {
+			return err
+		}
+		if err := f.renderObject(elemMap, depth, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeInline writes a "<indent><Label>:<pad>  <value>" line, aligning the
+// value to labelWidth. extraPad accounts for a sequence-item marker ("- ")
+// already written on this line by the caller. Multiline values have their
+// continuation lines aligned under the value column.
+func (f *HumanFormatter) writeInline(indent, label, value string, labelWidth, extraPad int) error {
+	pad := strings.Repeat(" ", max(0, labelWidth-lipgloss.Width(label)))
+	if strings.Contains(value, "\n") {
+		// The first field of a sequence item is written without its own indent
+		// (the caller already emitted "<indent>- "); the value column then sits
+		// at indent + extraPad + label + ":" + pad + gap.
+		valueCol := len(indent) + extraPad + lipgloss.Width(label) + 1 + len(pad) + len(labelValueGap)
+		valueIndent := strings.Repeat(" ", valueCol)
+		lines := strings.Split(value, "\n")
+		if _, err := fmt.Fprintf(f.out, "%s%s:%s%s%s\n", indent, label, pad, labelValueGap, lines[0]); err != nil {
+			return err
+		}
+		for _, line := range lines[1:] {
+			if _, err := fmt.Fprintf(f.out, "%s%s\n", valueIndent, line); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	_, err := fmt.Fprintf(f.out, "%s%s:%s%s%s\n", indent, label, pad, labelValueGap, value)
+	return err
 }
 
 func autoColumnsFor(row map[string]any) []command.Column {
