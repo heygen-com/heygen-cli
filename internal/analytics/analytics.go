@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/heygen-com/heygen-cli/internal/origin"
 	"github.com/heygen-com/heygen-cli/internal/paths"
 	"github.com/posthog/posthog-go"
 )
@@ -22,11 +23,12 @@ type captureClient interface {
 
 // Client wraps PostHog event capture behind a small no-op-friendly surface.
 type Client struct {
-	ph         captureClient
-	enabled    bool
-	distinctID string
-	version    string
-	started    bool
+	ph           captureClient
+	enabled      bool
+	distinctID   string
+	version      string
+	clientOrigin string
+	started      bool
 }
 
 // New creates an analytics client. Disabled clients are inert no-ops.
@@ -48,10 +50,11 @@ func New(version string, enabled bool) *Client {
 
 func newWithCapture(version string, ph captureClient) *Client {
 	return &Client{
-		ph:         ph,
-		enabled:    true,
-		distinctID: distinctID(),
-		version:    version,
+		ph:           ph,
+		enabled:      true,
+		distinctID:   distinctID(),
+		version:      version,
+		clientOrigin: string(origin.Detect()),
 	}
 }
 
@@ -63,11 +66,7 @@ func (c *Client) CommandRun(command string) {
 	_ = c.ph.Enqueue(posthog.Capture{
 		DistinctId: c.distinctID,
 		Event:      "COMMAND_RUN",
-		Properties: posthog.NewProperties().
-			Set("command", command).
-			Set("cli_version", c.version).
-			Set("os", runtime.GOOS).
-			Set("arch", runtime.GOARCH),
+		Properties: c.baseProperties(command),
 	})
 }
 
@@ -78,16 +77,28 @@ func (c *Client) CommandRunComplete(command string, exitCode int, duration time.
 	_ = c.ph.Enqueue(posthog.Capture{
 		DistinctId: c.distinctID,
 		Event:      "COMMAND_RUN_COMPLETE",
-		Properties: posthog.NewProperties().
-			Set("command", command).
-			Set("cli_version", c.version).
-			Set("os", runtime.GOOS).
-			Set("arch", runtime.GOARCH).
+		Properties: c.baseProperties(command).
 			Set("exit_code", exitCode).
 			Set("duration_ms", duration.Milliseconds()).
 			Set("success", exitCode == 0).
 			Set("error_code", errorCode),
 	})
+}
+
+// baseProperties is the per-event property bundle every CLI event carries.
+// Kept in one place so client_origin / cli_version / os / arch can't drift
+// between COMMAND_RUN and COMMAND_RUN_COMPLETE — funnel queries break when
+// the start and complete events disagree on dimensions.
+func (c *Client) baseProperties(command string) posthog.Properties {
+	props := posthog.NewProperties().
+		Set("command", command).
+		Set("cli_version", c.version).
+		Set("os", runtime.GOOS).
+		Set("arch", runtime.GOARCH)
+	if c.clientOrigin != "" {
+		props = props.Set("client_origin", c.clientOrigin)
+	}
+	return props
 }
 
 func (c *Client) Close() {
