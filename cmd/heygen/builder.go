@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/heygen-com/heygen-cli/internal/clidesc"
 	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
@@ -27,14 +28,17 @@ import (
 func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 	var rawData string
 
-	description := spec.Description
+	// CLI-surface description overlay (internal/clidesc). Resolved here at
+	// build time; spec is never mutated. Falls through to spec text when no
+	// override exists.
+	description := clidesc.Description(spec)
 	if spec.BodyEncoding == "json" && !hasBodyFlags(spec) {
 		description += "\n\nUse --request-schema to see all available request fields."
 	}
 
 	cmd := &cobra.Command{
 		Use:     buildUseLine(spec),
-		Short:   spec.Summary,
+		Short:   clidesc.Summary(spec),
 		Long:    description,
 		Example: strings.Join(spec.Examples, "\n"),
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -55,6 +59,9 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 			defer restoreRequiredFlagAnnotations(cmd)
 
 			if show, schema := requestedSchema(cmd, spec); show {
+				// Apply CLI-surface field-description overrides (no-op when
+				// none exist). Resolved at render time; spec is not mutated.
+				schema = clidesc.Schema(spec, schema)
 				var buf bytes.Buffer
 				if err := json.Compact(&buf, []byte(schema)); err != nil {
 					// Fallback: print as-is if compact fails.
@@ -199,9 +206,10 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 		},
 	}
 
-	// Register flags from spec
+	// Register flags from spec. Flag usage text is resolved through the
+	// description overlay (falls through to FlagSpec.Help when no override).
 	for _, flag := range spec.Flags {
-		registerFlag(cmd, flag)
+		registerFlag(cmd, flag, clidesc.FlagHelp(spec, flag))
 	}
 
 	if spec.RequestSchema != "" {
@@ -363,8 +371,11 @@ func restoreRequiredFlagAnnotations(cmd *cobra.Command) {
 }
 
 // registerFlag adds a typed flag to the Cobra command based on the FlagSpec.
-func registerFlag(cmd *cobra.Command, flag command.FlagSpec) {
-	helpText := flag.Help
+// help is the resolved usage text (a CLI-surface override if one applies,
+// otherwise FlagSpec.Help); the "(required)"/"(allowed: ...)" suffixes are
+// appended on top of it.
+func registerFlag(cmd *cobra.Command, flag command.FlagSpec, help string) {
+	helpText := help
 	if flag.Required {
 		helpText += " (required)"
 	}

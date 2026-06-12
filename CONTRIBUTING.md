@@ -57,6 +57,16 @@ This reads the spec, generates command definitions in `gen/`, and formats the ou
 
 Every command must have usage examples. If a new endpoint lacks examples, codegen fails. Add examples to `codegen/examples/{group}.yaml`.
 
+### CLI-specific OpenAPI extensions
+
+The codegen honors a small set of `x-cli-*` vendor extensions that the API team sets in the source spec (in EF, via Pydantic `json_schema_extra`). They let a field behave differently on the CLI surface than on the raw HTTP API:
+
+- `x-cli-visible` (operation or schema property, bool) — when `false`, the command or flag is omitted from the CLI.
+- `x-cli-action` (operation, bool) — when `true`, the path's terminal literal is treated as the verb (no `create`/`get` appended).
+- `x-cli-default` (schema property) — overrides the HTTP `default` for the CLI flag default, and marks the value to be sent even when the user omits the flag.
+
+Surface-specific *descriptions* are intentionally not a spec extension: they are owned CLI-side via the description overlay (see "CLI-surface description overrides" below), so the spec stays the single API contract.
+
 ## Adding Hand-Written Enhancements
 
 Generated commands are pure data. To add behavior on top:
@@ -84,6 +94,24 @@ Generated commands are pure data. To add behavior on top:
     {Header: "Created", Field: "created_at"},
 },
 ```
+
+**CLI-surface description overrides** (`--help` / `--request-schema` / `--response-schema` text) — register in `internal/clidesc`:
+
+```go
+{"/v3/voices/clone", "POST"}: {
+    Description: "Creates a voice clone ... poll it with `heygen voice get <voice-clone-id>` ...",
+    Flags:  map[string]string{"style-id": "Style ID from 'heygen video-agent styles list'. ..."},
+    Fields: map[string]string{"asset_id": "Reusable asset identifier. Becomes usable after `heygen asset complete create <asset-id>`."},
+},
+```
+
+Some OpenAPI descriptions are written in raw HTTP terms (`poll via GET /v3/videos/{id}`, `Pass to POST /v3/video-agents`) that mislead a CLI user, who drives the API with commands and flags. This overlay reframes those few cases in CLI terms.
+
+- **It is a runtime overlay, not a spec/codegen change.** `command.Spec` is generated and immutable (see [AGENTS.md](./AGENTS.md)). The override is resolved at command-build time in `buildCobraCommand` (via `clidesc.Summary`/`Description`/`FlagHelp`/`Schema`) and never mutates the Spec, exactly like `DefaultColumns`. It lives in `internal/clidesc` (not `gen/`) so the builder and any tooling can share one source of truth.
+- **Keyed by `(Endpoint, Method)`** — the same pair that uniquely identifies a `Spec`, so a key survives a command rename in the generated surface.
+- **Sparse and fall-through.** Most commands have no entry. `Summary` overrides `Short`, `Description` overrides `Long`, `Flags[name]` overrides a flag's usage, and `Fields[json_name]` overrides a schema property's description. Any field left empty/absent falls through to the generated spec text unchanged.
+- **Precedence: overlay wins.** The override replaces the generated spec text. (A spec-extension approach, `x-cli-description`, was considered and dropped in favor of this CLI-curated overlay: surface framing belongs to the surface, and the source of truth in the spec stays the API contract.)
+- **Flag help avoids backticks.** Cobra/pflag treats the first backtick-delimited token in a flag's usage as the value placeholder; use plain quotes in `Flags` entries. Backticks are fine in `Summary`/`Description` and in `Fields` (schema JSON).
 
 **Custom commands** (not in the API spec) — add a new file in `cmd/heygen/` and register in `root.go`. See `video_download.go` for an example.
 
