@@ -1,0 +1,108 @@
+name: Weekly Stable Release
+
+# Automatically cuts a stable release once a week, but only if new commits
+# landed on main since the last stable tag. This keeps the cadence regular
+# (codegen resyncs land ~weekly) without a human remembering to trigger it,
+# and skips weeks with no changes instead of cutting an empty release.
+#
+# This workflow does NOT build or sign anything itself. It only computes the
+# next version and delegates to the existing release-stable.yml workflow via
+# workflow_dispatch, so the build/sign/publish path stays in exactly one place.
+
+on:
+  # Monday 09:00 UTC. Early-week cut so a fresh stable is available for the
+  # week's work; UTC avoids DST ambiguity.
+  schedule:
+    - cron: "0 9 * * 1"
+  # Allow a maintainer to run the same detect-and-dispatch logic on demand.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Required so `gh workflow run` can dispatch release-stable.yml.
+  actions: write
+
+# Never run two auto-release dispatches at once.
+concurrency:
+  group: weekly-stable-release
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history + tags so we can find the last stable tag and count
+          # commits since it.
+          fetch-depth: 0
+          ref: main
+
+      - name: Determine whether a release is needed and compute version
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Latest stable tag (vX.Y.Z, excluding -dev prereleases).
+          latest_stable="$(git tag --list 'v*' --sort=-v:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+
+          if [[ -z "$latest_stable" ]]; then
+            # No stable tag yet: bootstrap at v0.0.1 and always release.
+            echo "No existing stable tag found; bootstrapping at v0.0.1."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "version=v0.0.1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Last stable tag: $latest_stable"
+
+          # Count commits on main since the last stable tag. Empty week => skip.
+          new_commits="$(git rev-list --count "${latest_stable}..origin/main")"
+          echo "Commits on main since ${latest_stable}: ${new_commits}"
+
+          if [[ "$new_commits" -eq 0 ]]; then
+            echo "No new commits since ${latest_stable}; skipping this week's release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Patch bump from the last stable tag. This matches the dev-release
+          # auto-derivation and the repo's pre-1.0 convention where the weekly
+          # driver (codegen resyncs, fixes, additive schema) is a patch bump.
+          # Minor/major bumps for new command groups remain a manual release.
+          next="$(echo "$latest_stable" | sed 's/^v//' \
+            | awk -F. '{printf "v%d.%d.%d", $1, $2, $3 + 1}')"
+
+          # Idempotency guard: if the computed tag somehow already exists (e.g.
+          # a manual release raced this run), skip rather than double-release.
+          # release-stable.yml re-checks this too, but failing here keeps the
+          # run green instead of erroring on a skipped week.
+          if git rev-parse "$next" >/dev/null 2>&1; then
+            echo "Computed tag ${next} already exists; nothing to do."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Will release ${next} (${new_commits} new commit(s))."
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "version=${next}" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch stable release
+        if: steps.plan.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Dispatching release-stable.yml for ${VERSION}"
+          # Reuse the existing manual release workflow; it owns tag creation,
+          # tests, GoReleaser, and S3 upload. We only feed it the version.
+          gh workflow run release-stable.yml -f "version=${VERSION}" --ref main
+
+      - name: Report skip
+        if: steps.plan.outputs.release != 'true'
+        shell: bash
+        run: echo "No release dispatched this run (see plan step for the reason)."
