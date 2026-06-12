@@ -113,6 +113,16 @@ Some OpenAPI descriptions are written in raw HTTP terms (`poll via GET /v3/video
 - **Precedence: overlay wins.** The override replaces the generated spec text. (A spec-extension approach, `x-cli-description`, was considered and dropped in favor of this CLI-curated overlay: surface framing belongs to the surface, and the source of truth in the spec stays the API contract.)
 - **Flag help avoids backticks.** Cobra/pflag treats the first backtick-delimited token in a flag's usage as the value placeholder; use plain quotes in `Flags` entries. Backticks are fine in `Summary`/`Description` and in `Fields` (schema JSON).
 
+#### Catching new HTTP-framed descriptions on resync
+
+New OpenAPI descriptions arrive on every codegen resync, and some are written in raw HTTP terms that read badly on the CLI. After a resync, run the advisory checker:
+
+```bash
+make check-descriptions
+```
+
+It scans every generated command's summary, description, flag help, and schema-field descriptions for divergence markers (uppercase HTTP verbs like `GET`/`POST`, version paths like `/v3/...`, and poll words like `poll`/`polling`) and reports any flagged text on a command that has **no** override in `internal/clidesc`. It is advisory: it prints a report and always exits 0, never failing CI. For anything it flags that genuinely misleads a CLI user, add an override in `internal/clidesc`; this is how new HTTP-framed descriptions get caught and reframed going forward. Some hits are accurate CLI-neutral text (e.g. a webhook `url` that legitimately describes an inbound `POST` from HeyGen) and are fine to leave; the report is a review aid, not a gate.
+
 **Custom commands** (not in the API spec) — add a new file in `cmd/heygen/` and register in `root.go`. See `video_download.go` for an example.
 
 **Deprecated aliases** (backward compatibility after a spec-driven rename) — register in `cmd/heygen/aliases.go`. Command names are derived from the upstream OpenAPI spec, so an upstream tag or path change can rename a command that already shipped in a stable release. An `Alias` re-registers the canonical `Spec` at its old path, hidden from help and marked deprecated, so the old invocation still resolves to the same handler while a stderr notice points to the new name:
