@@ -42,6 +42,62 @@ func TestClient_Do_InjectsHeaders(t *testing.T) {
 	}
 }
 
+func TestClient_Do_SetsClientOrigin(t *testing.T) {
+	var gotOrigin string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotOrigin = r.Header.Get("X-HeyGen-Client-Origin")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := New("key",
+		WithBaseURL(srv.URL),
+		WithHTTPClient(srv.Client()),
+		WithClientOrigin("claude_code"),
+	)
+
+	req, _ := http.NewRequest("GET", srv.URL+"/v3/videos", nil)
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotOrigin != "claude_code" {
+		t.Errorf("X-HeyGen-Client-Origin = %q, want %q", gotOrigin, "claude_code")
+	}
+}
+
+// Empty origin must produce NO header at all — an empty header would still
+// land on the wire and downstream attribution would treat empty string as
+// "explicitly unknown" rather than "no signal". They're not the same thing
+// for funnel queries.
+func TestClient_Do_OmitsClientOriginWhenEmpty(t *testing.T) {
+	hadHeader := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, hadHeader = r.Header["X-Heygen-Client-Origin"]
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := New("key",
+		WithBaseURL(srv.URL),
+		WithHTTPClient(srv.Client()),
+		WithClientOrigin(""),
+	)
+
+	req, _ := http.NewRequest("GET", srv.URL+"/v3/videos", nil)
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if hadHeader {
+		t.Error("X-HeyGen-Client-Origin header was set despite empty origin")
+	}
+}
+
 func TestClient_Do_SetsContentType(t *testing.T) {
 	var gotContentType string
 

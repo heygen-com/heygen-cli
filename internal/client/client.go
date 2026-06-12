@@ -3,6 +3,8 @@ package client
 import (
 	"net/http"
 	"time"
+
+	"github.com/heygen-com/heygen-cli/internal/origin"
 )
 
 const (
@@ -15,11 +17,12 @@ const (
 // automatic x-api-key header injection, base URL resolution, and
 // User-Agent tagging. Use WithHTTPClient to inject a test transport.
 type Client struct {
-	httpClient *http.Client
-	baseURL    string
-	apiKey     string
-	userAgent  string
-	retry      RetryConfig
+	httpClient   *http.Client
+	baseURL      string
+	apiKey       string
+	userAgent    string
+	clientOrigin string
+	retry        RetryConfig
 }
 
 // Option configures the Client.
@@ -46,14 +49,23 @@ func WithUserAgent(ua string) Option {
 	return func(c *Client) { c.userAgent = ua }
 }
 
+// WithClientOrigin overrides the parent-agent string sent in the
+// X-HeyGen-Client-Origin header. Empty disables the header. By default the
+// constructor calls origin.Detect() once at startup; tests use this to
+// pin a deterministic value.
+func WithClientOrigin(o string) Option {
+	return func(c *Client) { c.clientOrigin = o }
+}
+
 // New creates a Client with the given API key and options.
 func New(apiKey string, opts ...Option) *Client {
 	c := &Client{
-		httpClient: &http.Client{Timeout: DefaultTimeout},
-		baseURL:    DefaultBaseURL,
-		apiKey:     apiKey,
-		userAgent:  DefaultUserAgent,
-		retry:      DefaultRetryConfig(),
+		httpClient:   &http.Client{Timeout: DefaultTimeout},
+		baseURL:      DefaultBaseURL,
+		apiKey:       apiKey,
+		userAgent:    DefaultUserAgent,
+		clientOrigin: string(origin.Detect()),
+		retry:        DefaultRetryConfig(),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -78,6 +90,9 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("x-api-key", c.apiKey)
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("X-HeyGen-Source", "cli")
+	if c.clientOrigin != "" {
+		req.Header.Set("X-HeyGen-Client-Origin", c.clientOrigin)
+	}
 	if req.Header.Get("Content-Type") == "" && req.Body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

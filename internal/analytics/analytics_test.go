@@ -89,6 +89,48 @@ func TestCommandRunComplete_Properties(t *testing.T) {
 	}
 }
 
+func TestCommandRun_IncludesClientOrigin(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+	client.clientOrigin = "cursor"
+
+	client.CommandRun("heygen video list")
+
+	msg := stub.messages[0].(posthog.Capture)
+	if got := msg.Properties["client_origin"]; got != "cursor" {
+		t.Fatalf("client_origin = %v, want %q", got, "cursor")
+	}
+}
+
+func TestCommandRunComplete_IncludesClientOrigin(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+	client.clientOrigin = "claude_code"
+
+	client.CommandRunComplete("heygen video create", 0, time.Second, "")
+
+	msg := stub.messages[0].(posthog.Capture)
+	if got := msg.Properties["client_origin"]; got != "claude_code" {
+		t.Fatalf("client_origin = %v, want %q", got, "claude_code")
+	}
+}
+
+// Origin "" must NOT land in PostHog as `client_origin: ""` — that would
+// pollute the property's value distribution (the empty bucket and the
+// unknown bucket are different cohorts in funnel analysis).
+func TestCommandRun_OmitsClientOriginWhenEmpty(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+	client.clientOrigin = ""
+
+	client.CommandRun("heygen video list")
+
+	msg := stub.messages[0].(posthog.Capture)
+	if _, present := msg.Properties["client_origin"]; present {
+		t.Fatalf("client_origin set to %v despite empty origin", msg.Properties["client_origin"])
+	}
+}
+
 func TestClose_DisabledNoop(t *testing.T) {
 	client := New("test", false)
 	client.Close()
