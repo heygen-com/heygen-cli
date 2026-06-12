@@ -98,7 +98,7 @@ heygen video download <video-id>
 
 Add `--human` to any command for a readable layout. Set `HEYGEN_OUTPUT=human` to make it the default.
 
-In `--human` mode, list responses render as a table and single-object responses render as aligned key-value rows. Nested objects are flattened into dotted keys (e.g. `wallet.auto_reload.enabled  false`); arrays of scalars are joined inline (`a, b, c`) and arrays of objects are indexed (`messages.0.role`). JSON output (the default) is never altered.
+In `--human` mode, list responses render as a table and single-object responses render as aligned key-value rows. Nested objects are flattened into dotted keys (e.g. `wallet.auto_reload.enabled: false`); arrays of scalars are joined inline (`a, b, c`) and arrays of objects are indexed (`messages.0.role`). JSON output (the default) is never altered.
 
 ## Commands
 

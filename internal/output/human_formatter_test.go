@@ -238,6 +238,43 @@ func TestHumanFormatter_Data_KeyValue_ArrayOfObjects(t *testing.T) {
 	}
 }
 
+func TestHumanFormatter_Data_KeyValue_ArrayOfObjects_EmptyElement(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	input := json.RawMessage(`{"data":{"messages":[{},{"role":"model"}]}}`)
+	if err := f.Data(input, "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	// An empty object element must render as (none) at its index, not be
+	// dropped (which would leave a confusing gap, e.g. only messages.1.*).
+	if !strings.Contains(got, "messages.0") || !strings.Contains(got, "(none)") {
+		t.Fatalf("empty object element must render as (none), not be dropped:\n%s", got)
+	}
+	if !strings.Contains(got, "messages.1.role") {
+		t.Fatalf("non-empty sibling element should still flatten:\n%s", got)
+	}
+}
+
+func TestHumanFormatter_Data_KeyValue_MixedScalarArrayUsesCompactJSON(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	input := json.RawMessage(`{"data":{"items":["hello",42,true]}}`)
+	if err := f.Data(input, "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	// A mixed-type scalar array falls back to compact JSON rather than an
+	// ambiguous inline join, so string vs number vs bool is not lost.
+	if !strings.Contains(got, `["hello",42,true]`) {
+		t.Fatalf("mixed-type scalar array should render as compact JSON:\n%s", got)
+	}
+}
+
 func TestHumanFormatter_Data_KeyValue_EmptyCollections(t *testing.T) {
 	var out bytes.Buffer
 	f := NewHumanFormatter(&out, &bytes.Buffer{})

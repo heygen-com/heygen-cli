@@ -237,17 +237,27 @@ func flattenValue(key string, value any, fieldName string, depth int) []kvRow {
 		if len(v) == 0 {
 			return []kvRow{{key: key, value: "(none)"}}
 		}
-		if isScalarArray(v) {
+		if isHomogeneousScalarArray(v) {
 			return []kvRow{{key: key, value: formatArrayInline(v)}}
 		}
 		if isObjectArray(v) {
 			var rows []kvRow
 			for i, elem := range v {
-				rows = append(rows, flattenObject(elem.(map[string]any), joinKey(key, strconv.Itoa(i)), depth+1)...)
+				elemKey := joinKey(key, strconv.Itoa(i))
+				elemMap := elem.(map[string]any)
+				// An empty object element renders as "(none)" so the index is
+				// not silently dropped (which would create confusing gaps).
+				if len(elemMap) == 0 {
+					rows = append(rows, kvRow{key: elemKey, value: "(none)"})
+					continue
+				}
+				rows = append(rows, flattenObject(elemMap, elemKey, depth+1)...)
 			}
 			return rows
 		}
-		// Heterogeneous or mixed array (e.g. contains null): compact JSON fallback.
+		// Mixed-type scalar array, array containing null, or otherwise
+		// heterogeneous array: compact JSON fallback (preserves type fidelity
+		// that an ambiguous inline join would lose).
 		return []kvRow{{key: key, value: compactJSON(v)}}
 	default:
 		return []kvRow{{key: key, value: formatCell(value, fieldName)}}
@@ -366,6 +376,43 @@ func isScalarArray(v []any) bool {
 		switch elem.(type) {
 		case string, float64, bool:
 		default:
+			return false
+		}
+	}
+	return true
+}
+
+// isHomogeneousScalarArray reports whether every element is a non-nil scalar of
+// the SAME JSON type (all string, all float64, or all bool). The key-value path
+// inline-joins only homogeneous scalar arrays; a mixed-type scalar array returns
+// false so it falls back to compact JSON rather than an ambiguous inline join
+// (e.g. "42, true" hiding whether 42 was a number or a string). The table path
+// uses the looser isScalarArray and is intentionally left unchanged.
+func isHomogeneousScalarArray(v []any) bool {
+	if len(v) == 0 {
+		return false
+	}
+	const (
+		kindString = 1
+		kindFloat  = 2
+		kindBool   = 3
+	)
+	kind := 0
+	for _, elem := range v {
+		var k int
+		switch elem.(type) {
+		case string:
+			k = kindString
+		case float64:
+			k = kindFloat
+		case bool:
+			k = kindBool
+		default:
+			return false
+		}
+		if kind == 0 {
+			kind = k
+		} else if kind != k {
 			return false
 		}
 	}
