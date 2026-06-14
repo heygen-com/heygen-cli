@@ -498,6 +498,45 @@ func TestHumanFormatter_Data_KeyValue_NullValuesInNestedObject(t *testing.T) {
 	}
 }
 
+func TestHumanFormatter_Data_KeyValue_ArrayOfObjects_NestedFirstField(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	// A sequence item whose first sorted key (Config) is itself a nested object:
+	// Config's child (Timeout) must indent UNDER Config, while the element's
+	// sibling field (Role) stays aligned with Config under the "- " marker.
+	input := json.RawMessage(`{"data":{"messages":[{"config":{"timeout":10},"role":"user"}]}}`)
+	if err := f.Data(input, "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	want := "Messages:\n" +
+		"  - Config:\n" +
+		"      Timeout:  10\n" +
+		"    Role:  user\n"
+	if got != want {
+		t.Fatalf("nested first field in a sequence item should not collide with its sibling:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestHumanFormatter_Data_KeyValue_NullAtDepthCap(t *testing.T) {
+	var out bytes.Buffer
+	f := NewHumanFormatter(&out, &bytes.Buffer{})
+
+	// A null leaf at/below the nesting depth cap must still render (none), not a
+	// blank value (the depth-cap path uses compactJSON, which returns "" for nil).
+	input := json.RawMessage(`{"data":{"a":{"b":{"c":{"d":{"e":{"f":null}}}}}}}`)
+	if err := f.Data(input, "data", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "(none)") {
+		t.Fatalf("null leaf at the depth cap should render (none), not blank:\n%s", got)
+	}
+}
+
 func TestHumanFormatter_Data_KeyValue_EmptyNestedObjectIsNone(t *testing.T) {
 	var out bytes.Buffer
 	f := NewHumanFormatter(&out, &bytes.Buffer{})

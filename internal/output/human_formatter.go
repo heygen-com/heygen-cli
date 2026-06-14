@@ -183,23 +183,21 @@ func (f *HumanFormatter) renderObject(obj map[string]any, depth int, firstFieldI
 		}
 	}
 
-	// For sequence items, the caller wrote "<indent>- " and the first field
-	// continues on that line (no own indent); subsequent fields indent by the
-	// marker width so they align under the first field.
-	markerSpaces := strings.Repeat(" ", len(seqMarker))
-
+	// For sequence items the caller wrote "<outer-indent>- " and the first field
+	// continues on that line. The element body is rendered at this depth, which
+	// the caller set to outer-depth+1; because the "- " marker is exactly one
+	// indent unit wide (len(seqMarker) == len(indentUnit)), the marker prefix
+	// occupies exactly `indent` columns. So the first field needs no own indent
+	// (its value aligns at len(indent)), subsequent fields use the normal indent
+	// (lining up under the first field), and nested children of any field recurse
+	// at depth+1 and land correctly one level deeper than the element body.
 	for i, key := range keys {
 		label := humanizeKey(key)
 		fieldIndent := indent
 		markerPad := 0
-		if firstFieldInline {
-			if i == 0 {
-				// First field: caller already positioned the cursor after "- ".
-				fieldIndent = ""
-				markerPad = len(indent) + len(seqMarker)
-			} else {
-				fieldIndent = indent + markerSpaces
-			}
+		if firstFieldInline && i == 0 {
+			fieldIndent = ""
+			markerPad = len(indent)
 		}
 		if err := f.renderField(fieldIndent, label, key, obj[key], depth, labelWidth, markerPad); err != nil {
 			return err
@@ -237,15 +235,19 @@ func isInlineValue(value any, depth int) bool {
 // in formatCell). labelWidth is the per-level scalar label width used for value
 // alignment; extraPad is any sequence-item prefix width on the first line.
 func (f *HumanFormatter) renderField(indent, label, rawKey string, value any, depth, labelWidth, extraPad int) error {
+	// Null renders as (none) at every depth, consistent with empty
+	// objects/arrays and unambiguous versus an empty string. Checked before the
+	// depth cap so a null leaf at maxNestedDepth doesn't fall through to
+	// compactJSON(nil), which would print a blank value.
+	if value == nil {
+		return f.writeInline(indent, label, "(none)", labelWidth, extraPad)
+	}
+
 	if depth >= maxNestedDepth {
 		return f.writeInline(indent, label, compactJSON(value), labelWidth, extraPad)
 	}
 
 	switch v := value.(type) {
-	case nil:
-		// Explicit null renders as (none), consistent with empty objects/arrays
-		// and unambiguous versus an empty string.
-		return f.writeInline(indent, label, "(none)", labelWidth, extraPad)
 	case map[string]any:
 		if len(v) == 0 {
 			return f.writeInline(indent, label, "(none)", labelWidth, extraPad)
@@ -291,12 +293,14 @@ func (f *HumanFormatter) renderObjectArray(elems []any, depth int) error {
 			}
 			continue
 		}
-		// Emit the "- " marker, then render the element's fields. The first
-		// field continues on the marker line; subsequent fields indent under it.
+		// Emit the "- " marker, then render the element's fields one level deeper
+		// (depth+1). The "- " marker is one indent unit wide, so the element body
+		// at depth+1 lines up exactly after the marker, and nested fields recurse
+		// correctly relative to it.
 		if _, err := fmt.Fprintf(f.out, "%s%s", indent, seqMarker); err != nil {
 			return err
 		}
-		if err := f.renderObject(elemMap, depth, true); err != nil {
+		if err := f.renderObject(elemMap, depth+1, true); err != nil {
 			return err
 		}
 	}
