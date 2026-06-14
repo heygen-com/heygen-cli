@@ -98,7 +98,7 @@ heygen video download <video-id>
 
 Add `--human` to any command for a readable layout. Set `HEYGEN_OUTPUT=human` to make it the default.
 
-In `--human` mode, list responses render as a table and single-object responses render as an indented, humanized layout (similar to `kubectl describe`). Keys are humanized per segment (`auto_reload` → `Auto Reload`); nested objects indent under a `Label:` header, scalar siblings align locally within each block, arrays of scalars join inline (`a, b, c`), and arrays of objects render as YAML-style `- ` sequence items. Empty objects, empty arrays, and nulls show as `(none)`. Long scalar values (e.g. pre-signed download URLs) are printed in full and may wrap in a narrow terminal; pipe the default JSON to `jq` if you need to extract one cleanly. For example:
+In `--human` mode, list responses render as a table and single-object responses render as an indented, humanized layout (similar to `kubectl describe`). Keys are humanized per segment (`auto_reload` → `Auto Reload`), with common acronyms uppercased (`video_url` → `Video URL`); nested objects indent under a `Label:` header, scalar siblings align locally within each block, arrays of scalars join inline (`a, b, c`), and arrays of objects render as YAML-style `- ` sequence items. Empty objects, empty arrays, and nulls show as `(none)`. Long scalar values (e.g. pre-signed download URLs) are printed in full and may wrap in a narrow terminal; pipe the default JSON to `jq` if you need to extract one cleanly. For example:
 
 ```
 Status:  completed

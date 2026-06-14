@@ -54,7 +54,7 @@ func TestHumanFormatter_Data_AutoColumns(t *testing.T) {
 	}
 
 	got := stripANSI(out.String())
-	if !strings.Contains(got, "Voice Id") || !strings.Contains(got, "Name") || !strings.Contains(got, "Gender") {
+	if !strings.Contains(got, "Voice ID") || !strings.Contains(got, "Name") || !strings.Contains(got, "Gender") {
 		t.Fatalf("missing auto-generated headers in output:\n%s", got)
 	}
 	if strings.Contains(got, "Showing ") {
@@ -74,7 +74,7 @@ func TestHumanFormatter_Data_KeyValue(t *testing.T) {
 	got := stripANSI(out.String())
 	// Nested objects render as an indented "Label:" header block; top-level
 	// scalars align locally, the nested scalar aligns within its own block.
-	want := "Id:      vid_123\n" +
+	want := "ID:      vid_123\n" +
 		"Meta:\n" +
 		"  Kind:  demo\n" +
 		"Status:  completed\n"
@@ -200,7 +200,7 @@ func TestHumanFormatter_Data_KeyValue_NestedObject(t *testing.T) {
 	want := "Error:\n" +
 		"  Code:     not_found\n" +
 		"  Message:  Video not found\n" +
-		"Id:  vid_1\n"
+		"ID:  vid_1\n"
 	if got != want {
 		t.Fatalf("nested object should render as an indented block:\ngot:\n%s\nwant:\n%s", got, want)
 	}
@@ -549,7 +549,7 @@ func TestHumanFormatter_Data_KeyValue_EmptyNestedObjectIsNone(t *testing.T) {
 	got := stripANSI(out.String())
 	// An empty nested object renders inline as (none), so it aligns with the
 	// sibling scalar Id at this level.
-	want := "Id:        x\n" +
+	want := "ID:        x\n" +
 		"Settings:  (none)\n"
 	if got != want {
 		t.Fatalf("empty nested object should render as (none):\ngot:\n%s\nwant:\n%s", got, want)

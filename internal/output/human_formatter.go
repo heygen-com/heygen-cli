@@ -604,12 +604,36 @@ func sanitizeForTable(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// humanizeAcronyms maps a lowercased key segment to its fully-uppercase display
+// form, so `video_url` renders as "Video URL" rather than "Video Url". Limited
+// to unambiguous acronyms that appear in the API surface; anything not listed is
+// plain title-cased.
+var humanizeAcronyms = map[string]string{
+	"id":   "ID",
+	"url":  "URL",
+	"api":  "API",
+	"srt":  "SRT",
+	"vtt":  "VTT",
+	"tts":  "TTS",
+	"ssml": "SSML",
+	"json": "JSON",
+	"uuid": "UUID",
+	"ai":   "AI",
+	"hd":   "HD",
+	"sd":   "SD",
+	"fps":  "FPS",
+}
+
 func humanizeKey(key string) string {
 	parts := strings.FieldsFunc(key, func(r rune) bool {
 		return r == '_' || r == '-' || r == '.'
 	})
 	for i, part := range parts {
 		if part == "" {
+			continue
+		}
+		if acronym, ok := humanizeAcronyms[strings.ToLower(part)]; ok {
+			parts[i] = acronym
 			continue
 		}
 		parts[i] = strings.ToUpper(part[:1]) + part[1:]
