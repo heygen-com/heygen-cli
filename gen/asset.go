@@ -222,7 +222,7 @@ var AssetSearchList = &command.Spec{
 			Name:     "type",
 			Type:     "string-slice",
 			Default:  "",
-			Help:     "Comma-separated asset types to include, e.g. 'image,icon'. Omit for all types.",
+			Help:     "Asset types to include (image, icon). Omit to include all types.",
 			Required: false,
 			Enum:     []string{"image", "icon"},
 			Min:      nil,
