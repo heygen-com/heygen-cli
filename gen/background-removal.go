@@ -14,6 +14,11 @@ var BackgroundRemovalCreate = &command.Spec{
 	Endpoint:       "/v3/background-removals",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Submit a video for background removal\n  heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"}}' --wait",
+		"# Submit with explicit layer set\n  heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"},\"layers\":[\"foreground\",\"mask\",\"background\"]}' --wait",
+		"# See all available request fields\n  heygen background-removal create --request-schema",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "layers",
@@ -64,6 +69,9 @@ var BackgroundRemovalDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Examples: []string{
+		"# Soft-delete a background-removal job\n  heygen background-removal delete <job-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "job-id", Param: "job_id", Help: ""},
 	},
@@ -78,6 +86,9 @@ var BackgroundRemovalGet = &command.Spec{
 	Endpoint:       "/v3/background-removals/{job_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Check job status and grab the layer URLs once completed\n  heygen background-removal get <job-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "job-id", Param: "job_id", Help: ""},
 	},
@@ -93,6 +104,10 @@ var BackgroundRemovalList = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Paginated:      true,
+	Examples: []string{
+		"# List recent background-removal jobs\n  heygen background-removal list --limit 10",
+		"# Paginate through results\n  heygen background-removal list --limit 25 --token <next-token>",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "limit",
