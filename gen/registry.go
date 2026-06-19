@@ -15,6 +15,7 @@ var Groups = map[string][]*command.Spec{
 		AssetDelete,
 		AssetDirectUploadsCreate,
 		AssetGet,
+		AssetSearchList,
 	},
 	"audio": {
 		AudioSoundsList,
@@ -76,6 +77,7 @@ var Groups = map[string][]*command.Spec{
 	"voice": {
 		VoiceCloneCreate,
 		VoiceCreate,
+		VoiceDelete,
 		VoiceGet,
 		VoiceList,
 		VoiceSpeechCreate,
