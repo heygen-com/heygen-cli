@@ -57,6 +57,45 @@ func TestBuildInvocation_QueryParamFlag(t *testing.T) {
 	}
 }
 
+func TestBuildInvocation_StringSliceQueryParamRepeatsKeys(t *testing.T) {
+	// A string-slice query param serializes as repeated keys (?type=image&type=icon),
+	// NOT a single comma-joined value and NOT an empty value (the old GetString-on-slice bug).
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "type", Type: "string-slice", Source: "query", JSONName: "type"},
+		},
+	}
+	cmd := helperCmd(t, spec, []string{"--type", "image", "--type", "icon"})
+
+	inv, err := spec.BuildInvocation(cmd, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := inv.QueryParams["type"]
+	if len(got) != 2 || got[0] != "image" || got[1] != "icon" {
+		t.Errorf("QueryParams[type] = %v, want [image icon] (repeated keys)", got)
+	}
+}
+
+func TestBuildInvocation_StringSliceQueryParamCommaForm(t *testing.T) {
+	// The comma form (--type image,icon) also expands to repeated keys, since Cobra's
+	// GetStringSlice splits on commas.
+	spec := &Spec{
+		Flags: []FlagSpec{
+			{Name: "type", Type: "string-slice", Source: "query", JSONName: "type"},
+		},
+	}
+	cmd := helperCmd(t, spec, []string{"--type", "image,icon"})
+
+	inv, err := spec.BuildInvocation(cmd, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := inv.QueryParams["type"]; len(got) != 2 || got[0] != "image" || got[1] != "icon" {
+		t.Errorf("QueryParams[type] = %v, want [image icon]", got)
+	}
+}
+
 func TestBuildInvocation_BodyFieldFlag(t *testing.T) {
 	spec := &Spec{
 		Flags: []FlagSpec{

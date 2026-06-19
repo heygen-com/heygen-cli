@@ -210,7 +210,19 @@ func (s *Spec) BuildInvocation(cmd *cobra.Command, args []string, data map[strin
 
 		switch flag.Source {
 		case "query":
-			inv.QueryParams.Add(flag.JSONName, getFlagAsString(cmd, flag))
+			if flag.Type == "string-slice" {
+				// Repeatable query param: emit one key per value (?type=image&type=icon,
+				// style=form/explode=true). getFlagAsString can't express this (a single
+				// string), and GetString on a slice flag returns "", which silently drops
+				// the filter. GetStringSlice also splits a comma form, so both
+				// `--type image,icon` and `--type image --type icon` expand the same way.
+				vals, _ := cmd.Flags().GetStringSlice(flag.Name)
+				for _, v := range vals {
+					inv.QueryParams.Add(flag.JSONName, v)
+				}
+			} else {
+				inv.QueryParams.Add(flag.JSONName, getFlagAsString(cmd, flag))
+			}
 		case "body":
 			if inv.Body == nil {
 				inv.Body = make(map[string]any)
