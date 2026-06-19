@@ -15,6 +15,9 @@
     cmd: "heygen voice get <voice-id>"
   - desc: "Poll a voice clone until complete"
     cmd: "heygen voice get <voice-clone-id>"
+"DELETE /v3/voices/{voice_id}":
+  - desc: "Delete a voice clone"
+    cmd: "heygen voice delete <voice-id>"
 "POST /v3/voices/clone":
   - desc: "Clone a voice from a URL"
     cmd: "heygen voice clone create --voice-name 'My Clone' -d '{\"audio\":{\"type\":\"url\",\"url\":\"https://example.com/sample.mp3\"}}'"

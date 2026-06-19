@@ -134,6 +134,9 @@ var VoiceDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Examples: []string{
+		"# Delete a voice clone\n  heygen voice delete <voice-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "voice-id", Param: "voice_id", Help: ""},
 	},
