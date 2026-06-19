@@ -124,6 +124,21 @@ var VoiceCreate = &command.Spec{
 	},
 }
 
+var VoiceDelete = &command.Spec{
+	Group:          "voice",
+	Name:           "delete",
+	Summary:        "Delete a Voice",
+	Description:    "Deletes a voice clone owned by the caller. The voice must not be in use by any template. The voice is removed from your voice list and no longer counts against your voice clone limit. Deleting an already-deleted or unknown voice returns 404 `voice_not_found` (not 200) — a delete-then-list flow should treat that 404 as success, not an error.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for DELETE /v3/voices/{voice_id}.\",\n      \"properties\": {\n        \"voice_id\": {\n          \"description\": \"ID of the deleted voice.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"voice_id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/voices/{voice_id}",
+	Method:         "DELETE",
+	BodyEncoding:   "",
+	Destructive:    true,
+	Args: []command.ArgSpec{
+		{Name: "voice-id", Param: "voice_id", Help: ""},
+	},
+}
+
 var VoiceGet = &command.Spec{
 	Group:          "voice",
 	Name:           "get",
