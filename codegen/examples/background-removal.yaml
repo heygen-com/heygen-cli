@@ -1,0 +1,18 @@
+"POST /v3/background-removals":
+  - desc: "Submit a video for background removal"
+    cmd: "heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"}}' --wait"
+  - desc: "Submit with explicit layer set"
+    cmd: "heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"},\"layers\":[\"foreground\",\"mask\",\"background\"]}' --wait"
+  - desc: "See all available request fields"
+    cmd: "heygen background-removal create --request-schema"
+"GET /v3/background-removals":
+  - desc: "List recent background-removal jobs"
+    cmd: "heygen background-removal list --limit 10"
+  - desc: "Paginate through results"
+    cmd: "heygen background-removal list --limit 25 --token <next-token>"
+"GET /v3/background-removals/{job_id}":
+  - desc: "Check job status and grab the layer URLs once completed"
+    cmd: "heygen background-removal get <job-id>"
+"DELETE /v3/background-removals/{job_id}":
+  - desc: "Soft-delete a background-removal job"
+    cmd: "heygen background-removal delete <job-id>"
