@@ -19,15 +19,6 @@ permissions:
   contents: write
   id-token: write
 
-# Serialize stable publishes. Two overlapping runs (e.g. a manual dispatch and a
-# merged release PR) could each validate against the same latest tag and then
-# race the S3 "stable" pointer, moving it backward. Queue, do not cancel, so an
-# in-flight publish always finishes and the next run re-validates against the
-# tag it created (the monotonic guard then rejects a lower version).
-concurrency:
-  group: stable-release
-  cancel-in-progress: false
-
 jobs:
   release:
     # Run only for a manual dispatch, or when a release/* PR is actually MERGED
@@ -36,6 +27,16 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.merged == true &&
        startsWith(github.event.pull_request.head.ref, 'release/v'))
+    # Serialize stable publishes at the JOB level, not workflow level. This
+    # workflow also fires for every closed PR to main; a workflow-level group
+    # would let those (skipped) runs queue in the group and evict a pending real
+    # release (GitHub keeps only one pending run per group). A job skipped by the
+    # `if` above never enters this group. Queue, don't cancel, so an in-flight
+    # publish finishes and the next release re-validates against the tag it
+    # created (the monotonic guard then rejects a lower version).
+    concurrency:
+      group: stable-release
+      cancel-in-progress: false
     # Protected environment: a required reviewer must approve before publish.
     # NOTE: create a `release` environment with a required reviewer in repo
     # settings; until then this gate is a no-op (the PR review is still a gate).

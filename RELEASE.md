@@ -43,8 +43,10 @@ the "did anyone remember to release?" burden.
   (`workflow_dispatch`).
 - **Skip behavior:** It finds the latest stable tag (`vX.Y.Z`) and counts
   commits on `main` since it. **No new commits → no PR** (empty weeks are
-  skipped, not failed). If a release branch for the computed version already
-  exists, it is left untouched so in-progress edits are never clobbered.
+  skipped, not failed). If a release PR for the computed version is already
+  **open**, it is left untouched (no clobbering in-progress edits); a leftover
+  branch with no open PR is treated as stale and recreated, so a week you skipped
+  by closing the PR is simply re-offered on the next run.
 - **Versioning:** It **patch-bumps** the latest stable tag (e.g. `v0.0.11` →
   `v0.0.12`). Patch is the default because the weekly driver (codegen resyncs,
   fixes, additive schema) is a patch bump. Minor/major bumps (new command
