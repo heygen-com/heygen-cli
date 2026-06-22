@@ -70,7 +70,11 @@ environment approval. There are two ways to get that PR.
 1. The Monday automation opens a `release: vX.Y.Z` PR (`gh pr list --state open`).
 2. **Refine the changelog.** Run `/changelog-cli vX.Y.Z` in Claude Code and
    update `releases/vX.Y.Z.md` on the release branch with the result.
-3. **Confirm CI is green** on the PR and on `main`.
+3. **Confirm `main` CI is green.** The release PR only adds the notes file and
+   is opened by the automation's `GITHUB_TOKEN`, so PR CI does not run on it; the
+   build and `make test` run in `release-stable.yml` before publishing. If branch
+   protection requires PR status checks, merge with admin (or provision a PAT/App
+   token so release PRs trigger CI — tracked as a PRINFRA-170 follow-up).
 4. **Run the E2E smoke test.** With `HEYGEN_API_KEY` set, run `/e2e-cli-test` in
    Claude Code from the repo root. Confirm all phases pass (no FAIL). WARN on
    Phase 3 means the account lacks data for some get/detail commands and should
@@ -84,15 +88,17 @@ environment approval. There are two ways to get that PR.
 1. **Pick the version** (`gh release list --limit 3`):
    - Patch (`v0.0.x`) for bug fixes, UX polish, codegen resyncs, additive schema.
    - Minor (`v0.x.0`) for new command groups or significant new capabilities.
-2. Either run **Actions > Weekly Stable Release > Run workflow** to open the
-   release PR (then follow the normal path above), or dispatch the release
-   directly:
-   ```bash
-   gh workflow run release-stable.yml -f version=v0.1.0
-   ```
-   Either way the `release` environment approval still gates the publish. A
-   direct dispatch uses `releases/v0.1.0.md` if present, otherwise GoReleaser
-   autogenerates the notes.
+2. Cut it one of two ways (both still gated by the `release` environment approval):
+   - **Dispatch directly** (works for any version, including minor/major):
+     ```bash
+     gh workflow run release-stable.yml -f version=v0.1.0
+     ```
+     Uses `releases/v0.1.0.md` if present, otherwise GoReleaser autogenerates notes.
+   - **Open a release PR by hand** (if you want the changelog reviewed first):
+     create a `release/v0.1.0` branch, add `releases/v0.1.0.md` (run
+     `/changelog-cli v0.1.0`), open the PR, then merge. Note the **weekly
+     workflow only patch-bumps**, so don't use it for a minor/major, create the
+     `release/*` branch yourself or dispatch directly.
 
 ### Post-release
 

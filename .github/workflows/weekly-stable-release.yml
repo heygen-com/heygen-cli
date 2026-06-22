@@ -87,7 +87,7 @@ jobs:
           echo "version=${next}" >> "$GITHUB_OUTPUT"
           echo "range=${latest_stable}..origin/main" >> "$GITHUB_OUTPUT"
 
-      - name: Skip if a release branch already exists
+      - name: Skip if a release PR is already open
         id: existing
         if: steps.plan.outputs.release == 'true'
         env:
@@ -98,11 +98,18 @@ jobs:
         run: |
           set -euo pipefail
           branch="release/${VERSION}"
-          # A pre-existing branch means a prior run already opened this release
-          # PR (and a human may be editing the notes). Do not clobber it.
-          if gh api "repos/${REPO}/git/ref/heads/${branch}" >/dev/null 2>&1; then
+          # Idempotency keys on an OPEN PR, not the branch ref. An open release
+          # PR (a human may be editing its notes) must not be clobbered. But a
+          # leftover branch from a CLOSED PR must NOT suppress this week's PR:
+          # closing a PR to "skip a week" does not delete its branch, and
+          # latest_stable is unchanged until a release actually merges, so the
+          # next run computes the same version. Keying on the branch ref would
+          # then skip forever. The open-PR step below deletes any such stale
+          # branch before recreating it, so skipping is per-week, not permanent.
+          open_pr="$(gh pr list --repo "${REPO}" --state open --head "${branch}" --json number --jq '.[0].number // ""')"
+          if [[ -n "$open_pr" ]]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Branch ${branch} already exists; leaving the existing release PR untouched."
+            echo "Release PR #${open_pr} for ${VERSION} already open; leaving it untouched."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
@@ -130,6 +137,11 @@ jobs:
             echo
             git log --no-merges --pretty='- %s' ${log_range}
           } > notes.md
+
+          # Delete any stale branch left by a previously closed release PR (see
+          # the idempotency note above) so the ref is recreated from current
+          # main. No-op if the branch does not exist.
+          gh api --method DELETE "repos/${REPO}/git/refs/heads/${branch}" >/dev/null 2>&1 || true
 
           # Create the release branch at main's head, then commit the draft notes
           # via the contents API. API-created commits are GitHub-signed

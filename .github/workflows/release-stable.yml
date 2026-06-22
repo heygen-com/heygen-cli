@@ -19,6 +19,15 @@ permissions:
   contents: write
   id-token: write
 
+# Serialize stable publishes. Two overlapping runs (e.g. a manual dispatch and a
+# merged release PR) could each validate against the same latest tag and then
+# race the S3 "stable" pointer, moving it backward. Queue, do not cancel, so an
+# in-flight publish always finishes and the next run re-validates against the
+# tag it created (the monotonic guard then rejects a lower version).
+concurrency:
+  group: stable-release
+  cancel-in-progress: false
+
 jobs:
   release:
     # Run only for a manual dispatch, or when a release/* PR is actually MERGED
