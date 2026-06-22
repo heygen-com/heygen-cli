@@ -176,3 +176,20 @@ func visibleChildren(cmd *cobra.Command) []*cobra.Command {
 func isLeafCommand(cmd *cobra.Command) bool {
 	return len(visibleChildren(cmd)) == 0
 }
+
+// hideEmptyGroups hides any group command left with no visible children — e.g. an intermediate
+// group whose only leaf is in hiddenCommands. Without this, such a group reads as a leaf to the
+// flattened help and renders as a phantom entry. Runs bottom-up so a group whose children all
+// become hidden is itself hidden. The underlying command stays reachable and runnable; only its
+// help listing is suppressed.
+func hideEmptyGroups(cmd *cobra.Command) {
+	for _, child := range cmd.Commands() {
+		hideEmptyGroups(child)
+	}
+	// A command with subcommands but no visible ones is an empty group (e.g. its only leaf is in
+	// hiddenCommands). Hide it. Leaves have no subcommands, so they're unaffected; intermediate
+	// groups carry a help-showing RunE, so we must not gate on Runnable().
+	if cmd.HasSubCommands() && len(visibleChildren(cmd)) == 0 {
+		cmd.Hidden = true
+	}
+}
