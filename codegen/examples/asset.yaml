@@ -3,9 +3,9 @@
     cmd: "heygen asset create --file ./video.mp4"
 "GET /v3/assets/search":
   - desc: "Search the asset library by natural-language description"
-    cmd: "heygen asset search list --query 'pepperoni pizza on a wooden table'"
+    cmd: "heygen asset search --query 'pepperoni pizza on a wooden table'"
   - desc: "Search for icons only, with a relevance floor and a page size"
-    cmd: "heygen asset search list --query 'minimalist rocket icon' --type icon --min-score 0.3 --limit 10"
+    cmd: "heygen asset search --query 'minimalist rocket icon' --type icon --min-score 0.3 --limit 10"
 "GET /v3/assets/{asset_id}":
   - desc: "Get metadata for an asset"
     cmd: "heygen asset get <asset-id>"

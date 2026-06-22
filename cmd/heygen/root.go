@@ -50,6 +50,7 @@ func newRootCmd(version string, formatter output.Formatter, analyticsClient *ana
 	registerGroups(root, ctx, gen.Groups)
 	attachCustomCommands(root, ctx)
 	attachDeprecatedAliases(root, ctx)
+	hideEmptyGroups(root)
 	installFlattenedHelp(root)
 	installRootHelpFooter(root)
 
@@ -117,6 +118,7 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, analyticsCl
 	registerGroups(root, ctx, groups)
 	attachCustomCommands(root, ctx)
 	attachDeprecatedAliases(root, ctx)
+	hideEmptyGroups(root)
 	installFlattenedHelp(root)
 
 	return root

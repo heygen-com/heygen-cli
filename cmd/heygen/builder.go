@@ -21,6 +21,25 @@ import (
 	"golang.org/x/term"
 )
 
+// hiddenCommands lists generated commands that remain fully functional but are omitted from
+// `--help` listings (Cobra Hidden) — for endpoints that exist in the OpenAPI spec but aren't
+// announced yet (still under development). The spec is the source of truth for what exists; this
+// hard-coded list is the CLI-side decision of what's discoverable. A hidden command still runs if
+// invoked directly, and its own `--help` works. Keyed by "METHOD /path" so it survives command
+// renames (e.g. an x-cli-action verb change).
+// To surface a command in --help, remove its entry here. This list is transitional, for endpoints
+// under development pre-launch; for a permanent hidden-from-help posture, plumb an `x-cli-hidden`
+// extension from the OpenAPI spec instead of hard-coding it here, so the spec stays the source of
+// truth.
+var hiddenCommands = map[string]bool{
+	"GET /v3/assets/search": true, // asset search — pre-launch, not yet announced
+}
+
+// isHiddenCommand reports whether the command for this spec should be omitted from help listings.
+func isHiddenCommand(spec *command.Spec) bool {
+	return hiddenCommands[strings.ToUpper(spec.Method)+" "+spec.Endpoint]
+}
+
 // buildCobraCommand creates a Cobra command from a command.Spec.
 // It registers typed flags, sets up positional arg validation, and wires
 // RunE to build an Invocation and execute it through the HTTP client.
@@ -37,6 +56,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 		Short:   spec.Summary,
 		Long:    description,
 		Example: strings.Join(spec.Examples, "\n"),
+		Hidden:  isHiddenCommand(spec),
 		Args: func(cmd *cobra.Command, args []string) error {
 			if isSchemaRequest(cmd) {
 				return nil
