@@ -1,8 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"testing"
+
+	"github.com/heygen-com/heygen-cli/internal/analytics"
+	"github.com/heygen-com/heygen-cli/internal/output"
 )
+
+func TestHeadersFlagHiddenButRegistered(t *testing.T) {
+	var out, errOut bytes.Buffer
+	root := newRootCmd("test", output.NewJSONFormatter(&out, &errOut), analytics.New("test", false))
+
+	flag := root.PersistentFlags().Lookup("headers")
+	if flag == nil {
+		t.Fatal("--headers flag should still be registered (media-use relies on it)")
+	}
+	if !flag.Hidden {
+		t.Error("--headers flag should be hidden from help output")
+	}
+}
 
 func TestParseAndValidateHeaders_Valid(t *testing.T) {
 	hdrs, err := parseAndValidateHeaders([]string{"X-HeyGen-Client-Source: media-use"})
