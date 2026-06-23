@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"net/textproto"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/heygen-com/heygen-cli/internal/auth"
 	"github.com/heygen-com/heygen-cli/internal/client"
@@ -123,10 +126,18 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 		return clierrors.NewUsage("HEYGEN_API_BASE uses HTTP which transmits API keys in plaintext. Set HEYGEN_ALLOW_HTTP=1 to allow.")
 	}
 
-	ctx.client = client.New(result.Key,
+	opts := []client.Option{
 		client.WithBaseURL(baseURL),
-		client.WithUserAgent("heygen-cli/"+version),
-	)
+		client.WithUserAgent("heygen-cli/" + version),
+	}
+	if hdrs, _ := cmd.Flags().GetStringArray("headers"); len(hdrs) > 0 {
+		parsed, err := parseAndValidateHeaders(hdrs)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, client.WithExtraHeaders(parsed))
+	}
+	ctx.client = client.New(result.Key, opts...)
 
 	human, _ := cmd.Flags().GetBool("human")
 	if human {
@@ -134,4 +145,32 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 	}
 
 	return nil
+}
+
+// allowedHeaders is the set of header names that --headers accepts.
+// Add new entries here as new attribution or routing headers are defined.
+var allowedHeaders = map[string]bool{
+	"x-heygen-client-source": true,
+}
+
+var headerValueRe = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]+$`)
+
+func parseAndValidateHeaders(raw []string) (map[string]string, error) {
+	parsed := make(map[string]string, len(raw))
+	for _, h := range raw {
+		k, v, ok := strings.Cut(h, ":")
+		if !ok {
+			return nil, clierrors.NewUsage("invalid --headers format: " + h + " (expected Key:Value)")
+		}
+		key := strings.ToLower(strings.TrimSpace(k))
+		val := strings.TrimSpace(v)
+		if !allowedHeaders[key] {
+			return nil, clierrors.NewUsage("header " + key + " is not in the allowlist")
+		}
+		if !headerValueRe.MatchString(val) {
+			return nil, clierrors.NewUsage("header value must be alphanumeric, hyphens, underscores, and dots only")
+		}
+		parsed[textproto.CanonicalMIMEHeaderKey(key)] = val
+	}
+	return parsed, nil
 }
