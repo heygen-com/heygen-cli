@@ -226,3 +226,67 @@ func (s *stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		Request:    req,
 	}, nil
 }
+
+func TestClient_Do_SetsExtraHeaders(t *testing.T) {
+	var gotSource string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSource = r.Header.Get("X-HeyGen-Client-Source")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := New("key",
+		WithBaseURL(srv.URL),
+		WithHTTPClient(srv.Client()),
+		WithExtraHeaders(map[string]string{"X-HeyGen-Client-Source": "media-use"}),
+	)
+
+	req, _ := http.NewRequest("GET", srv.URL+"/v3/test", nil)
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotSource != "media-use" {
+		t.Errorf("X-HeyGen-Client-Source = %q, want %q", gotSource, "media-use")
+	}
+}
+
+func TestClient_Do_ExtraHeadersCannotOverrideReserved(t *testing.T) {
+	var gotKey, gotUA, gotSource string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.Header.Get("x-api-key")
+		gotUA = r.Header.Get("User-Agent")
+		gotSource = r.Header.Get("X-HeyGen-Source")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := New("real-key",
+		WithBaseURL(srv.URL),
+		WithHTTPClient(srv.Client()),
+		WithExtraHeaders(map[string]string{
+			"x-api-key":      "evil",
+			"User-Agent":     "evil-agent",
+			"X-HeyGen-Source": "evil",
+		}),
+	)
+
+	req, _ := http.NewRequest("GET", srv.URL+"/v3/test", nil)
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotKey != "real-key" {
+		t.Errorf("x-api-key = %q, want %q (reserved must not be overridden)", gotKey, "real-key")
+	}
+	if gotUA == "evil-agent" {
+		t.Error("User-Agent was overridden by extraHeaders")
+	}
+	if gotSource != "cli" {
+		t.Errorf("X-HeyGen-Source = %q, want %q", gotSource, "cli")
+	}
+}

@@ -38,7 +38,7 @@ func newRootCmd(version string, formatter output.Formatter, analyticsClient *ana
 		return clierrors.NewUsage(err.Error())
 	})
 	root.CompletionOptions.HiddenDefaultCmd = true
-	root.PersistentFlags().Bool("human", false, "Display output as a formatted table instead of JSON")
+	addGlobalFlags(root)
 
 	// Move examples after flags in help output (matches gh, aws, gcloud convention).
 	// Cobra's default puts examples before flags; most CLIs do the opposite.
@@ -55,6 +55,13 @@ func newRootCmd(version string, formatter output.Formatter, analyticsClient *ana
 	installRootHelpFooter(root)
 
 	return root
+}
+
+// addGlobalFlags registers persistent flags shared by both newRootCmd and
+// newRootCmdWithSpecs, keeping the two builders in sync.
+func addGlobalFlags(root *cobra.Command) {
+	root.PersistentFlags().Bool("human", false, "Display output as a formatted table instead of JSON")
+	root.PersistentFlags().StringArray("headers", nil, "Extra HTTP header(s) sent with every request (repeatable, format: Key:Value). Only allowlisted header names are accepted.")
 }
 
 // installRootHelpFooter appends environment variables, exit codes, and hints
@@ -108,7 +115,7 @@ func newRootCmdWithSpecs(version string, formatter output.Formatter, analyticsCl
 		return clierrors.NewUsage(err.Error())
 	})
 	root.CompletionOptions.HiddenDefaultCmd = true
-	root.PersistentFlags().Bool("human", false, "Display output as a formatted table instead of JSON")
+	addGlobalFlags(root)
 
 	root.SetUsageTemplate(usageTemplateExamplesLast)
 

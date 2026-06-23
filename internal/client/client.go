@@ -22,6 +22,7 @@ type Client struct {
 	apiKey       string
 	userAgent    string
 	clientOrigin string
+	extraHeaders map[string]string
 	retry        RetryConfig
 }
 
@@ -57,6 +58,11 @@ func WithClientOrigin(o string) Option {
 	return func(c *Client) { c.clientOrigin = o }
 }
 
+// WithExtraHeaders adds custom headers sent with every request.
+func WithExtraHeaders(h map[string]string) Option {
+	return func(c *Client) { c.extraHeaders = h }
+}
+
 // New creates a Client with the given API key and options.
 func New(apiKey string, opts ...Option) *Client {
 	c := &Client{
@@ -86,7 +92,13 @@ func New(apiKey string, opts ...Option) *Client {
 }
 
 // Do executes an HTTP request, injecting auth and User-Agent headers.
+// Extra headers are applied FIRST so the client's own reserved headers
+// always win and cannot be overridden by user input.
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	for k, v := range c.extraHeaders {
+		req.Header.Set(k, v)
+	}
+	// Reserved headers set AFTER extraHeaders — these always win.
 	req.Header.Set("x-api-key", c.apiKey)
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("X-HeyGen-Source", "cli")
