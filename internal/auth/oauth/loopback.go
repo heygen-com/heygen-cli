@@ -178,8 +178,10 @@ func (lb *LoopbackServer) shutdown() {
 }
 
 // handleCallback serves the OAuth redirect. Only GET requests on the
-// expected path are honored; anything else gets a 404 without revealing
-// that a CLI is listening.
+// expected path are honored: non-GET requests on the matched path
+// return 405 (Method Not Allowed) via the branch below, while unknown
+// paths fall through to the mux's default 404 — together these avoid
+// revealing that a CLI is listening on any particular route.
 func (lb *LoopbackServer) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
