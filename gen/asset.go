@@ -179,7 +179,7 @@ var AssetSearch = &command.Spec{
 	Paginated:      true,
 	Examples: []string{
 		"# Search the asset library by natural-language description\n  heygen asset search --query 'pepperoni pizza on a wooden table'",
-		"# Search for icons only, with a relevance floor and a page size\n  heygen asset search --query 'minimalist rocket icon' --type icon --min-score 0.3 --limit 10",
+		"# Search for icons only, with a page size\n  heygen asset search --query 'minimalist rocket icon' --type icon --limit 10",
 	},
 	Flags: []command.FlagSpec{
 		{
