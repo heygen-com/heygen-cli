@@ -10,8 +10,7 @@ import (
 // Referenced by auth_login.go, auth_status.go, and the auth group help below.
 var authGuidance = `Two ways to authenticate:
 
-  1. API key (recommended — uses API credits, interactive prompt or
-     piped on stdin):
+  1. API key (uses API credits, interactive prompt or piped on stdin):
        heygen auth login --api-key
        echo "$KEY" | heygen auth login --api-key
 
