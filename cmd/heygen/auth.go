@@ -22,10 +22,13 @@ defaulted to the API-key path. Non-interactive shells (piped stdin,
 CI=true, HEYGEN_NONINTERACTIVE=1) skip the picker and run the API-key
 flow so agents and scripts keep working unchanged.
 
-The HEYGEN_API_KEY environment variable also takes priority over any
-stored credential when both are set. The credentials file holds at
-most one of api_key / oauth per session — running ` + "`heygen auth login`" + `
-clears the other block on success.
+The HEYGEN_API_KEY environment variable always takes priority over
+any stored credential when both are set.
+
+IMPORTANT: running ` + "`heygen auth login`" + ` REPLACES the stored credential.
+Logging in with an API key clears any stored OAuth session and
+vice versa. The credentials file holds at most ONE of api_key /
+oauth at any time — use ` + "`heygen auth status`" + ` to see which is active.
 
 Manage your session:
   heygen auth status    # verify the active credential + show metadata

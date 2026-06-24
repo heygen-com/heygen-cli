@@ -115,10 +115,13 @@ The API-key flow stores the key at ~/.heygen/credentials with mode
 0600. The HEYGEN_API_KEY environment variable takes priority over any
 stored credential when both are set.
 
-Single-credential normalization: a successful login clears the other
-credential block (api_key or oauth) so the file holds at most one per
-session. Pre-this-change users with both blocks self-heal on their
-next login.`,
+IMPORTANT — running auth login REPLACES the stored credential:
+
+  • Logging in with an API key clears any stored OAuth session.
+  • Logging in with OAuth clears any stored API key.
+
+The credentials file holds at most ONE of api_key / oauth at any
+time. heygen auth status reports which is active.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAuthLogin(cmd, ctx, authLoginFlags{
 				apiKeyMode:     apiKeyMode,
