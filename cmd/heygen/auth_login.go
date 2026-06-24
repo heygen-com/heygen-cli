@@ -147,7 +147,10 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	}
 	oc := oauth.NewClient(clientOpts...)
 
-	authURL := oc.BuildAuthorizationURL(state, challenge, loopback.RedirectURI, "")
+	authURL, err := oc.BuildAuthorizationURL(state, challenge, loopback.RedirectURI, "")
+	if err != nil {
+		return clierrors.New(fmt.Sprintf("oauth: build authorize URL: %v", err))
+	}
 
 	fmt.Fprintln(cmd.ErrOrStderr(), "Opening browser to https://app.heygen.com/oauth/authorize ...")
 	openFn := cfg.OpenBrowser
