@@ -15,7 +15,7 @@ var Groups = map[string][]*command.Spec{
 		AssetDelete,
 		AssetDirectUploadsCreate,
 		AssetGet,
-		AssetSearchList,
+		AssetSearch,
 	},
 	"audio": {
 		AudioSoundsList,
