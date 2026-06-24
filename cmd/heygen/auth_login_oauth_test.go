@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -178,13 +179,17 @@ func TestAuthLogin_OAuthFlow_PersistsTokens(t *testing.T) {
 		t.Errorf("expires_at = %v, want future", tok.ExpiresAt)
 	}
 
-	// File permissions must be 0600 (same as api-key path).
-	info, err := os.Stat(filepath.Join(configDir, "credentials"))
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("perms = %o, want 0600", perm)
+	// File permissions must be 0600 on Unix (same as api-key path).
+	// Windows NTFS does not honor POSIX permission bits, so the assert
+	// only applies elsewhere.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(filepath.Join(configDir, "credentials"))
+		if err != nil {
+			t.Fatalf("Stat: %v", err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("perms = %o, want 0600", perm)
+		}
 	}
 
 	// Stderr should mention "Logged in as demo" (from /v3/users/me).
