@@ -106,6 +106,13 @@ func mergeStatusEnvelope(raw json.RawMessage, credMeta map[string]any) (json.Raw
 		// than mask the actual response.
 		return nil, errors.New("upstream response was not JSON")
 	}
+	// `null` (or any JSON literal that decodes to a nil map) succeeds
+	// the Unmarshal but leaves envelope nil, so the assignment below
+	// would panic. Initialize a fresh map so the credential block still
+	// lands cleanly when the API returns a null envelope. (W3)
+	if envelope == nil {
+		envelope = map[string]any{}
+	}
 	envelope["credential"] = credMeta
 	out, err := json.Marshal(envelope)
 	if err != nil {

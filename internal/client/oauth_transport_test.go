@@ -1,7 +1,9 @@
 package client
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -438,17 +440,16 @@ func TestClient_Do_OAuth_RefreshAndRetry_ReplaysBody(t *testing.T) {
 	}
 }
 
-// Ensure refreshing without an oauth client wired up returns an explicit
-// error instead of a nil-pointer deref.
-func TestClient_Do_OAuthExpired_NoOAuthClient_ReturnsClearError(t *testing.T) {
+// A refresh against an unreachable IdP is a TRANSIENT failure, not a
+// credential-rejected case. Per W1, the transport must surface the
+// underlying network error (so the executor can render something
+// accurate) instead of misclassifying it as ErrReLoginNeeded.
+func TestClient_Do_OAuthExpired_TransientRefreshFailure_NotReLoginNeeded(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer api.Close()
 
-	// Explicitly leave WithOAuthClient out — but the constructor auto-
-	// fills oauthClient with the default. We force the broken state by
-	// constructing manually below.
 	c := NewWithCredential(auth.Credential{
 		Type:         auth.CredentialTypeOAuthExpired,
 		RefreshToken: "rt",
@@ -467,8 +468,15 @@ func TestClient_Do_OAuthExpired_NoOAuthClient_ReturnsClearError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error refreshing against dead endpoint")
 	}
-	if !errors.Is(err, ErrReLoginNeeded) {
-		t.Fatalf("err = %v, want ErrReLoginNeeded", err)
+	if errors.Is(err, ErrReLoginNeeded) {
+		t.Fatalf("err = %v, must NOT be ErrReLoginNeeded for a transient failure (W1)", err)
+	}
+	if !errors.Is(err, oauth.ErrRejected) {
+		// Sanity: not ErrRejected either — it's a plain transport error.
+		// We don't pin the exact message because dial errors vary by OS.
+		if !strings.Contains(err.Error(), "oauth: refresh failed") {
+			t.Errorf("err = %v, want %q prefix so callers can recognize transient refresh failures", err, "oauth: refresh failed")
+		}
 	}
 }
 
@@ -545,5 +553,248 @@ func TestClient_Do_OAuth_BearerOnEveryRequest(t *testing.T) {
 			t.Fatalf("Do %s: %v", path, err)
 		}
 		resp.Body.Close()
+	}
+}
+
+// W1: a 401 followed by an IdP-rejected refresh (HTTP 400 with
+// oauth.ErrRejected wrapped inside) must surface as ErrReLoginNeeded.
+// This is the legitimate "your refresh token is dead" path.
+func TestClient_Do_OAuth_RefreshRejected_ReturnsReLoginNeeded(t *testing.T) {
+	var refreshes int32
+	// nil tok = the IdP returns 400, which oauth.postTokenForm wraps as
+	// a TokenError with errRejected.
+	idp := newFakeIdP(t, nil, &refreshes)
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer api.Close()
+
+	c := NewWithCredential(auth.Credential{
+		Type:         auth.CredentialTypeOAuth,
+		AccessToken:  "stale_at",
+		RefreshToken: "rt_dead",
+	},
+		WithBaseURL(api.URL),
+		WithHTTPClient(api.Client()),
+		WithMaxRetries(0),
+		WithOAuthClient(oauth.NewClient(
+			oauth.WithTokenURL(idp.URL),
+			oauth.WithHTTPClient(idp.Client()),
+		)),
+		WithOAuthPersister(&fakePersister{}),
+	)
+
+	req, _ := http.NewRequest("GET", api.URL+"/v3/things", nil)
+	_, err := c.Do(req)
+	if err == nil {
+		t.Fatal("expected error on rejected refresh")
+	}
+	if !errors.Is(err, ErrReLoginNeeded) {
+		t.Fatalf("err = %v, want ErrReLoginNeeded for an IdP-rejected refresh", err)
+	}
+}
+
+// W1: a 401 followed by a TRANSIENT refresh failure (IdP unreachable)
+// must NOT be classified as ErrReLoginNeeded — the user can still log
+// in. The error surfaces with the transient cause so the executor can
+// render an accurate message ("network unreachable") instead of
+// "OAuth session expired".
+func TestClient_Do_OAuth_TransientRefreshFailure_NotReLoginNeeded(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer api.Close()
+
+	c := NewWithCredential(auth.Credential{
+		Type:         auth.CredentialTypeOAuth,
+		AccessToken:  "stale_at",
+		RefreshToken: "rt",
+	},
+		WithBaseURL(api.URL),
+		WithHTTPClient(api.Client()),
+		WithMaxRetries(0),
+		WithOAuthClient(oauth.NewClient(
+			oauth.WithTokenURL("http://127.0.0.1:1"), // dead IdP
+		)),
+		WithOAuthPersister(&fakePersister{}),
+	)
+
+	req, _ := http.NewRequest("GET", api.URL+"/v3/things", nil)
+	_, err := c.Do(req)
+	if err == nil {
+		t.Fatal("expected error on transient refresh failure")
+	}
+	if errors.Is(err, ErrReLoginNeeded) {
+		t.Fatalf("err = %v, must NOT be ErrReLoginNeeded for a transient failure (W1)", err)
+	}
+	if !strings.Contains(err.Error(), "oauth: refresh failed") {
+		t.Errorf("err = %v, want %q prefix", err, "oauth: refresh failed")
+	}
+}
+
+// W2: a 401 on a request whose body cannot be replayed (Body set but
+// GetBody nil) must NOT call cloneRequestForRetry — that would
+// nil-panic on req.GetBody. Instead the 401 is returned to the caller
+// unchanged.
+func TestClient_Do_OAuth_401WithNonReplayableBody_ReturnsResponseUnchanged(t *testing.T) {
+	var refreshes int32
+	idp := newFakeIdP(t, &oauth.TokenResponse{AccessToken: "fresh"}, &refreshes)
+
+	var apiCalls int
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiCalls++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer api.Close()
+
+	c := NewWithCredential(auth.Credential{
+		Type:         auth.CredentialTypeOAuth,
+		AccessToken:  "stale",
+		RefreshToken: "rt",
+	},
+		WithBaseURL(api.URL),
+		WithHTTPClient(api.Client()),
+		WithMaxRetries(0),
+		WithOAuthClient(oauth.NewClient(
+			oauth.WithTokenURL(idp.URL),
+			oauth.WithHTTPClient(idp.Client()),
+		)),
+		WithOAuthPersister(&fakePersister{}),
+	)
+
+	// Build a POST request with Body set but GetBody nil. http.NewRequest
+	// sets GetBody for strings.Reader-shaped readers, so we use a
+	// plain io.NopCloser around bytes.Buffer (no GetBody auto-population).
+	body := io.NopCloser(bytes.NewBufferString(`{"x":1}`))
+	req, err := http.NewRequest("POST", api.URL+"/v3/things", body)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.GetBody = nil // belt + braces; NopCloser shouldn't trigger it but be explicit
+	if canReplayBody(req) {
+		t.Fatal("test setup: canReplayBody must be false for this case")
+	}
+
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v (must return the 401 unchanged, NOT panic on cloneRequestForRetry)", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("StatusCode = %d, want 401 returned unchanged", resp.StatusCode)
+	}
+	if refreshes != 0 {
+		t.Errorf("refreshes = %d, want 0 — we must NOT refresh when we can't replay", refreshes)
+	}
+	if apiCalls != 1 {
+		t.Errorf("apiCalls = %d, want 1 — no retry on non-replayable body", apiCalls)
+	}
+}
+
+// N1: two concurrent Do() calls against an OAuth credential at near
+// expiry must coalesce to a single refresh round-trip. Tested with
+// race detector enabled (go test -race) to also catch the credential
+// mutation hazard.
+func TestClient_Do_OAuth_ConcurrentRefresh_Coalesces(t *testing.T) {
+	var refreshes int32
+	var mu sync.Mutex
+	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		refreshes++
+		mu.Unlock()
+		// Slight delay so both goroutines have a real chance to race
+		// into the refresh path before either completes.
+		time.Sleep(20 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"fresh","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer idp.Close()
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer api.Close()
+
+	c := NewWithCredential(auth.Credential{
+		Type:         auth.CredentialTypeOAuth,
+		AccessToken:  "stale_at",
+		RefreshToken: "rt",
+		ExpiresAt:    time.Now().Add(5 * time.Second), // inside the skew
+	},
+		WithBaseURL(api.URL),
+		WithHTTPClient(api.Client()),
+		WithMaxRetries(0),
+		WithOAuthClient(oauth.NewClient(
+			oauth.WithTokenURL(idp.URL),
+			oauth.WithHTTPClient(idp.Client()),
+		)),
+		WithOAuthPersister(&fakePersister{}),
+	)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			defer wg.Done()
+			req, _ := http.NewRequest("GET", api.URL+"/v3/things", nil)
+			resp, err := c.Do(req)
+			if err != nil {
+				t.Errorf("Do: %v", err)
+				return
+			}
+			resp.Body.Close()
+		}()
+	}
+	wg.Wait()
+
+	mu.Lock()
+	got := refreshes
+	mu.Unlock()
+	if got != 1 {
+		t.Errorf("refreshes = %d, want 1 (concurrent Do() must coalesce, N1)", got)
+	}
+}
+
+// N2: a near-expiry credential that triggers a proactive refresh + the
+// fresh token still gets 401'd must NOT refresh a SECOND time. The
+// 401 retry path detects the in-Do refresh and goes straight to
+// ErrReLoginNeeded.
+func TestClient_Do_OAuth_NoDoubleRefreshAfterProactive(t *testing.T) {
+	var refreshes int32
+	idp := newFakeIdP(t, &oauth.TokenResponse{AccessToken: "fresh_at"}, &refreshes)
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// API always 401s, even with the freshly-minted token.
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer api.Close()
+
+	c := NewWithCredential(auth.Credential{
+		Type:         auth.CredentialTypeOAuth,
+		AccessToken:  "stale_at",
+		RefreshToken: "rt",
+		ExpiresAt:    time.Now().Add(5 * time.Second), // inside the skew → proactive refresh
+	},
+		WithBaseURL(api.URL),
+		WithHTTPClient(api.Client()),
+		WithMaxRetries(0),
+		WithOAuthClient(oauth.NewClient(
+			oauth.WithTokenURL(idp.URL),
+			oauth.WithHTTPClient(idp.Client()),
+		)),
+		WithOAuthPersister(&fakePersister{}),
+	)
+
+	req, _ := http.NewRequest("GET", api.URL+"/v3/things", nil)
+	_, err := c.Do(req)
+	if err == nil {
+		t.Fatal("expected ErrReLoginNeeded after fresh-token 401")
+	}
+	if !errors.Is(err, ErrReLoginNeeded) {
+		t.Fatalf("err = %v, want ErrReLoginNeeded", err)
+	}
+	if refreshes != 1 {
+		t.Errorf("refreshes = %d, want 1 (proactive refresh only; N2 forbids a second refresh after still-401)", refreshes)
 	}
 }

@@ -24,12 +24,6 @@ type jsonOAuthTokens struct {
 	TokenType    string `json:"token_type,omitempty"`
 }
 
-// oauthExpiryClockSkew is the leeway used when deciding whether an OAuth
-// access token is "still fresh." Anything within this many seconds of
-// its expiry is treated as already expired so the transport refreshes
-// proactively instead of racing the IdP's clock.
-const oauthExpiryClockSkew = 60 * time.Second
-
 // nowFn is the wall-clock source used when comparing OAuth expiry. Tests
 // override this to drive deterministic resolver paths.
 var nowFn = time.Now
@@ -178,5 +172,5 @@ func oauthExpired(expiresAt, now time.Time) bool {
 	if expiresAt.IsZero() {
 		return false
 	}
-	return !now.Before(expiresAt.Add(-oauthExpiryClockSkew))
+	return !now.Before(expiresAt.Add(-OAuthRefreshSkew))
 }

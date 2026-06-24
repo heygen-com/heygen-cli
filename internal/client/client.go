@@ -19,11 +19,6 @@ const (
 	DefaultTimeout   = 30 * time.Second
 )
 
-// oauthRefreshSkew matches the resolver's skew so the transport's
-// proactive-refresh check and the resolver's "is this token still fresh"
-// check agree on the boundary.
-const oauthRefreshSkew = 60 * time.Second
-
 // ErrReLoginNeeded signals that the stored OAuth credential was rejected
 // even after a refresh attempt. Callers (CLI surface, error renderer)
 // can use errors.Is to drive a "run `heygen auth login` again" hint.
@@ -53,6 +48,12 @@ type Client struct {
 
 	oauthClient    *oauth.Client
 	oauthPersister OAuthPersister
+
+	// refreshMu serializes the OAuth refresh path so two concurrent Do()
+	// calls don't both round-trip the IdP. Holders re-check the in-memory
+	// expiry under the lock; if another goroutine already refreshed, the
+	// second arrival skips its own refresh.
+	refreshMu sync.Mutex
 }
 
 // Option configures the Client.
@@ -165,8 +166,17 @@ func NewWithCredential(cred auth.Credential, opts ...Option) *Client {
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 
+	// `refreshedThisCall` tracks whether ensureFreshOAuthToken already
+	// minted a new token during this Do(). When the post-Do 401 retry
+	// path fires, this lets us skip a second refresh round-trip in the
+	// same call: if the token we just sent was already fresh and the
+	// server still rejected it, refresh-on-401 won't fix it — go
+	// straight to ErrReLoginNeeded. (N2)
+	var refreshedThisCall bool
 	if c.credential.IsOAuth() {
-		if err := c.ensureFreshOAuthToken(ctx); err != nil {
+		var err error
+		refreshedThisCall, err = c.ensureFreshOAuthToken(ctx)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -185,9 +195,44 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		// can be reused.
 		drainAndClose(resp.Body)
 
+		// If the request body can't be replayed, we can't safely retry
+		// even with a fresh token — handing the caller back the 401
+		// gives them a deterministic shape they can act on. (W2)
+		if !canReplayBody(req) {
+			// Re-issue the 401 response we already drained: callers (and
+			// the executor) need a non-nil resp to render its body, so
+			// synthesize a fresh 401 with the same status line. The body
+			// is unrecoverable at this point — drainAndClose consumed it.
+			return &http.Response{
+				StatusCode: http.StatusUnauthorized,
+				Status:     resp.Status,
+				Header:     resp.Header,
+				Body:       http.NoBody,
+				Request:    req,
+				Proto:      resp.Proto,
+				ProtoMajor: resp.ProtoMajor,
+				ProtoMinor: resp.ProtoMinor,
+			}, nil
+		}
+
+		// If we already refreshed at the top of this Do() and the server
+		// STILL returned 401, the fresh token doesn't help — re-login is
+		// the only path forward. (N2)
+		if refreshedThisCall {
+			return nil, ErrReLoginNeeded
+		}
+
 		refreshed, refreshErr := c.forceRefresh(ctx)
 		if refreshErr != nil {
-			return nil, fmt.Errorf("%w: %v", ErrReLoginNeeded, refreshErr)
+			// Discriminate between "IdP said no" (rejected) and any other
+			// transient failure (network, 5xx, ctx cancel). Only the
+			// rejected branch tells the user re-login is needed; the
+			// transient branch surfaces the underlying error as-is so
+			// the executor renders something accurate. (W1)
+			if errors.Is(refreshErr, oauth.ErrRejected) {
+				return nil, fmt.Errorf("%w: %v", ErrReLoginNeeded, refreshErr)
+			}
+			return nil, fmt.Errorf("oauth: refresh failed: %w", refreshErr)
 		}
 		if !refreshed {
 			// Refresh succeeded as a no-op (no new token issued) —
@@ -229,6 +274,14 @@ func (c *Client) applyHeaders(req *http.Request) {
 	case auth.CredentialTypeOAuth:
 		req.Header.Set("Authorization", "Bearer "+c.credential.AccessToken)
 		req.Header.Del("x-api-key")
+	case auth.CredentialTypeOAuthExpired:
+		// Programmer-bug guard: by the time applyHeaders runs, Do() must
+		// have already routed an OAuthExpired credential through
+		// ensureFreshOAuthToken, which upgrades it to CredentialTypeOAuth
+		// on success or returns an error before we get here. Reaching
+		// this branch means a code path skipped the refresh gate. (N7)
+		c.credMu.Unlock()
+		panic("client.applyHeaders: refresh gate skipped for CredentialTypeOAuthExpired (programmer bug)")
 	}
 	c.credMu.Unlock()
 	req.Header.Set("User-Agent", c.userAgent)
@@ -245,36 +298,68 @@ func (c *Client) applyHeaders(req *http.Request) {
 // missing (OAuthExpired) or near expiry (OAuth + ExpiresAt within skew).
 // Tokens with no expiry information are left alone — the transport
 // optimistically tries them and falls back to refresh-on-401.
-func (c *Client) ensureFreshOAuthToken(ctx context.Context) error {
-	c.credMu.Lock()
-	needsRefresh := false
-	switch c.credential.Type {
-	case auth.CredentialTypeOAuthExpired:
-		needsRefresh = true
-	case auth.CredentialTypeOAuth:
-		if !c.credential.ExpiresAt.IsZero() && time.Now().Add(oauthRefreshSkew).After(c.credential.ExpiresAt) {
-			needsRefresh = true
-		}
-	}
-	c.credMu.Unlock()
-
-	if !needsRefresh {
-		return nil
+//
+// Returns true when this call performed a refresh round-trip; false when
+// the in-memory token was already fresh enough or another goroutine
+// refreshed concurrently. Callers thread the bool through to the
+// post-Do() 401 retry path to skip a redundant refresh in the same
+// Do() invocation. (N1, N2)
+func (c *Client) ensureFreshOAuthToken(ctx context.Context) (bool, error) {
+	if !c.needsRefresh() {
+		return false, nil
 	}
 	if !c.credential.HasRefreshToken() {
-		return ErrReLoginNeeded
+		return false, ErrReLoginNeeded
 	}
+
+	// Serialize the refresh path so concurrent Do() calls don't both
+	// round-trip the IdP. After grabbing the lock, re-check expiry: if
+	// another goroutine already refreshed, the token is now fresh and
+	// we don't need to refresh again. (N1)
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	if !c.needsRefresh() {
+		// Lost the race — another caller refreshed while we were
+		// waiting for the lock. Treat this Do() as if we never needed
+		// to refresh at all.
+		return false, nil
+	}
+
 	if _, err := c.forceRefresh(ctx); err != nil {
-		return fmt.Errorf("%w: %v", ErrReLoginNeeded, err)
+		// Same W1 discrimination as the post-401 path: only an IdP
+		// rejection signals re-login is needed; transient failures
+		// surface as-is so the executor can render a useful error.
+		if errors.Is(err, oauth.ErrRejected) {
+			return false, fmt.Errorf("%w: %v", ErrReLoginNeeded, err)
+		}
+		return false, fmt.Errorf("oauth: refresh failed: %w", err)
 	}
-	return nil
+	return true, nil
+}
+
+// needsRefresh reports whether the in-memory credential needs a refresh
+// round-trip. Reads the credential under the lock so concurrent refreshes
+// don't see a torn snapshot.
+func (c *Client) needsRefresh() bool {
+	c.credMu.Lock()
+	defer c.credMu.Unlock()
+	switch c.credential.Type {
+	case auth.CredentialTypeOAuthExpired:
+		return true
+	case auth.CredentialTypeOAuth:
+		if !c.credential.ExpiresAt.IsZero() && time.Now().Add(auth.OAuthRefreshSkew).After(c.credential.ExpiresAt) {
+			return true
+		}
+	}
+	return false
 }
 
 // forceRefresh runs the OAuth refresh dance once and updates the
 // in-memory credential + persists the new tokens. Returns true when a
 // new access token was minted. Callers handle the err side: a real
 // network/IdP failure stays a refresh error; an IdP 400/401 (token
-// rejected) bubbles up.
+// rejected) bubbles up wrapped in oauth.ErrRejected so callers can
+// errors.Is-discriminate the re-login case.
 func (c *Client) forceRefresh(ctx context.Context) (bool, error) {
 	if c.oauthClient == nil {
 		return false, errors.New("oauth client not configured (programmer error)")

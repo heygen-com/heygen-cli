@@ -103,3 +103,30 @@ func TestAuthStatus_OAuth_ReportsExpiryAndScope(t *testing.T) {
 		t.Errorf("credential.expires_at missing or wrong type: %v", credMeta)
 	}
 }
+
+// W3: a /v3/users/me response body of literal `null` decodes to a nil
+// map. The merge step must not panic on the credential assignment;
+// instead it returns an envelope with just the credential block.
+func TestMergeStatusEnvelope_NullBody_DoesNotPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("mergeStatusEnvelope panicked on null body: %v (W3 regression)", r)
+		}
+	}()
+	credMeta := map[string]any{"type": "api_key", "source": "env"}
+	out, err := mergeStatusEnvelope([]byte("null"), credMeta)
+	if err != nil {
+		t.Fatalf("mergeStatusEnvelope: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		t.Fatalf("merged output not JSON: %v\n%s", err, string(out))
+	}
+	got, ok := parsed["credential"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected `credential` block in merged output, got %v", parsed)
+	}
+	if got["type"] != "api_key" {
+		t.Errorf("credential.type = %v, want api_key", got["type"])
+	}
+}

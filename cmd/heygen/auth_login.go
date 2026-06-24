@@ -195,7 +195,17 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	// Best-effort identity probe so we can surface "Logged in as ...".
 	// A failure here doesn't roll back the login (tokens are on disk and
 	// usable); we just leave the identity blank in the success payload.
-	username, email := lookupCurrentUser(cmdCtx, tok.AccessToken, cfg.UsersMeBaseURL)
+	//
+	// Resolve the base URL in priority order: test-pinned override
+	// (cfg.UsersMeBaseURL) > the CLI's config provider (which honors
+	// HEYGEN_API_BASE) > a hardcoded fallback inside lookupCurrentUser.
+	// (W4 — without this the identity probe hits api.heygen.com even
+	// when the user pointed the CLI at a dev sandbox.)
+	probeBase := cfg.UsersMeBaseURL
+	if probeBase == "" && ctx.configProvider != nil {
+		probeBase = ctx.configProvider.BaseURL()
+	}
+	username, email := lookupCurrentUser(cmdCtx, tok.AccessToken, probeBase)
 
 	credPath := filepath.Join(paths.ConfigDir(), "credentials")
 	payload := map[string]any{

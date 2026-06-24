@@ -75,9 +75,9 @@ func runAuthLogout(cmd *cobra.Command, ctx *cmdContext, alsoAPIKey bool, cfg aut
 		msg = "No OAuth session was stored"
 	}
 	data, err := json.Marshal(map[string]any{
-		"message":         msg,
-		"cleared_oauth":   hadOAuthSession,
-		"cleared_api_key": alsoAPIKey,
+		"message":                 msg,
+		"cleared_oauth":           hadOAuthSession,
+		"clear_api_key_requested": alsoAPIKey,
 	})
 	if err != nil {
 		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))

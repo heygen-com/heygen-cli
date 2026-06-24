@@ -15,6 +15,7 @@ import (
 	"github.com/heygen-com/heygen-cli/internal/analytics"
 	"github.com/heygen-com/heygen-cli/internal/auth"
 	"github.com/heygen-com/heygen-cli/internal/auth/oauth"
+	"github.com/heygen-com/heygen-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -273,6 +274,45 @@ func TestAuthLogin_DeviceCode_NotYetSupported(t *testing.T) {
 	}
 }
 
+// W4: when cfg.UsersMeBaseURL is empty (production path), the login
+// identity probe must read HEYGEN_API_BASE from the config provider
+// instead of hardcoding https://api.heygen.com. Without this, pointing
+// the CLI at a dev sandbox silently fans the probe out to prod.
+func TestAuthLogin_OAuthFlow_HonorsHEYGEN_API_BASEForUsersMeProbe(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", configDir)
+	t.Setenv("HEYGEN_API_KEY", "")
+
+	idp := newFakeIdP(t)
+	usersMe := fakeUsersMeServer(t, `{"data":{"username":"sandbox-user","email":"u@example.com"}}`)
+
+	// Pin the CLI's base URL to the test users/me server. This is the
+	// production code path (no cfg.UsersMeBaseURL override) but the
+	// probe should still hit our test server because HEYGEN_API_BASE
+	// directs the config provider there.
+	t.Setenv("HEYGEN_API_BASE", usersMe.URL)
+
+	cfg := oauthLoginConfig{
+		TokenURL: idp.server.URL + "/v1/oauth/token",
+		OpenBrowser: func(authURL string) error {
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				hitBrowserCallback(t, idp.expectedCode, authURL)
+			}()
+			return nil
+		},
+		// Deliberately leave UsersMeBaseURL empty — we want to verify
+		// the production fallback (ctx.configProvider.BaseURL()).
+	}
+	res := runOAuthLoginForTest(t, cfg)
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s\nstdout: %s", res.ExitCode, res.Stderr, res.Stdout)
+	}
+	if !strings.Contains(res.Stderr, "Logged in as sandbox-user") {
+		t.Errorf("stderr = %q, want 'Logged in as sandbox-user' (probe should have hit %s, not api.heygen.com)", res.Stderr, usersMe.URL)
+	}
+}
+
 // runOAuthLoginForTest builds the auth login command directly with a
 // pinned oauthLoginConfig — runCommand can't pass per-command config
 // hooks, so we drop down a level here.
@@ -288,11 +328,16 @@ func runOAuthLoginForTest(t *testing.T, cfg oauthLoginConfig) cmdResult {
 	t.Setenv("HEYGEN_NO_ANALYTICS", "1")
 	t.Setenv("HEYGEN_NO_BROWSER", "1") // belt + braces; OpenBrowser is stubbed via cfg anyway
 
+	// Mirror what initContext sets up so runOAuthLogin can fall back to
+	// ctx.configProvider.BaseURL() when cfg.UsersMeBaseURL is empty (W4).
 	ctx := &cmdContext{
-		formatter:      formatter,
-		version:        "test",
-		configProvider: nil,
-		client:         nil,
+		formatter: formatter,
+		version:   "test",
+		configProvider: &config.LayeredProvider{
+			Env:  &config.EnvProvider{},
+			File: &config.FileProvider{},
+		},
+		client: nil,
 	}
 	_ = analytics.New("test", false)
 
