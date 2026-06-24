@@ -90,7 +90,7 @@ func TestEnrichAuthHint_ExistingHint_Preserved(t *testing.T) {
 	if res.ExitCode != clierrors.ExitAuth {
 		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitAuth, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "Three ways to provide your API key") {
+	if !strings.Contains(res.Stderr, "Two ways to authenticate") {
 		t.Fatalf("no-key error should preserve authGuidance hint:\n%s", res.Stderr)
 	}
 }

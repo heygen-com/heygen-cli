@@ -31,7 +31,7 @@ func TestAuthLogin_EmptyStdin_NoEnvVar_NonTTY(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	t.Setenv("HEYGEN_API_KEY", "") // ensure env var is not set
 
-	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader(""), "auth", "login")
+	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader(""), "auth", "login", "--api-key")
 
 	if res.ExitCode != 2 {
 		t.Fatalf("ExitCode = %d, want 2\nstderr: %s", res.ExitCode, res.Stderr)
@@ -52,7 +52,7 @@ func TestAuthLogin_EmptyStdin_WithEnvVar_NonTTY(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	t.Setenv("HEYGEN_API_KEY", "env-test-key")
 
-	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader(""), "auth", "login")
+	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader(""), "auth", "login", "--api-key")
 
 	if res.ExitCode != 2 {
 		t.Fatalf("ExitCode = %d, want 2\nstderr: %s", res.ExitCode, res.Stderr)
@@ -68,7 +68,7 @@ func TestAuthLogin_PipedKey_StillWorks(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", dir)
 
-	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("real-key\n"), "auth", "login")
+	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("real-key\n"), "auth", "login", "--api-key")
 
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
@@ -82,7 +82,7 @@ func TestAuthLogin_PipedKey_StillWorks(t *testing.T) {
 func TestAuthLogin_Success(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
-	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("test-key-123\n"), "auth", "login")
+	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("test-key-123\n"), "auth", "login", "--api-key")
 
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
@@ -104,7 +104,7 @@ func TestAuthLogin_Success(t *testing.T) {
 func TestAuthLogin_EmptyInput(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
-	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("\n"), "auth", "login")
+	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("\n"), "auth", "login", "--api-key")
 
 	if res.ExitCode != 2 {
 		t.Fatalf("ExitCode = %d, want 2\nstderr: %s", res.ExitCode, res.Stderr)
@@ -114,12 +114,12 @@ func TestAuthLogin_EmptyInput(t *testing.T) {
 func TestAuthLogin_OverwriteExisting(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
-	first := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("first-key\n"), "auth", "login")
+	first := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("first-key\n"), "auth", "login", "--api-key")
 	if first.ExitCode != 0 {
 		t.Fatalf("first login failed: %#v", first)
 	}
 
-	second := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("second-key\n"), "auth", "login")
+	second := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("second-key\n"), "auth", "login", "--api-key")
 	if second.ExitCode != 0 {
 		t.Fatalf("second login failed: %#v", second)
 	}
@@ -132,7 +132,7 @@ func TestAuthLogin_OverwriteExisting(t *testing.T) {
 func TestAuthLogin_SkipsAuth(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
-	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("test-key-123\n"), "auth", "login")
+	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("test-key-123\n"), "auth", "login", "--api-key")
 
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)

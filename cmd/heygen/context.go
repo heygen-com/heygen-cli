@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"net/textproto"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/heygen-com/heygen-cli/internal/auth"
+	"github.com/heygen-com/heygen-cli/internal/auth/oauth"
 	"github.com/heygen-com/heygen-cli/internal/client"
 	"github.com/heygen-com/heygen-cli/internal/config"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
@@ -108,7 +109,7 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 			&auth.FileCredentialResolver{},
 		},
 	}
-	result, err := resolver.ResolveWithSource()
+	cred, err := resolver.ResolveTypedCredential()
 	if err != nil {
 		// Enrich the generic cold-start auth error ("no API key found")
 		// with the full auth guidance. Don't overwrite specific hints
@@ -119,7 +120,7 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 		}
 		return err
 	}
-	cmd.SetContext(context.WithValue(cmd.Context(), credSourceKey{}, result.Source))
+	cmd.SetContext(context.WithValue(cmd.Context(), credSourceKey{}, cred.Source))
 
 	baseURL := provider.BaseURL()
 	if u, err := url.Parse(baseURL); err == nil && u.Scheme == "http" && os.Getenv("HEYGEN_ALLOW_HTTP") == "" {
@@ -130,6 +131,9 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 		client.WithBaseURL(baseURL),
 		client.WithUserAgent("heygen-cli/" + version),
 	}
+	if cred.IsOAuth() {
+		opts = append(opts, client.WithOAuthClient(oauth.NewClient()))
+	}
 	if hdrs, _ := cmd.Flags().GetStringArray("headers"); len(hdrs) > 0 {
 		parsed, err := parseAndValidateHeaders(hdrs)
 		if err != nil {
@@ -137,7 +141,7 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 		}
 		opts = append(opts, client.WithExtraHeaders(parsed))
 	}
-	ctx.client = client.New(result.Key, opts...)
+	ctx.client = client.NewWithCredential(*cred, opts...)
 
 	human, _ := cmd.Flags().GetBool("human")
 	if human {

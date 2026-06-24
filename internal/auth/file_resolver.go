@@ -1,6 +1,9 @@
 package auth
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // jsonCredentials is the on-disk format hyperframes-CLI (and heygen-cli,
 // since the write-side change) persist to ~/.heygen/credentials. Mirror
@@ -11,8 +14,8 @@ type jsonCredentials struct {
 }
 
 // jsonOAuthTokens is parsed and round-tripped (so heygen-cli preserves a
-// hyperframes-written OAuth block on save) but NOT selected as a usable
-// credential — see selectCredential.
+// hyperframes-written OAuth block on save) and now also selectable by
+// the resolver as the live credential.
 type jsonOAuthTokens struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
@@ -21,33 +24,67 @@ type jsonOAuthTokens struct {
 	TokenType    string `json:"token_type,omitempty"`
 }
 
-// FileCredentialResolver reads the API key from the credentials file.
+// oauthExpiryClockSkew is the leeway used when deciding whether an OAuth
+// access token is "still fresh." Anything within this many seconds of
+// its expiry is treated as already expired so the transport refreshes
+// proactively instead of racing the IdP's clock.
+const oauthExpiryClockSkew = 60 * time.Second
+
+// nowFn is the wall-clock source used when comparing OAuth expiry. Tests
+// override this to drive deterministic resolver paths.
+var nowFn = time.Now
+
+// FileCredentialResolver reads credentials from the shared credentials
+// file. It supports both api_key and OAuth-token credentials, with the
+// type discriminated by the on-disk content.
 type FileCredentialResolver struct{}
 
-// Resolve returns a credential string from the shared credentials file.
+// Resolve returns the API-key form of the resolved credential. Retained
+// for backwards compatibility with callers (and the chain resolver) that
+// only understand a single string. For OAuth-aware callers see
+// ResolveCredential.
 //
-// The on-disk format may be either:
+// When the resolved credential is an OAuth token, Resolve returns a
+// non-ErrNotConfigured error explaining that OAuth credentials must be
+// consumed via ResolveCredential / the OAuth-aware transport path. This
+// preserves the historical contract for callers that haven't been
+// upgraded yet, while letting the new path flow through cleanly.
+func (r *FileCredentialResolver) Resolve() (string, error) {
+	cred, err := r.ResolveCredential()
+	if err != nil {
+		return "", err
+	}
+	if cred.Type != CredentialTypeAPIKey {
+		return "", fmt.Errorf(
+			"credentials file holds an OAuth session; use the OAuth-aware transport (this is a heygen-cli internal API contract)",
+		)
+	}
+	return cred.APIKey, nil
+}
+
+// ResolveCredential returns the typed credential heygen-cli will send.
+// On-disk formats:
 //
-//	1. The JSON layout `{ "api_key": "...", "oauth": { ... } }` produced
-//	   by hyperframes-CLI and by this CLI's own writes.
-//	2. The legacy single-line plaintext API key (what heygen-cli wrote
-//	   historically). Still readable so existing users aren't logged out.
+//  1. JSON layout `{ "api_key": "...", "oauth": { ... } }` produced
+//     by hyperframes-CLI and by this CLI's own writes.
+//  2. Legacy single-line plaintext API key (what heygen-cli wrote
+//     historically). Still readable so existing users aren't logged out.
 //
 // Reads are side-effect-free: a legacy plaintext file is NOT rewritten
 // here. Upgrading to JSON happens only on an explicit write (Save), so
 // passive commands can't silently convert a file that an older pinned
 // binary might still need to read.
-func (r *FileCredentialResolver) Resolve() (string, error) {
+func (r *FileCredentialResolver) ResolveCredential() (*Credential, error) {
 	path := credentialFilePath()
 	creds, format, err := loadCredentialsFile(path)
 	if format == formatAbsent && err == nil {
-		return "", &ErrNotConfigured{Msg: "no credentials file"}
+		return nil, &ErrNotConfigured{Msg: "no credentials file"}
 	}
 	if err != nil {
 		// Empty / invalid-JSON / multi-line garbage — broken state.
 		// Surfaced as a plain error so the chain reports it instead of
 		// silently skipping (distinct from ErrNotConfigured).
-		return "", err
+		return nil, err
 	}
 	return selectCredential(creds, path)
 }
@@ -58,26 +95,88 @@ func isJSONObject(s string) bool {
 
 // selectCredential picks the credential heygen-cli will actually send.
 //
-// heygen-cli transmits credentials via the `x-api-key` header only (see
-// internal/client) — it has no `Authorization: Bearer` support yet. So
-// it can only use an `api_key`; an OAuth `access_token` must NOT be
-// returned here, or it would be mis-sent as an API key and rejected.
-// We therefore always prefer api_key and refuse an OAuth-only file with
-// an actionable error. (The OAuth block is still parsed and preserved
-// on write — see Save — just never selected.)
+// Precedence (when both an OAuth block and an api_key are present):
+//
+//  1. A non-expired OAuth access_token wins. OAuth is the new
+//     default-recommended path; an api_key that's still co-located is
+//     treated as legacy.
+//  2. An OAuth refresh_token (with no fresh access_token) wins — caller
+//     will refresh + persist before the first request.
+//  3. Otherwise fall back to api_key.
 //
 // Errors are plain `error` (not ErrNotConfigured) so the chain resolver
 // surfaces a present-but-unusable file rather than skipping it.
-func selectCredential(parsed jsonCredentials, path string) (string, error) {
-	if parsed.APIKey != "" {
-		return parsed.APIKey, nil
-	}
+func selectCredential(parsed jsonCredentials, path string) (*Credential, error) {
 	if parsed.OAuth != nil && parsed.OAuth.AccessToken != "" {
-		return "", fmt.Errorf(
-			"credentials file %s holds an OAuth session, which heygen-cli can't use yet; "+
-				"run `heygen auth login` with an API key or set HEYGEN_API_KEY",
-			path,
-		)
+		expiresAt := parseOAuthExpiry(parsed.OAuth.ExpiresAt)
+		if !oauthExpired(expiresAt, nowFn()) {
+			return &Credential{
+				Type:         CredentialTypeOAuth,
+				AccessToken:  parsed.OAuth.AccessToken,
+				RefreshToken: parsed.OAuth.RefreshToken,
+				ExpiresAt:    expiresAt,
+				Scope:        parsed.OAuth.Scope,
+				Source:       SourceFile,
+			}, nil
+		}
+		if parsed.OAuth.RefreshToken != "" {
+			return &Credential{
+				Type:         CredentialTypeOAuthExpired,
+				RefreshToken: parsed.OAuth.RefreshToken,
+				ExpiresAt:    expiresAt,
+				Scope:        parsed.OAuth.Scope,
+				Source:       SourceFile,
+			}, nil
+		}
+		// Expired access token, no refresh token, no api_key — unusable.
+		if parsed.APIKey == "" {
+			return nil, fmt.Errorf(
+				"credentials file %s holds an expired OAuth session with no refresh token; run `heygen auth login`",
+				path,
+			)
+		}
 	}
-	return "", fmt.Errorf("credentials file %s has no usable credential", path)
+	if parsed.OAuth != nil && parsed.OAuth.RefreshToken != "" && parsed.OAuth.AccessToken == "" {
+		// Refresh-only block (no access token at all). Same shape as
+		// "expired access token + refresh".
+		return &Credential{
+			Type:         CredentialTypeOAuthExpired,
+			RefreshToken: parsed.OAuth.RefreshToken,
+			Scope:        parsed.OAuth.Scope,
+			Source:       SourceFile,
+		}, nil
+	}
+	if parsed.APIKey != "" {
+		return &Credential{
+			Type:   CredentialTypeAPIKey,
+			APIKey: parsed.APIKey,
+			Source: SourceFile,
+		}, nil
+	}
+	return nil, fmt.Errorf("credentials file %s has no usable credential", path)
+}
+
+// parseOAuthExpiry parses the RFC 3339 `expires_at` stored on disk.
+// Returns a zero time when absent or unparseable — the caller then treats
+// the token as "no expiry information" and falls back to refresh-on-401.
+func parseOAuthExpiry(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+// oauthExpired reports whether the access token at expiresAt is past
+// (or within the clock skew of) now. A zero expiresAt is treated as
+// "no information" and reported as NOT expired so the transport can
+// optimistically try the access token and refresh on 401.
+func oauthExpired(expiresAt, now time.Time) bool {
+	if expiresAt.IsZero() {
+		return false
+	}
+	return !now.Before(expiresAt.Add(-oauthExpiryClockSkew))
 }

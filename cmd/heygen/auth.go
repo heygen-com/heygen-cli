@@ -8,15 +8,22 @@ import (
 
 // authGuidance is the single source of truth for how to set up CLI auth.
 // Referenced by auth_login.go, auth_status.go, and the auth group help below.
-var authGuidance = `Three ways to provide your API key:
-  1. Environment variable (current shell only):
-       export HEYGEN_API_KEY=<your-key>
-  2. Pipe to auth login (saves to ~/.heygen/credentials):
-       echo "$KEY" | heygen auth login
-  3. Interactive prompt (saves to ~/.heygen/credentials):
+var authGuidance = `Two ways to authenticate:
+
+  1. Browser OAuth (default — opens https://app.heygen.com):
        heygen auth login
 
-When both env var and stored credential are set, the env var takes priority.
+  2. API key (interactive prompt or piped on stdin):
+       heygen auth login --api-key
+       echo "$KEY" | heygen auth login --api-key
+
+The HEYGEN_API_KEY environment variable also takes priority over any
+stored credential when both are set.
+
+Manage your session:
+  heygen auth status    # verify the active credential + show metadata
+  heygen auth refresh   # refresh the OAuth access token
+  heygen auth logout    # clear the stored OAuth session
 
 Get a key: ` + clierrors.APIKeySettingsURL
 
@@ -25,5 +32,7 @@ func newAuthCmd(ctx *cmdContext) *cobra.Command {
 	cmd.Long = "Manage how the CLI authenticates with the HeyGen API.\n\n" + authGuidance
 	cmd.AddCommand(newAuthLoginCmd(ctx))
 	cmd.AddCommand(newAuthStatusCmd(ctx))
+	cmd.AddCommand(newAuthLogoutCmd(ctx))
+	cmd.AddCommand(newAuthRefreshCmd(ctx))
 	return cmd
 }
