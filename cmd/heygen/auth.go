@@ -22,7 +22,6 @@ stored credential when both are set.
 
 Manage your session:
   heygen auth status    # verify the active credential + show metadata
-  heygen auth refresh   # refresh the OAuth access token
   heygen auth logout    # clear the stored OAuth session
 
 Get a key: ` + clierrors.APIKeySettingsURL
@@ -33,6 +32,5 @@ func newAuthCmd(ctx *cmdContext) *cobra.Command {
 	cmd.AddCommand(newAuthLoginCmd(ctx))
 	cmd.AddCommand(newAuthStatusCmd(ctx))
 	cmd.AddCommand(newAuthLogoutCmd(ctx))
-	cmd.AddCommand(newAuthRefreshCmd(ctx))
 	return cmd
 }

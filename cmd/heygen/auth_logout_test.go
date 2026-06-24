@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,7 +12,6 @@ import (
 
 	"github.com/heygen-com/heygen-cli/internal/analytics"
 	"github.com/heygen-com/heygen-cli/internal/auth"
-	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -124,85 +121,6 @@ func TestAuthLogout_NoSession_NoOp(t *testing.T) {
 	}
 }
 
-func TestAuthRefresh_UsesStoredRefreshToken(t *testing.T) {
-	dir := t.TempDir()
-	seedOAuthCredentials(t, dir, "stale_at", "rt_seed", time.Now().Add(-time.Hour))
-
-	var seenRefresh string
-	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseForm()
-		seenRefresh = r.PostForm.Get("refresh_token")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"fresh_at","refresh_token":"rt_rotated","token_type":"Bearer","expires_in":3600,"scope":"openid"}`))
-	}))
-	defer idp.Close()
-
-	res := runAuthRefreshForTest(t, authRefreshConfig{TokenURL: idp.URL + "/v1/oauth/token"})
-	if res.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
-	}
-	if seenRefresh != "rt_seed" {
-		t.Errorf("IdP saw refresh_token = %q, want rt_seed", seenRefresh)
-	}
-
-	tok, err := auth.LoadOAuthTokens()
-	if err != nil {
-		t.Fatalf("LoadOAuthTokens: %v", err)
-	}
-	if tok.AccessToken != "fresh_at" {
-		t.Errorf("access_token = %q, want fresh_at", tok.AccessToken)
-	}
-	if tok.RefreshToken != "rt_rotated" {
-		t.Errorf("refresh_token = %q, want rt_rotated", tok.RefreshToken)
-	}
-
-	if !strings.Contains(res.Stderr, "Refreshed") {
-		t.Errorf("stderr = %q, want 'Refreshed'", res.Stderr)
-	}
-
-	// JSON payload should expose expires_at + scope so callers can pipe.
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
-		t.Fatalf("stdout not JSON: %v\n%s", err, res.Stdout)
-	}
-	if parsed["scope"] != "openid" {
-		t.Errorf("stdout.scope = %v, want openid", parsed["scope"])
-	}
-}
-
-func TestAuthRefresh_NotLoggedIn(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HEYGEN_CONFIG_DIR", dir)
-
-	res := runAuthRefreshForTest(t, authRefreshConfig{TokenURL: "http://127.0.0.1:1"})
-	if res.ExitCode != 3 {
-		t.Fatalf("ExitCode = %d, want 3 (auth)", res.ExitCode)
-	}
-	if !strings.Contains(res.Stderr, "heygen auth login") {
-		t.Errorf("stderr = %q, want 'heygen auth login' hint", res.Stderr)
-	}
-}
-
-func TestAuthRefresh_RefreshRejected(t *testing.T) {
-	dir := t.TempDir()
-	seedOAuthCredentials(t, dir, "stale_at", "rt_bad", time.Now().Add(-time.Hour))
-
-	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
-	}))
-	defer idp.Close()
-
-	res := runAuthRefreshForTest(t, authRefreshConfig{TokenURL: idp.URL + "/v1/oauth/token"})
-	if res.ExitCode != 3 {
-		t.Fatalf("ExitCode = %d, want 3 (auth)", res.ExitCode)
-	}
-	if !strings.Contains(res.Stderr, "rejected") {
-		t.Errorf("stderr = %q, want 'rejected'", res.Stderr)
-	}
-}
-
 func runAuthLogoutForTest(t *testing.T, alsoAPIKey bool, cfg authLogoutConfig) cmdResult {
 	t.Helper()
 	var stdout, stderr strings.Builder
@@ -222,37 +140,6 @@ func runAuthLogoutForTest(t *testing.T, alsoAPIKey bool, cfg authLogoutConfig) c
 	if err := cmd.Execute(); err != nil {
 		exitCode = 1
 		_, _ = stderr.WriteString(err.Error())
-	}
-	return cmdResult{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: exitCode}
-}
-
-func runAuthRefreshForTest(t *testing.T, cfg authRefreshConfig) cmdResult {
-	t.Helper()
-	var stdout, stderr strings.Builder
-	formatter := formatterForArgs([]string{"auth", "refresh"}, &stdout, &stderr)
-	t.Setenv("HEYGEN_NO_ANALYTICS", "1")
-	ctx := &cmdContext{formatter: formatter, version: "test"}
-
-	cmd := newAuthRefreshCmd(ctx)
-	cmd.SetOut(&stdout)
-	cmd.SetErr(&stderr)
-	cmd.SetArgs([]string{})
-	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return runAuthRefresh(c, ctx, cfg)
-	}
-	exitCode := 0
-	if err := cmd.Execute(); err != nil {
-		// Mirror main.go's error rendering: if it's already a CLIError,
-		// honor its ExitCode; otherwise classify.
-		var cliErr *clierrors.CLIError
-		if errors.As(err, &cliErr) {
-			formatter.Error(cliErr)
-			exitCode = cliErr.ExitCode
-		} else {
-			wrapped := classifyError(err)
-			formatter.Error(wrapped)
-			exitCode = wrapped.ExitCode
-		}
 	}
 	return cmdResult{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: exitCode}
 }
