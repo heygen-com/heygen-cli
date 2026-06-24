@@ -364,3 +364,60 @@ func runOAuthLoginForTest(t *testing.T, cfg oauthLoginConfig) cmdResult {
 		ExitCode: exitCode,
 	}
 }
+
+// N1: explicit `heygen auth login --oauth` in a headless shell (no
+// stdin TTY + HEYGEN_NO_BROWSER=1) must fail fast with a usage error
+// instead of blocking on the loopback callback for ~5min. Test by
+// calling runOAuthLogin directly with cfg.OpenBrowser nil — that's
+// the "production" signal that the test path also lacks injection.
+func TestRunOAuthLogin_HeadlessShell_FailsFast(t *testing.T) {
+	t.Setenv("HEYGEN_NO_BROWSER", "1")
+	t.Setenv("BROWSER", "")
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+
+	// Force stdinIsTerminalFunc to report false — `go test` may attach
+	// a tty even when the harness is non-interactive.
+	orig := stdinIsTerminalFunc
+	stdinIsTerminalFunc = func() bool { return false }
+	t.Cleanup(func() { stdinIsTerminalFunc = orig })
+
+	var stdout, stderr strings.Builder
+	formatter := formatterForArgs([]string{"auth", "login"}, &stdout, &stderr)
+	ctx := &cmdContext{
+		formatter: formatter,
+		version:   "test",
+		configProvider: &config.LayeredProvider{
+			Env:  &config.EnvProvider{},
+			File: &config.FileProvider{},
+		},
+	}
+	_ = analytics.New("test", false)
+	cmd := newAuthLoginCmd(ctx)
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+
+	// Production-shape config: NO OpenBrowser injected. That's the
+	// signal the guard uses to fast-fail.
+	cfg := oauthLoginConfig{}
+
+	// Call runOAuthLogin directly so the test doesn't depend on the
+	// flag dispatcher (which also has its own non-interactive fallback
+	// to the API-key path). The N1 guard sits inside runOAuthLogin.
+	start := time.Now()
+	err := runOAuthLogin(cmd, ctx, cfg)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected headless --oauth to fail fast, got nil")
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("runOAuthLogin took %v in a headless shell; must fast-fail (N1)", elapsed)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "headless") {
+		t.Errorf("error = %q, want a 'headless' hint (N1)", msg)
+	}
+	if !strings.Contains(msg, "--api-key") {
+		t.Errorf("error = %q, want a pointer to --api-key (N1)", msg)
+	}
+}

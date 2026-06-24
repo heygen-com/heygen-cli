@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -796,5 +797,244 @@ func TestClient_Do_OAuth_NoDoubleRefreshAfterProactive(t *testing.T) {
 	}
 	if refreshes != 1 {
 		t.Errorf("refreshes = %d, want 1 (proactive refresh only; N2 forbids a second refresh after still-401)", refreshes)
+	}
+}
+
+// S1: two concurrent Do() calls against a still-valid (proactive
+// refresh NOT triggered) OAuth credential that both get 401'd must
+// coalesce the REACTIVE refresh to a single IdP round-trip. Without
+// the refreshMu + sent-token re-check, both goroutines call
+// forceRefresh and the second consumes a refresh_token that the IdP
+// has already rotated → spurious ErrReLoginNeeded. Run with -race
+// to also exercise the credMu-guarded snapshot helper. (S1)
+func TestClient_Do_OAuth_ConcurrentReactiveRefresh_Coalesces(t *testing.T) {
+	var refreshes int32
+	var refreshMu sync.Mutex
+	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		refreshMu.Lock()
+		refreshes++
+		current := refreshes
+		refreshMu.Unlock()
+		// Slow down so both Do() goroutines have a real chance to
+		// observe their 401 and race into the reactive refresh path
+		// before either completes.
+		time.Sleep(30 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		// First IdP call rotates the refresh_token. Second call would
+		// receive the already-consumed token → invalid_grant in real
+		// IdP behaviour. The test asserts that second call never
+		// happens.
+		if current == 1 {
+			_, _ = w.Write([]byte(`{"access_token":"fresh_at","refresh_token":"rotated_rt","token_type":"Bearer","expires_in":3600}`))
+			return
+		}
+		// If we reach here, the coalescing failed.
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+	}))
+	defer idp.Close()
+
+	var apiCalls int32
+	var apiMu sync.Mutex
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiMu.Lock()
+		apiCalls++
+		apiMu.Unlock()
+		// Reject the stale Bearer; accept the fresh one. The fresh
+		// access_token is "fresh_at" from the IdP above.
+		if r.Header.Get("Authorization") == "Bearer fresh_at" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer api.Close()
+
+	// Long-lived ExpiresAt means proactive refresh is NOT triggered;
+	// the only refresh path is reactive-after-401.
+	c := NewWithCredential(auth.Credential{
+		Type:         auth.CredentialTypeOAuth,
+		AccessToken:  "stale_at",
+		RefreshToken: "rt_seed",
+		ExpiresAt:    time.Now().Add(2 * time.Hour),
+	},
+		WithBaseURL(api.URL),
+		WithHTTPClient(api.Client()),
+		WithMaxRetries(0),
+		WithOAuthClient(oauth.NewClient(
+			oauth.WithTokenURL(idp.URL),
+			oauth.WithHTTPClient(idp.Client()),
+		)),
+		WithOAuthPersister(&fakePersister{}),
+	)
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	wg.Add(2)
+	for i := 0; i < 2; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			req, _ := http.NewRequest("GET", api.URL+"/v3/things", nil)
+			resp, err := c.Do(req)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				errs[i] = fmt.Errorf("status %d", resp.StatusCode)
+			}
+		}()
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("Do[%d] err = %v (concurrent reactive refresh must not surface invalid_grant)", i, err)
+		}
+	}
+
+	refreshMu.Lock()
+	got := refreshes
+	refreshMu.Unlock()
+	if got != 1 {
+		t.Errorf("IdP refreshes = %d, want 1 (concurrent reactive Do() must coalesce, S1)", got)
+	}
+}
+
+// S2: forceRefresh's call to OAuthPersister.SaveOAuthTokens must NOT
+// silently swallow a disk-write error. The in-memory token is fine for
+// the current Do(), but the next CLI invocation will reload the old
+// (now-rotated, now-dead) refresh_token from disk and force re-login.
+// We surface a warning to the configured warn writer so the user can
+// investigate. (S2)
+func TestClient_Do_OAuth_PersistFailure_WarnsToStderr(t *testing.T) {
+	var refreshes int32
+	idp := newFakeIdP(t, &oauth.TokenResponse{AccessToken: "fresh", RefreshToken: "rotated"}, &refreshes)
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer api.Close()
+
+	var warn strings.Builder
+	c := NewWithCredential(auth.Credential{
+		Type:         auth.CredentialTypeOAuthExpired,
+		RefreshToken: "rt_seed",
+	},
+		WithBaseURL(api.URL),
+		WithHTTPClient(api.Client()),
+		WithMaxRetries(0),
+		WithOAuthClient(oauth.NewClient(
+			oauth.WithTokenURL(idp.URL),
+			oauth.WithHTTPClient(idp.Client()),
+		)),
+		WithOAuthPersister(failingPersister{}),
+		WithWarnOutput(&warn),
+	)
+
+	req, _ := http.NewRequest("GET", api.URL+"/v3/things", nil)
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v (refresh-success + persist-fail must not fail the request)", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("StatusCode = %d, want 200", resp.StatusCode)
+	}
+
+	got := warn.String()
+	if !strings.Contains(got, "failed to persist") {
+		t.Errorf("warn output = %q, want a 'failed to persist' warning (S2)", got)
+	}
+	if !strings.Contains(got, "boom-persist") {
+		t.Errorf("warn output = %q, want underlying error %q to surface (S2)", got, "boom-persist")
+	}
+}
+
+// failingPersister always returns a known error from SaveOAuthTokens
+// so the warn-to-stderr behaviour can be asserted deterministically.
+type failingPersister struct{}
+
+func (failingPersister) SaveOAuthTokens(_ auth.OAuthTokens) error {
+	return errors.New("boom-persist")
+}
+
+// S3: NewWithCredential must panic when an OAuth credential is supplied
+// without WithOAuthClient. Silent fallback to oauth.NewClient() would
+// tie a test transport to the live IdP, defeating the whole point of
+// the test-injected oauth.Client. (S3)
+func TestClient_NewWithCredential_OAuthWithoutOAuthClient_Panics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected NewWithCredential to panic on OAuth credential without WithOAuthClient (S3)")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("panic value = %T(%v), want string", r, r)
+		}
+		if !strings.Contains(msg, "WithOAuthClient") {
+			t.Errorf("panic message = %q, want a hint about WithOAuthClient (S3)", msg)
+		}
+	}()
+
+	// No WithOAuthClient — must panic.
+	_ = NewWithCredential(auth.Credential{
+		Type:         auth.CredentialTypeOAuth,
+		AccessToken:  "at",
+		RefreshToken: "rt",
+	})
+}
+
+// S3 (positive case): API-key credentials must NOT trigger the fail-fast
+// — they don't need an oauth.Client.
+func TestClient_NewWithCredential_APIKey_NoOAuthClientNeeded(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("API-key NewWithCredential panicked: %v (S3: only OAuth needs WithOAuthClient)", r)
+		}
+	}()
+	c := NewWithCredential(auth.Credential{
+		Type:   auth.CredentialTypeAPIKey,
+		APIKey: "k",
+	})
+	if c == nil {
+		t.Fatal("NewWithCredential returned nil")
+	}
+}
+
+// N2: needsRefresh must honour a test-injected nowFn so refresh
+// decisions are deterministic. Pin "now" to a moment just inside the
+// skew window and assert refresh fires.
+func TestClient_NeedsRefresh_UsesInjectedNowFn(t *testing.T) {
+	pinned := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	c := NewWithCredential(auth.Credential{
+		Type:         auth.CredentialTypeOAuth,
+		AccessToken:  "at",
+		RefreshToken: "rt",
+		// ExpiresAt set so (pinned + skew) is AFTER expiry → refresh.
+		ExpiresAt: pinned.Add(10 * time.Second),
+	},
+		WithOAuthClient(oauth.NewClient(oauth.WithTokenURL("http://example.invalid"))),
+		WithNow(func() time.Time { return pinned }),
+	)
+	if !c.needsRefresh() {
+		t.Errorf("needsRefresh = false with pinned now inside skew window; want true (N2)")
+	}
+
+	// Now pin "now" well before expiry — refresh must NOT fire.
+	c2 := NewWithCredential(auth.Credential{
+		Type:         auth.CredentialTypeOAuth,
+		AccessToken:  "at",
+		RefreshToken: "rt",
+		ExpiresAt:    pinned.Add(2 * time.Hour),
+	},
+		WithOAuthClient(oauth.NewClient(oauth.WithTokenURL("http://example.invalid"))),
+		WithNow(func() time.Time { return pinned }),
+	)
+	if c2.needsRefresh() {
+		t.Errorf("needsRefresh = true with pinned now well before expiry; want false (N2)")
 	}
 }

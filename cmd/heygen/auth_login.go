@@ -62,6 +62,25 @@ var (
 	}
 )
 
+// isHeadlessOAuthShell reports whether the current shell is incapable
+// of completing a browser OAuth flow — no TTY on stdin AND an
+// environment opt-out from opening a browser. Used by runOAuthLogin to
+// fast-fail explicit `--oauth` instead of blocking ~5min on the
+// loopback timeout. (N1)
+func isHeadlessOAuthShell() bool {
+	if stdinIsTerminalFunc() {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("BROWSER")), "none") {
+		return true
+	}
+	v := strings.TrimSpace(os.Getenv("HEYGEN_NO_BROWSER"))
+	if v != "" && v != "0" && !strings.EqualFold(v, "false") {
+		return true
+	}
+	return false
+}
+
 func newAuthLoginCmd(ctx *cmdContext) *cobra.Command {
 	var apiKeyMode bool
 	var oauthMode bool
@@ -258,6 +277,22 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
 // runOAuthLogin drives the browser + PKCE + loopback dance and persists
 // the resulting tokens.
 func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) error {
+	// Headless-shell fast-fail: when explicit --oauth lands in a shell
+	// with no TTY on stdin AND the environment opts out of opening a
+	// browser (BROWSER=none or HEYGEN_NO_BROWSER=1), the callback can
+	// never land. Without this we sit on the loopback for
+	// DefaultLoopbackTimeout (~5min) before erroring out. Skip the
+	// guard when cfg.OpenBrowser is injected (test path drives the
+	// callback synthetically). (N1)
+	if cfg.OpenBrowser == nil && isHeadlessOAuthShell() {
+		return clierrors.NewUsage(
+			"cannot complete browser OAuth flow in a headless shell " +
+				"(no TTY and BROWSER=none / HEYGEN_NO_BROWSER=1).\n" +
+				"Use `heygen auth login --api-key` instead, or unset " +
+				"HEYGEN_NO_BROWSER and re-run from an interactive shell.",
+		)
+	}
+
 	cmdCtx, cancel := context.WithTimeout(cmd.Context(), oauth.DefaultLoopbackTimeout+30*time.Second)
 	defer cancel()
 
