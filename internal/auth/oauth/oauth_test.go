@@ -70,7 +70,10 @@ func TestBuildAuthorizationURL_IncludesAllParams(t *testing.T) {
 		WithClientID("test-client"),
 		WithAuthorizeURL("https://example.test/oauth/authorize"),
 	)
-	u := c.BuildAuthorizationURL("the-state", "the-challenge", "http://127.0.0.1:12345/cb", "")
+	u, err := c.BuildAuthorizationURL("the-state", "the-challenge", "http://127.0.0.1:12345/cb", "")
+	if err != nil {
+		t.Fatalf("BuildAuthorizationURL: %v", err)
+	}
 
 	parsed, err := url.Parse(u)
 	if err != nil {
@@ -97,7 +100,10 @@ func TestBuildAuthorizationURL_IncludesAllParams(t *testing.T) {
 
 func TestBuildAuthorizationURL_HonorsExistingQuery(t *testing.T) {
 	c := NewClient(WithAuthorizeURL("https://example.test/oauth/authorize?foo=bar"))
-	u := c.BuildAuthorizationURL("s", "c", "http://127.0.0.1/cb", "openid")
+	u, err := c.BuildAuthorizationURL("s", "c", "http://127.0.0.1/cb", "openid")
+	if err != nil {
+		t.Fatalf("BuildAuthorizationURL: %v", err)
+	}
 	if !strings.Contains(u, "foo=bar") {
 		t.Errorf("expected pre-existing query to survive: %s", u)
 	}
@@ -108,10 +114,31 @@ func TestBuildAuthorizationURL_HonorsExistingQuery(t *testing.T) {
 
 func TestBuildAuthorizationURL_CustomScopeRespected(t *testing.T) {
 	c := NewClient(WithAuthorizeURL("https://example.test/oauth/authorize"))
-	u := c.BuildAuthorizationURL("s", "c", "http://127.0.0.1/cb", "custom scope here")
+	u, err := c.BuildAuthorizationURL("s", "c", "http://127.0.0.1/cb", "custom scope here")
+	if err != nil {
+		t.Fatalf("BuildAuthorizationURL: %v", err)
+	}
 	parsed, _ := url.Parse(u)
 	if got := parsed.Query().Get("scope"); got != "custom scope here" {
 		t.Errorf("scope = %q, want %q", got, "custom scope here")
+	}
+}
+
+func TestBuildAuthorizationURL_RejectsEmptyArgs(t *testing.T) {
+	c := NewClient(WithAuthorizeURL("https://example.test/oauth/authorize"))
+	tests := []struct {
+		name, state, challenge, redirect string
+	}{
+		{"empty state", "", "c", "http://127.0.0.1/cb"},
+		{"empty challenge", "s", "", "http://127.0.0.1/cb"},
+		{"empty redirect", "s", "c", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := c.BuildAuthorizationURL(tc.state, tc.challenge, tc.redirect, ""); err == nil {
+				t.Fatal("expected error for empty arg")
+			}
+		})
 	}
 }
 

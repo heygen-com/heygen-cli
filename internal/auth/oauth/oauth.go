@@ -114,7 +114,22 @@ func NewClient(opts ...Option) *Client {
 // state, PKCE code challenge, redirect URI, and scope.
 //
 // The challenge must be the S256-hashed verifier (see GeneratePKCEPair).
-func (c *Client) BuildAuthorizationURL(state, codeChallenge, redirectURI, scope string) string {
+//
+// state, codeChallenge, and redirectURI MUST be non-empty — an empty
+// value would silently produce an unusable authorize URL (state mismatch
+// on callback, PKCE rejection at token exchange, IdP returns the user
+// to the wrong place). Returns an error rather than papering over the
+// caller bug.
+func (c *Client) BuildAuthorizationURL(state, codeChallenge, redirectURI, scope string) (string, error) {
+	if state == "" {
+		return "", errors.New("oauth: BuildAuthorizationURL: state must be non-empty")
+	}
+	if codeChallenge == "" {
+		return "", errors.New("oauth: BuildAuthorizationURL: codeChallenge must be non-empty")
+	}
+	if redirectURI == "" {
+		return "", errors.New("oauth: BuildAuthorizationURL: redirectURI must be non-empty")
+	}
 	if scope == "" {
 		scope = DefaultScopes
 	}
@@ -128,9 +143,9 @@ func (c *Client) BuildAuthorizationURL(state, codeChallenge, redirectURI, scope 
 		"code_challenge_method": {"S256"},
 	}
 	if strings.Contains(c.AuthorizeURL, "?") {
-		return c.AuthorizeURL + "&" + q.Encode()
+		return c.AuthorizeURL + "&" + q.Encode(), nil
 	}
-	return c.AuthorizeURL + "?" + q.Encode()
+	return c.AuthorizeURL + "?" + q.Encode(), nil
 }
 
 // ExchangeAuthorizationCode POSTs the authorization code + PKCE verifier
@@ -222,6 +237,14 @@ func (c *Client) postTokenForm(
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
+	// Stamp IssuedAt at request-send time, not after the response is
+	// parsed: the IdP's `expires_in` is relative to *its* clock when it
+	// minted the token, which is closer to the moment the request hit
+	// the wire than to whenever we finish JSON-decoding. Bias toward
+	// "expired slightly sooner than ideal" rather than the opposite —
+	// a stale-cached refresh costs a round trip; a stale-cached access
+	// token costs an API failure.
+	requestSent := c.Now()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("oauth: %s request: %w", grant, err)
@@ -258,7 +281,7 @@ func (c *Client) postTokenForm(
 	if err != nil {
 		return nil, fmt.Errorf("oauth: %s response invalid: %w", grant, err)
 	}
-	tok.IssuedAt = c.Now()
+	tok.IssuedAt = requestSent
 	return tok, nil
 }
 
@@ -327,15 +350,12 @@ func numericField(obj map[string]any, key string) (float64, bool) {
 	if !ok {
 		return 0, false
 	}
+	// We decode with the default json package settings (no
+	// Decoder.UseNumber), so every JSON number arrives as float64 — no
+	// json.Number branch needed.
 	switch n := v.(type) {
 	case float64:
 		return n, true
-	case json.Number:
-		f, err := n.Float64()
-		if err != nil {
-			return 0, false
-		}
-		return f, true
 	case string:
 		// Spec says expires_in is numeric, but defend against IdPs that
 		// send it as a quoted string.

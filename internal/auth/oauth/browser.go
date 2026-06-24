@@ -33,15 +33,24 @@ var printOut io.Writer = os.Stdout
 // genuine launch failures the caller may want to log; callers should
 // still proceed to wait on the loopback callback either way.
 //
-// Two env-var escape hatches mirror the hyperframes-CLI driver:
+// Env-var precedence on Linux/BSD:
 //
-//   - BROWSER=none     — never try to open a browser; print the URL.
-//   - HEYGEN_NO_BROWSER=1 — same, scoped to this CLI.
+//  1. HEYGEN_NO_BROWSER=1 — never try to open a browser; print the URL.
+//  2. BROWSER=none — same, mirrors the cross-distro convention.
+//  3. BROWSER=<command> (any other non-empty value) — invoke <command>
+//     with the URL as a single argument, per the de-facto Linux
+//     convention sketched in freedesktop.org and adopted by Python's
+//     webbrowser module, Git, etc.
+//  4. Fallback: xdg-open <url>.
+//
+// On macOS and Windows the platform-native opener is used regardless of
+// $BROWSER, since the conventional values there ("Safari", "Chrome",
+// "msedge") aren't shell commands.
 func OpenBrowser(url string) error {
 	if url == "" {
 		return errors.New("oauth: OpenBrowser called with empty URL")
 	}
-	if os.Getenv("BROWSER") == "none" || os.Getenv("HEYGEN_NO_BROWSER") == "1" {
+	if os.Getenv("HEYGEN_NO_BROWSER") == "1" || os.Getenv("BROWSER") == "none" {
 		printManualURL(url, "")
 		return nil
 	}
@@ -58,25 +67,38 @@ func OpenBrowser(url string) error {
 
 // openWithSystem dispatches to the platform-native command.
 func openWithSystem(url string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		// rundll32 is the most reliable way to launch a URL on Windows
-		// without needing a specific app association.
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		// Linux + BSD: xdg-open is the conventional dispatcher.
-		cmd = exec.Command("xdg-open", url)
-	}
+	cmd := platformOpenCmd(url)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("oauth: launch browser via %s: %w", cmd.Path, err)
 	}
-	// Don't wait on the child — `open` / `xdg-open` may stay attached to
-	// the launched browser for the user's whole session.
+	// Don't wait on the child — `open` / `xdg-open` / $BROWSER may stay
+	// attached to the launched browser for the user's whole session.
 	go func() { _ = cmd.Wait() }()
 	return nil
+}
+
+// platformOpenCmd builds the platform-native exec.Cmd that opens url.
+// Factored out so the env-var precedence is testable without spawning
+// real processes.
+func platformOpenCmd(url string) *exec.Cmd {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", url)
+	case "windows":
+		// rundll32 is the most reliable way to launch a URL on Windows
+		// without needing a specific app association.
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		// Linux + BSD: honor the user's $BROWSER preference (non-empty,
+		// not the "none" sentinel handled in OpenBrowser) before
+		// falling back to xdg-open. $BROWSER is the user's own shell
+		// env — the documented Linux convention is to invoke its value
+		// as a command, so the "taint" is exactly the contract.
+		if b := os.Getenv("BROWSER"); b != "" && b != "none" {
+			return exec.Command(b, url) //nolint:gosec // $BROWSER is the user's documented preference; invoking it as a command is the convention.
+		}
+		return exec.Command("xdg-open", url)
+	}
 }
 
 func printManualURL(url, reason string) {

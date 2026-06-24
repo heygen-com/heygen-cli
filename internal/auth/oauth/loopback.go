@@ -5,12 +5,19 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
-	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
+
+// ErrInvalidRedirectPath is returned by StartLoopbackServer when the
+// supplied redirect path is malformed (does not start with '/', contains
+// '?' or '#', etc.). Surfacing a typed error makes the misuse obvious to
+// callers and pinable in tests.
+var ErrInvalidRedirectPath = errors.New("oauth: invalid redirect path")
 
 // DefaultLoopbackTimeout is how long StartLoopbackServer waits for the
 // browser to hit the redirect URI before giving up.
@@ -58,7 +65,14 @@ func StartLoopbackServer(
 	redirectPath, expectedState string,
 ) (*LoopbackServer, <-chan LoopbackResult, func(), error) {
 	if redirectPath == "" || redirectPath[0] != '/' {
-		return nil, nil, nil, fmt.Errorf("oauth: redirectPath must start with '/', got %q", redirectPath)
+		return nil, nil, nil, fmt.Errorf("%w: must start with '/', got %q", ErrInvalidRedirectPath, redirectPath)
+	}
+	// `?` and `#` would silently register a dead route — net/http's mux
+	// matches only on the path component, so a "callback?source=cli" path
+	// never receives the IdP's bare `/callback` redirect. Reject early so
+	// the misuse surfaces at boot, not as a timeout.
+	if strings.ContainsAny(redirectPath, "?#") {
+		return nil, nil, nil, fmt.Errorf("%w: must not contain '?' or '#', got %q", ErrInvalidRedirectPath, redirectPath)
 	}
 	if expectedState == "" {
 		return nil, nil, nil, errors.New("oauth: expectedState must be non-empty")
@@ -91,10 +105,13 @@ func StartLoopbackServer(
 	go func() {
 		// Serve returns ErrServerClosed on graceful shutdown — not an
 		// error worth surfacing. Any other error is propagated to the
-		// caller via the results channel.
+		// caller via the results channel AND the watchdog is signalled
+		// to exit so we don't leak a goroutine for the full 5-min
+		// DefaultLoopbackTimeout window.
 		err := lb.server.Serve(listener)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			lb.deliver(LoopbackResult{Err: fmt.Errorf("oauth: loopback server: %w", err)})
+			lb.shutdown()
 		}
 	}()
 
@@ -203,16 +220,6 @@ func (lb *LoopbackServer) handleCallback(w http.ResponseWriter, r *http.Request)
 	go lb.shutdown()
 }
 
-// joinPath helper used by tests to construct full redirect URLs.
-func joinPath(base, path string) string {
-	u, err := url.Parse(base)
-	if err != nil {
-		return base + path
-	}
-	u.Path = path
-	return u.String()
-}
-
 func writeSuccessPage(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -228,31 +235,8 @@ func writeErrorPage(w http.ResponseWriter, status int, code, description string)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Connection", "close")
 	w.WriteHeader(status)
-	body := fmt.Sprintf(errorPageHTMLTemplate, htmlEscape(code), htmlEscape(description))
+	body := fmt.Sprintf(errorPageHTMLTemplate, html.EscapeString(code), html.EscapeString(description))
 	_, _ = w.Write([]byte(body))
-}
-
-func htmlEscape(s string) string {
-	// Tiny escaper — sufficient for the few fields we render and avoids
-	// pulling in html/template for a single string slot.
-	var out []byte
-	for _, r := range s {
-		switch r {
-		case '&':
-			out = append(out, []byte("&amp;")...)
-		case '<':
-			out = append(out, []byte("&lt;")...)
-		case '>':
-			out = append(out, []byte("&gt;")...)
-		case '"':
-			out = append(out, []byte("&quot;")...)
-		case '\'':
-			out = append(out, []byte("&#39;")...)
-		default:
-			out = append(out, []byte(string(r))...)
-		}
-	}
-	return string(out)
 }
 
 const successPageHTML = `<!doctype html><html><head><meta charset="utf-8"><title>Signed in to HeyGen</title>

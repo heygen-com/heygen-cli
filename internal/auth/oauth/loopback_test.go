@@ -208,10 +208,13 @@ func TestStartLoopbackServer_RejectsNonGet(t *testing.T) {
 func TestStartLoopbackServer_ValidatesArgs(t *testing.T) {
 	tests := []struct {
 		name, path, state string
+		wantSentinel      bool
 	}{
-		{"empty path", "", "s"},
-		{"path missing slash", "callback", "s"},
-		{"empty state", "/cb", ""},
+		{"empty path", "", "s", true},
+		{"path missing slash", "callback", "s", true},
+		{"path with question mark", "/cb?source=cli", "s", true},
+		{"path with fragment", "/cb#frag", "s", true},
+		{"empty state", "/cb", "", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -219,17 +222,12 @@ func TestStartLoopbackServer_ValidatesArgs(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error")
 			}
+			if tc.wantSentinel && !errors.Is(err, ErrInvalidRedirectPath) {
+				t.Errorf("expected ErrInvalidRedirectPath, got %v", err)
+			}
+			if !tc.wantSentinel && errors.Is(err, ErrInvalidRedirectPath) {
+				t.Errorf("did not expect ErrInvalidRedirectPath, got %v", err)
+			}
 		})
-	}
-}
-
-// Sanity: helper is exercised so it stays maintained.
-func TestJoinPath_Helper(t *testing.T) {
-	if got := joinPath("http://127.0.0.1:8080", "/cb"); got != "http://127.0.0.1:8080/cb" {
-		t.Errorf("joinPath = %q", got)
-	}
-	// Fallback path: malformed base.
-	if got := joinPath("::::", "/cb"); got != "::::/cb" {
-		t.Errorf("joinPath fallback = %q", got)
 	}
 }
