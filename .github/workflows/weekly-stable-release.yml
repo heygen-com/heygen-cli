@@ -1,0 +1,169 @@
+name: Weekly Stable Release
+
+# Opens (does NOT publish) a stable release PR once a week, but only if new
+# commits landed on main since the last stable tag. A human refines the draft
+# changelog (via `/changelog-cli`) and merges; the merge triggers
+# release-stable.yml to build, sign, and publish. This keeps a regular cadence
+# without anyone remembering to cut a release, while keeping the merge (and the
+# `release` environment approval) as the human gate. Manual on-demand releases
+# remain available via release-stable.yml's workflow_dispatch (see RELEASE.md).
+
+on:
+  # Monday 09:00 UTC. Early-week so a fresh stable is teed up for the week;
+  # UTC avoids DST ambiguity.
+  schedule:
+    - cron: "0 9 * * 1"
+  # Allow a maintainer to run the same detect-and-open logic on demand.
+  workflow_dispatch:
+
+permissions:
+  contents: write       # create the release/* branch + commit the draft notes (via API, signed)
+  pull-requests: write  # open the release PR
+
+# Never open two release PRs at once.
+concurrency:
+  group: weekly-stable-release
+  cancel-in-progress: false
+
+jobs:
+  open-release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history + tags so we can find the last stable tag and list
+          # commits since it.
+          fetch-depth: 0
+          ref: main
+
+      - name: Determine whether a release is needed and compute version
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Latest stable tag (vX.Y.Z, excluding -dev prereleases).
+          latest_stable="$(git tag --list 'v*' --sort=-v:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+
+          if [[ -z "$latest_stable" ]]; then
+            # No stable tag yet: bootstrap at v0.0.1 and always open the PR.
+            echo "No existing stable tag found; bootstrapping at v0.0.1."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "version=v0.0.1" >> "$GITHUB_OUTPUT"
+            echo "range=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Last stable tag: $latest_stable"
+
+          # Count commits on main since the last stable tag. Empty week => skip.
+          new_commits="$(git rev-list --count "${latest_stable}..origin/main")"
+          echo "Commits on main since ${latest_stable}: ${new_commits}"
+
+          if [[ "$new_commits" -eq 0 ]]; then
+            echo "No new commits since ${latest_stable}; skipping this week."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Patch bump from the last stable tag. Matches the dev-release
+          # auto-derivation and the repo's pre-1.0 convention where the weekly
+          # driver (codegen resyncs, fixes, additive schema) is a patch bump.
+          # Minor/major bumps for new command groups remain a manual release.
+          next="$(echo "$latest_stable" | sed 's/^v//' \
+            | awk -F. '{printf "v%d.%d.%d", $1, $2, $3 + 1}')"
+
+          # If the computed tag already exists (e.g. a manual release raced this
+          # run), skip rather than open a PR for an already-released version.
+          if git rev-parse "$next" >/dev/null 2>&1; then
+            echo "Computed tag ${next} already exists; nothing to do."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Will open a release PR for ${next} (${new_commits} new commit(s))."
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "version=${next}" >> "$GITHUB_OUTPUT"
+          echo "range=${latest_stable}..origin/main" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if a release PR is already open
+        id: existing
+        if: steps.plan.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="release/${VERSION}"
+          # Idempotency keys on an OPEN PR, not the branch ref. An open release
+          # PR (a human may be editing its notes) must not be clobbered. But a
+          # leftover branch from a CLOSED PR must NOT suppress this week's PR:
+          # closing a PR to "skip a week" does not delete its branch, and
+          # latest_stable is unchanged until a release actually merges, so the
+          # next run computes the same version. Keying on the branch ref would
+          # then skip forever. The open-PR step below deletes any such stale
+          # branch before recreating it, so skipping is per-week, not permanent.
+          open_pr="$(gh pr list --repo "${REPO}" --state open --head "${branch}" --json number --jq '.[0].number // ""')"
+          if [[ -n "$open_pr" ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release PR #${open_pr} for ${VERSION} already open; leaving it untouched."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open release PR with a draft changelog
+        if: steps.plan.outputs.release == 'true' && steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          RANGE: ${{ steps.plan.outputs.range }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="release/${VERSION}"
+          today="$(date -u +%Y-%m-%d)"
+          log_range="${RANGE:-origin/main}"
+
+          # Deterministic starting point. The reviewer refines this with
+          # /changelog-cli (see RELEASE.md) before merging; merging publishes.
+          {
+            echo "## ${VERSION} (${today})"
+            echo
+            echo "> Draft generated by the weekly release automation. Refine with \`/changelog-cli ${VERSION}\`, then merge to publish."
+            echo
+            git log --no-merges --pretty='- %s' ${log_range}
+          } > notes.md
+
+          # Delete any stale branch left by a previously closed release PR (see
+          # the idempotency note above) so the ref is recreated from current
+          # main. No-op if the branch does not exist.
+          gh api --method DELETE "repos/${REPO}/git/refs/heads/${branch}" >/dev/null 2>&1 || true
+
+          # Create the release branch at main's head, then commit the draft notes
+          # via the contents API. API-created commits are GitHub-signed
+          # ("Verified"), which the repo's require-signed-commits rule needs — a
+          # plain token push would be rejected.
+          base_sha="$(gh api "repos/${REPO}/git/ref/heads/main" --jq .object.sha)"
+          gh api --method POST "repos/${REPO}/git/refs" \
+            -f ref="refs/heads/${branch}" -f sha="${base_sha}" >/dev/null
+          gh api --method PUT "repos/${REPO}/contents/releases/${VERSION}.md" \
+            -f message="release: ${VERSION} (draft notes)" \
+            -f branch="${branch}" \
+            -f content="$(base64 -w0 notes.md)" >/dev/null
+
+          gh pr create --repo "${REPO}" --base main --head "${branch}" \
+            --title "release: ${VERSION}" \
+            --body "Automated weekly release PR for \`${VERSION}\`.
+
+          **To finalize:** refine \`releases/${VERSION}.md\` (run \`/changelog-cli ${VERSION}\`), review, then **merge** to publish. Merging triggers \`release-stable.yml\` (test, tag, GoReleaser, S3) behind the \`release\` environment approval.
+
+          To skip this week's release, just close this PR."
+
+      - name: Report skip
+        if: steps.plan.outputs.release != 'true' || steps.existing.outputs.exists == 'true'
+        shell: bash
+        run: echo "No new release PR opened this run (see the plan/existing steps for the reason)."

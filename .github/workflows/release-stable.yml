@@ -1,12 +1,19 @@
 name: Stable Release
 
 on:
+  # Manual on-demand cut (see RELEASE.md). Still goes through the `release`
+  # environment approval below.
   workflow_dispatch:
     inputs:
       version:
         description: "Version tag (e.g., v0.1.0)"
         required: true
         type: string
+  # Automated path: merging a `release/vX.Y.Z` PR (opened weekly or by hand)
+  # publishes that version. The job `if` restricts this to MERGED release PRs.
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 permissions:
   contents: write
@@ -14,8 +21,46 @@ permissions:
 
 jobs:
   release:
+    # Run only for a manual dispatch, or when a release/* PR is actually MERGED
+    # (not merely closed). A human performs the merge, so the merge is the gate.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       startsWith(github.event.pull_request.head.ref, 'release/v'))
+    # Serialize stable publishes at the JOB level, not workflow level. This
+    # workflow also fires for every closed PR to main; a workflow-level group
+    # would let those (skipped) runs queue in the group and evict a pending real
+    # release (GitHub keeps only one pending run per group). A job skipped by the
+    # `if` above never enters this group. Queue, don't cancel, so an in-flight
+    # publish finishes and the next release re-validates against the tag it
+    # created (the monotonic guard then rejects a lower version).
+    concurrency:
+      group: stable-release
+      cancel-in-progress: false
+    # Protected environment: a required reviewer must approve before publish.
+    # NOTE: create a `release` environment with a required reviewer in repo
+    # settings; until then this gate is a no-op (the PR review is still a gate).
+    environment: release
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve version
+        id: resolve
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            version="$INPUT_VERSION"
+          else
+            # release/vX.Y.Z -> vX.Y.Z
+            version="${HEAD_REF#release/}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $version"
+
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -27,10 +72,12 @@ jobs:
 
       - name: Validate version
         shell: bash
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
         run: |
           set -euo pipefail
 
-          version="${{ github.event.inputs.version }}"
+          version="$VERSION"
           if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "invalid version: $version" >&2
             exit 1
@@ -39,6 +86,21 @@ jobs:
           if git rev-parse "$version" >/dev/null 2>&1; then
             echo "tag already exists: $version" >&2
             exit 1
+          fi
+
+          # Monotonic guard: refuse a version that is not strictly greater than
+          # the current latest stable tag. This protects the "stable" S3 pointer
+          # from moving backward when a stale/queued release lands after a newer
+          # tag, e.g. the weekly automation opens a patch-bump PR just before a
+          # maintainer cuts a manual minor/major release. Bootstrap (no existing
+          # stable tag) is allowed through.
+          latest="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          if [[ -n "$latest" ]]; then
+            highest="$(printf '%s\n%s\n' "$latest" "$version" | sort -V | tail -n1)"
+            if [[ "$version" == "$latest" || "$highest" != "$version" ]]; then
+              echo "requested version $version is not greater than latest stable tag $latest; refusing to publish a non-increasing stable release" >&2
+              exit 1
+            fi
           fi
 
       - name: Run tests
@@ -54,12 +116,30 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve release notes
+        id: notes
+        shell: bash
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          notes="releases/${VERSION}.md"
+          if [[ -f "$notes" ]]; then
+            echo "flag=--release-notes=${notes}" >> "$GITHUB_OUTPUT"
+            echo "Using reviewed release notes: ${notes}"
+          else
+            echo "flag=" >> "$GITHUB_OUTPUT"
+            echo "No ${notes} found; GoReleaser will autogenerate notes."
+          fi
+
       - name: Create git tag
         shell: bash
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
         run: |
           set -euo pipefail
 
-          version="${{ github.event.inputs.version }}"
+          version="$VERSION"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "$version"
@@ -69,10 +149,10 @@ jobs:
         uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
-          args: release --clean --skip=validate
+          args: release --clean --skip=validate ${{ steps.notes.outputs.flag }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ github.event.inputs.version }}
+          GORELEASER_CURRENT_TAG: ${{ steps.resolve.outputs.version }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -83,7 +163,7 @@ jobs:
       - name: Upload stable release artifacts to S3
         shell: bash
         env:
-          TAG: ${{ github.event.inputs.version }}
+          TAG: ${{ steps.resolve.outputs.version }}
         run: |
           set -euo pipefail
 
