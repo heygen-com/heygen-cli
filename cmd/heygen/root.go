@@ -62,6 +62,10 @@ func newRootCmd(version string, formatter output.Formatter, analyticsClient *ana
 func addGlobalFlags(root *cobra.Command) {
 	root.PersistentFlags().Bool("human", false, "Display output as a formatted table instead of JSON")
 	root.PersistentFlags().StringArray("headers", nil, "Extra HTTP header(s) sent with every request (repeatable, format: Key:Value). Only allowlisted header names are accepted.")
+	// --headers is an internal flag the media-use skill uses for caller
+	// attribution. Keep it functional but hidden from help until it becomes a
+	// supported user-facing feature.
+	_ = root.PersistentFlags().MarkHidden("headers")
 }
 
 // installRootHelpFooter appends environment variables, exit codes, and hints
