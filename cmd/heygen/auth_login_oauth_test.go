@@ -306,8 +306,7 @@ func runOAuthLoginForTest(t *testing.T, cfg oauthLoginConfig) cmdResult {
 	exitCode := 0
 	if err := cmd.Execute(); err != nil {
 		exitCode = 1
-		if _, _ = stderr.WriteString(err.Error()); false {
-		}
+		_, _ = stderr.WriteString(err.Error())
 	}
 	return cmdResult{
 		Stdout:   stdout.String(),
