@@ -260,6 +260,182 @@ func TestAuthLogin_APIKeyFlag_StillSavesKey(t *testing.T) {
 	}
 }
 
+// TestAuthLogin_APIKeyFlow_ClearsPreviousOAuth verifies the
+// single-credential normalization invariant on the api-key path:
+// when an OAuth block is already on disk (pre-this-change user, or
+// a user who logged in via OAuth previously), running
+// `heygen auth login --api-key <newkey>` must drop the OAuth block
+// so the file holds at most one of api_key / oauth.
+func TestAuthLogin_APIKeyFlow_ClearsPreviousOAuth(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", dir)
+	t.Setenv("HEYGEN_API_KEY", "")
+
+	// Seed an OAuth session from a prior login.
+	if err := auth.SaveOAuthTokens(auth.OAuthTokens{
+		AccessToken:  "at_old",
+		RefreshToken: "rt_old",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		Scope:        "openid profile",
+	}); err != nil {
+		t.Fatalf("seed SaveOAuthTokens: %v", err)
+	}
+
+	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("hg_replacement\n"),
+		"auth", "login", "--api-key")
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s\nstdout: %s", res.ExitCode, res.Stderr, res.Stdout)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, "credentials"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(raw), `"hg_replacement"`) {
+		t.Fatalf("api_key was not saved: %s", raw)
+	}
+	if strings.Contains(string(raw), `"oauth"`) {
+		t.Fatalf("OAuth block survived api-key login (single-credential invariant violated):\n%s", raw)
+	}
+	// Stdout JSON should report cleared_oauth=true so callers see the
+	// normalization happened.
+	if !strings.Contains(res.Stdout, `"cleared_oauth":true`) {
+		t.Errorf("stdout = %q, want cleared_oauth=true", res.Stdout)
+	}
+}
+
+// TestAuthLogin_APIKeyFlow_NoPriorOAuth_NoMention: when there's no
+// OAuth block to clear, the success message must NOT mention OAuth.
+// Keeps the happy path quiet for users who only ever used api_key.
+func TestAuthLogin_APIKeyFlow_NoPriorOAuth_NoMention(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", dir)
+
+	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("hg_first\n"),
+		"auth", "login", "--api-key")
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if strings.Contains(res.Stdout, "OAuth") || strings.Contains(res.Stdout, "oauth") {
+		// The boolean field "cleared_oauth":false is fine; we want to
+		// ensure the human-readable message doesn't ramble about
+		// OAuth when there was nothing to clear.
+		if !strings.Contains(res.Stdout, `"cleared_oauth":false`) ||
+			strings.Contains(res.Stdout, "cleared previously-stored OAuth") {
+			t.Errorf("stdout mentions OAuth for an OAuth-less first login: %s", res.Stdout)
+		}
+	}
+}
+
+// TestAuthLogin_OAuthFlow_ClearsPreviousAPIKey verifies the same
+// invariant on the OAuth path: a successful browser login drops any
+// co-located api_key block. Pre-this-change users with both blocks
+// self-heal on their next login.
+func TestAuthLogin_OAuthFlow_ClearsPreviousAPIKey(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", configDir)
+	t.Setenv("HEYGEN_API_KEY", "")
+
+	// Seed an api_key from a prior login.
+	store := &auth.FileCredentialStore{}
+	if err := store.Save("hg_legacy"); err != nil {
+		t.Fatalf("seed Save: %v", err)
+	}
+
+	idp := newFakeIdP(t)
+	usersMe := fakeUsersMeServer(t, `{"data":{"username":"demo","email":"demo@example.com"}}`)
+	cfg := oauthLoginConfig{
+		TokenURL: idp.server.URL + "/v1/oauth/token",
+		OpenBrowser: func(authURL string) error {
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				hitBrowserCallback(t, idp.expectedCode, authURL)
+			}()
+			return nil
+		},
+		UsersMeBaseURL: usersMe.URL,
+		Now:            time.Now,
+	}
+
+	res := runOAuthLoginForTest(t, cfg)
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s\nstdout: %s", res.ExitCode, res.Stderr, res.Stdout)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(configDir, "credentials"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if strings.Contains(string(raw), `"hg_legacy"`) {
+		t.Fatalf("api_key survived OAuth login (single-credential invariant violated):\n%s", raw)
+	}
+	if !strings.Contains(string(raw), `"access_token"`) {
+		t.Fatalf("oauth block missing after OAuth login:\n%s", raw)
+	}
+	if !strings.Contains(res.Stdout, `"cleared_api_key":true`) {
+		t.Errorf("stdout = %q, want cleared_api_key=true", res.Stdout)
+	}
+}
+
+// TestAuthLogin_CredentialConflict_SelfHeals walks the full
+// "pre-this-change user with both blocks" scenario end-to-end:
+//
+//  1. seed a file with both api_key + oauth (legacy state from a
+//     prior CLI version),
+//  2. run `auth status` — must report api_key (per C2 precedence),
+//  3. run `auth login --api-key <newkey>` — must save the new key
+//     AND drop the OAuth block (per C3 normalization),
+//  4. final file must hold only an api_key, no oauth section.
+func TestAuthLogin_CredentialConflict_SelfHeals(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", dir)
+	t.Setenv("HEYGEN_API_KEY", "")
+
+	// Seed both blocks via the legacy round-trip (Save then SaveOAuth
+	// — Save preserves a co-located oauth block, so this is the same
+	// file shape an old version would produce).
+	store := &auth.FileCredentialStore{}
+	if err := store.Save("hg_legacy"); err != nil {
+		t.Fatalf("seed Save: %v", err)
+	}
+	if err := auth.SaveOAuthTokens(auth.OAuthTokens{
+		AccessToken:  "at_legacy",
+		RefreshToken: "rt_legacy",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("seed SaveOAuthTokens: %v", err)
+	}
+
+	// (2) Resolver must select api_key under the new precedence.
+	r := &auth.FileCredentialResolver{}
+	cred, err := r.ResolveCredential()
+	if err != nil {
+		t.Fatalf("ResolveCredential: %v", err)
+	}
+	if cred.APIKey != "hg_legacy" {
+		t.Fatalf("legacy file: resolved cred = %+v, want APIKey hg_legacy", cred)
+	}
+
+	// (3) Next api-key login must drop the OAuth block.
+	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader("hg_new\n"),
+		"auth", "login", "--api-key")
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	// (4) Final file holds only api_key, no oauth.
+	raw, err := os.ReadFile(filepath.Join(dir, "credentials"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(raw), `"hg_new"`) {
+		t.Fatalf("new api_key missing: %s", raw)
+	}
+	if strings.Contains(string(raw), `"oauth"`) {
+		t.Fatalf("oauth block survived conflict self-heal:\n%s", raw)
+	}
+}
+
 // TestAuthLogin_DeviceCode_NotYetSupported guards the placeholder flag.
 func TestAuthLogin_DeviceCode_NotYetSupported(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())

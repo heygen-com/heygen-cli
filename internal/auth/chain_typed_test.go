@@ -156,7 +156,7 @@ func TestOAuthStore_RoundTrip(t *testing.T) {
 	}
 }
 
-// ClearOAuthTokens without --all preserves api_key.
+// ClearOAuthTokens(alsoAPIKey=false) preserves any co-located api_key.
 func TestOAuthStore_ClearPreservesAPIKey(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", dir)
@@ -187,7 +187,9 @@ func TestOAuthStore_ClearPreservesAPIKey(t *testing.T) {
 	}
 }
 
-// ClearOAuthTokens with --all removes file when api_key also wiped.
+// ClearOAuthTokens(alsoAPIKey=true) removes the file when the api_key
+// is also wiped. (Used by `auth logout` under the single-credential
+// normalization invariant.)
 func TestOAuthStore_ClearAllRemovesFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", dir)

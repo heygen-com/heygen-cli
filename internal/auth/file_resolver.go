@@ -91,16 +91,26 @@ func isJSONObject(s string) bool {
 //
 // Precedence (when both an OAuth block and an api_key are present):
 //
-//  1. A non-expired OAuth access_token wins. OAuth is the new
-//     default-recommended path; an api_key that's still co-located is
-//     treated as legacy.
-//  2. An OAuth refresh_token (with no fresh access_token) wins — caller
-//     will refresh + persist before the first request.
-//  3. Otherwise fall back to api_key.
+//  1. api_key wins. heygen-cli is agent-first; the API-key path is the
+//     dominant use case, so when a file holds both we prefer it.
+//     Going forward the runner clears the other block on login, so
+//     this branch mostly matters for pre-this-change users who still
+//     have a stale OAuth block co-located with the api_key they
+//     re-saved.
+//  2. A non-expired OAuth access_token.
+//  3. An OAuth refresh_token (no fresh access_token) — caller will
+//     refresh + persist before the first request.
 //
 // Errors are plain `error` (not ErrNotConfigured) so the chain resolver
 // surfaces a present-but-unusable file rather than skipping it.
 func selectCredential(parsed jsonCredentials, path string) (*Credential, error) {
+	if parsed.APIKey != "" {
+		return &Credential{
+			Type:   CredentialTypeAPIKey,
+			APIKey: parsed.APIKey,
+			Source: SourceFile,
+		}, nil
+	}
 	if parsed.OAuth != nil && parsed.OAuth.AccessToken != "" {
 		expiresAt := parseOAuthExpiry(parsed.OAuth.ExpiresAt)
 		if !oauthExpired(expiresAt, nowFn()) {
@@ -123,12 +133,10 @@ func selectCredential(parsed jsonCredentials, path string) (*Credential, error) 
 			}, nil
 		}
 		// Expired access token, no refresh token, no api_key — unusable.
-		if parsed.APIKey == "" {
-			return nil, fmt.Errorf(
-				"credentials file %s holds an expired OAuth session with no refresh token; run `heygen auth login`",
-				path,
-			)
-		}
+		return nil, fmt.Errorf(
+			"credentials file %s holds an expired OAuth session with no refresh token; run `heygen auth login`",
+			path,
+		)
 	}
 	if parsed.OAuth != nil && parsed.OAuth.RefreshToken != "" && parsed.OAuth.AccessToken == "" {
 		// Refresh-only block (no access token at all). Same shape as
@@ -138,13 +146,6 @@ func selectCredential(parsed jsonCredentials, path string) (*Credential, error) 
 			RefreshToken: parsed.OAuth.RefreshToken,
 			Scope:        parsed.OAuth.Scope,
 			Source:       SourceFile,
-		}, nil
-	}
-	if parsed.APIKey != "" {
-		return &Credential{
-			Type:   CredentialTypeAPIKey,
-			APIKey: parsed.APIKey,
-			Source: SourceFile,
 		}, nil
 	}
 	return nil, fmt.Errorf("credentials file %s has no usable credential", path)

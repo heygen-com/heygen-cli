@@ -42,7 +42,7 @@ func TestAuthLogout_ClearsOAuthBlock(t *testing.T) {
 	}))
 	defer revoke.Close()
 
-	res := runAuthLogoutForTest(t, false, authLogoutConfig{RevokeURL: revoke.URL + "/v1/oauth/revoke"})
+	res := runAuthLogoutForTest(t, authLogoutConfig{RevokeURL: revoke.URL + "/v1/oauth/revoke"})
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
@@ -57,7 +57,12 @@ func TestAuthLogout_ClearsOAuthBlock(t *testing.T) {
 	}
 }
 
-func TestAuthLogout_PreservesAPIKey(t *testing.T) {
+// TestAuthLogout_ClearsBothBlocks: with the single-credential
+// normalization invariant a fresh post-this-change file holds only one
+// of api_key / oauth, but logout still has to be safe against
+// pre-this-change files that hold both. Both blocks must be cleared and
+// the file removed.
+func TestAuthLogout_ClearsBothBlocks(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", dir)
 	store := &auth.FileCredentialStore{}
@@ -72,39 +77,44 @@ func TestAuthLogout_PreservesAPIKey(t *testing.T) {
 
 	// Pin revoke to a dead endpoint — best-effort means it still
 	// succeeds locally.
-	res := runAuthLogoutForTest(t, false, authLogoutConfig{RevokeURL: "http://127.0.0.1:1/revoke"})
+	res := runAuthLogoutForTest(t, authLogoutConfig{RevokeURL: "http://127.0.0.1:1/revoke"})
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	// API key block preserved.
-	raw, err := os.ReadFile(filepath.Join(dir, "credentials"))
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if !strings.Contains(string(raw), `"hg_keepme"`) {
-		t.Errorf("api_key was wiped by logout (default): %s", raw)
-	}
-	if strings.Contains(string(raw), `"oauth"`) {
-		t.Errorf("oauth block still present after logout: %s", raw)
-	}
-}
-
-func TestAuthLogout_All_AlsoClearsAPIKey(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HEYGEN_CONFIG_DIR", dir)
-	store := &auth.FileCredentialStore{}
-	_ = store.Save("hg_clear")
-	_ = auth.SaveOAuthTokens(auth.OAuthTokens{AccessToken: "at", RefreshToken: "rt", ExpiresAt: time.Now().Add(time.Hour)})
-
-	res := runAuthLogoutForTest(t, true, authLogoutConfig{RevokeURL: "http://127.0.0.1:1/revoke"})
-	if res.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
-	}
 	// File should be gone entirely — no api_key + no oauth.
 	if _, err := os.Stat(filepath.Join(dir, "credentials")); !os.IsNotExist(err) {
 		raw, _ := os.ReadFile(filepath.Join(dir, "credentials"))
-		t.Errorf("credentials file still exists after --all: %s", raw)
+		t.Errorf("credentials file still exists after logout: %s", raw)
+	}
+
+	// JSON envelope reports cleared_credential=both for pre-existing
+	// dual-block files.
+	if !strings.Contains(res.Stdout, `"cleared_credential":"both"`) {
+		t.Errorf("stdout = %q, want cleared_credential=both", res.Stdout)
+	}
+}
+
+func TestAuthLogout_ClearsAPIKeyOnly(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", dir)
+	store := &auth.FileCredentialStore{}
+	if err := store.Save("hg_clear"); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	res := runAuthLogoutForTest(t, authLogoutConfig{RevokeURL: "http://127.0.0.1:1/revoke"})
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "credentials")); !os.IsNotExist(err) {
+		t.Errorf("credentials file still exists after api-key-only logout")
+	}
+	if !strings.Contains(res.Stderr, "Cleared stored API key") {
+		t.Errorf("stderr = %q, want 'Cleared stored API key'", res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, `"cleared_credential":"api_key"`) {
+		t.Errorf("stdout = %q, want cleared_credential=api_key", res.Stdout)
 	}
 }
 
@@ -112,16 +122,16 @@ func TestAuthLogout_NoSession_NoOp(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", dir)
 
-	res := runAuthLogoutForTest(t, false, authLogoutConfig{RevokeURL: "http://127.0.0.1:1/revoke"})
+	res := runAuthLogoutForTest(t, authLogoutConfig{RevokeURL: "http://127.0.0.1:1/revoke"})
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0", res.ExitCode)
 	}
-	if !strings.Contains(res.Stderr, "No OAuth session") {
-		t.Errorf("stderr = %q, want 'No OAuth session'", res.Stderr)
+	if !strings.Contains(res.Stderr, "No stored credentials") {
+		t.Errorf("stderr = %q, want 'No stored credentials'", res.Stderr)
 	}
 }
 
-func runAuthLogoutForTest(t *testing.T, alsoAPIKey bool, cfg authLogoutConfig) cmdResult {
+func runAuthLogoutForTest(t *testing.T, cfg authLogoutConfig) cmdResult {
 	t.Helper()
 	var stdout, stderr strings.Builder
 	formatter := formatterForArgs([]string{"auth", "logout"}, &stdout, &stderr)
@@ -134,7 +144,7 @@ func runAuthLogoutForTest(t *testing.T, alsoAPIKey bool, cfg authLogoutConfig) c
 	cmd.SetErr(&stderr)
 	cmd.SetArgs([]string{})
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return runAuthLogout(c, ctx, alsoAPIKey, cfg)
+		return runAuthLogout(c, ctx, cfg)
 	}
 	exitCode := 0
 	if err := cmd.Execute(); err != nil {

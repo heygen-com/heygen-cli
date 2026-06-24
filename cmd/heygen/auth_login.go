@@ -93,18 +93,18 @@ func newAuthLoginCmd(ctx *cmdContext) *cobra.Command {
 		Long: `Authenticate the CLI against HeyGen.
 
 Interactive shells (stdin + stdout are both TTYs): an interactive
-picker offers two options:
+picker offers two options, defaulted to the API-key path:
 
-  • Login with HeyGen.com (browser OAuth — uses subscription credits)
   • Use an API key (paste an existing key — uses API credits)
+  • Login with HeyGen.com (browser OAuth — uses subscription credits)
 
 Non-interactive shells (piped stdin/stdout, CI=true, or
-HEYGEN_NONINTERACTIVE=1): defaults to the API-key flow so unattended
-agents and scripts keep working unchanged.
+HEYGEN_NONINTERACTIVE=1): skips the picker and runs the API-key flow
+so unattended agents and scripts keep working unchanged.
 
 Flags skip the picker:
-  --oauth     Start the browser OAuth flow directly
   --api-key   Read an API key from stdin (interactive prompt or pipe)
+  --oauth     Start the browser OAuth flow directly
 
 The OAuth flow opens your default browser to
 https://app.heygen.com/oauth/authorize and waits for the redirect on a
@@ -113,7 +113,12 @@ HEYGEN_NO_BROWSER=1 to print the URL instead of opening it.
 
 The API-key flow stores the key at ~/.heygen/credentials with mode
 0600. The HEYGEN_API_KEY environment variable takes priority over any
-stored credential when both are set.`,
+stored credential when both are set.
+
+Single-credential normalization: a successful login clears the other
+credential block (api_key or oauth) so the file holds at most one per
+session. Pre-this-change users with both blocks self-heal on their
+next login.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAuthLogin(cmd, ctx, authLoginFlags{
 				apiKeyMode:     apiKeyMode,
@@ -241,6 +246,11 @@ func errorsAsPickerCanceled(err error) bool {
 
 // runAPIKeyLogin is the legacy stdin/prompt API-key flow, retained
 // behind --api-key so existing automation keeps working unchanged.
+//
+// On success, any co-located OAuth block from a prior session is
+// cleared so the file holds at most one of api_key / oauth (the
+// single-credential normalization invariant). Pre-this-change users
+// with both blocks self-heal on their next login.
 func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
 	key, err := readAPIKey(cmd.InOrStdin(), cmd.ErrOrStderr())
 	if err != nil {
@@ -259,15 +269,47 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
 		)
 	}
 
+	// Detect a pre-existing OAuth block before save so we can vary the
+	// success message. LoadOAuthTokens returns ErrNotConfigured when no
+	// oauth block is present; any other error (e.g. malformed file) we
+	// surface immediately so we don't clobber a recoverable session.
+	hadOAuth := false
+	if _, loadErr := auth.LoadOAuthTokens(); loadErr == nil {
+		hadOAuth = true
+	} else {
+		var notConfigured *auth.ErrNotConfigured
+		if !errors.As(loadErr, &notConfigured) {
+			return clierrors.New(fmt.Sprintf("failed to read credentials: %v", loadErr))
+		}
+	}
+
 	store := &auth.FileCredentialStore{}
 	if err := store.Save(key); err != nil {
 		return clierrors.New(fmt.Sprintf("failed to save credentials: %v", err))
 	}
 
+	// Single-credential normalization: drop any stale OAuth block so the
+	// file holds at most one of api_key / oauth. ClearOAuthTokens(false)
+	// only clears the oauth block; the api_key we just saved is left in
+	// place. A missing file is a no-op (treated as already-normalized).
+	clearedOAuth := false
+	if hadOAuth {
+		if err := auth.ClearOAuthTokens(false); err != nil {
+			return clierrors.New(fmt.Sprintf("failed to clear previous OAuth session: %v", err))
+		}
+		clearedOAuth = true
+	}
+
 	credPath := filepath.Join(paths.ConfigDir(), "credentials")
-	data, err := json.Marshal(map[string]string{
-		"message": "API key saved to " + credPath,
-	})
+	message := "API key saved to " + credPath
+	if clearedOAuth {
+		message += " (cleared previously-stored OAuth session)"
+	}
+	payload := map[string]any{
+		"message":       message,
+		"cleared_oauth": clearedOAuth,
+	}
+	data, err := json.Marshal(payload)
 	if err != nil {
 		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
 	}
@@ -371,6 +413,15 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 		return clierrors.New(fmt.Sprintf("failed to save credentials: %v", err))
 	}
 
+	// Single-credential normalization: drop any stale api_key block so
+	// the file holds at most one of api_key / oauth. ClearAPIKey
+	// reports whether one was actually cleared so the success message
+	// can mention it.
+	clearedAPIKey, err := auth.ClearAPIKey()
+	if err != nil {
+		return clierrors.New(fmt.Sprintf("failed to clear previous API key: %v", err))
+	}
+
 	// Best-effort identity probe so we can surface "Logged in as ...".
 	// A failure here doesn't roll back the login (tokens are on disk and
 	// usable); we just leave the identity blank in the success payload.
@@ -387,10 +438,15 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	username, email := lookupCurrentUser(cmdCtx, tok.AccessToken, probeBase)
 
 	credPath := filepath.Join(paths.ConfigDir(), "credentials")
+	message := "Signed in via OAuth; credentials saved to " + credPath
+	if clearedAPIKey {
+		message += " (cleared previously-stored API key)"
+	}
 	payload := map[string]any{
-		"message":    "Signed in via OAuth; credentials saved to " + credPath,
-		"expires_at": "",
-		"scope":      tok.Scope,
+		"message":         message,
+		"expires_at":      "",
+		"scope":           tok.Scope,
+		"cleared_api_key": clearedAPIKey,
 	}
 	if !expiresAt.IsZero() {
 		payload["expires_at"] = expiresAt.UTC().Format(time.RFC3339)

@@ -18,6 +18,11 @@ import (
 // key path without ever instantiating the model below.
 type loginChoice int
 
+// The numeric ordering of these constants is independent of how the
+// picker renders them — the runner is selected by the loginChoice
+// returned, not by the cursor's row. We keep the values stable so
+// downstream switches stay exhaustive even as the picker ordering
+// evolves.
 const (
 	loginChoiceOAuth loginChoice = iota
 	loginChoiceAPIKey
@@ -45,16 +50,22 @@ type loginPickerOption struct {
 	description string
 }
 
+// loginPickerOptions controls both the order rows render in AND the
+// default highlighted choice (the first entry, cursor index 0). The
+// API-key path is listed first / marked Recommended because heygen-cli
+// is agent-first — most installs feed a pre-provisioned key. OAuth
+// stays a one-arrow-down opt-in for users who want subscription
+// pricing.
 var loginPickerOptions = []loginPickerOption{
-	{
-		choice:      loginChoiceOAuth,
-		title:       "Login with HeyGen.com",
-		description: "Opens a browser. Uses subscription credits. (Recommended)",
-	},
 	{
 		choice:      loginChoiceAPIKey,
 		title:       "Use an API key",
-		description: "Paste an existing key. Uses API credits.",
+		description: "Paste an existing key. Uses API credits. (Recommended)",
+	},
+	{
+		choice:      loginChoiceOAuth,
+		title:       "Login with HeyGen.com",
+		description: "Opens a browser. Uses subscription credits.",
 	},
 }
 

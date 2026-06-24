@@ -88,11 +88,12 @@ func TestAuthLogin_Success(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
 
-	var parsed map[string]string
+	var parsed map[string]any
 	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
 	}
-	if parsed["message"] == "" {
+	msg, _ := parsed["message"].(string)
+	if msg == "" {
 		t.Fatalf("expected success message, got %v", parsed)
 	}
 

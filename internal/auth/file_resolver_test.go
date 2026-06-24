@@ -162,24 +162,38 @@ func TestFileCredentialResolver_JSON_OAuthOnly_TypedIsAccepted(t *testing.T) {
 	}
 }
 
-// When both an OAuth session and an api_key are co-located, a fresh
-// OAuth credential wins — OAuth is the new default. The api_key is left
-// alone on disk and still selectable via the api-key code path.
-func TestFileCredentialResolver_JSON_BothPrefersOAuth(t *testing.T) {
+// TestResolveCredential_FileAPIKeyBeatsFileOAuth: when both an OAuth
+// session and an api_key are co-located, api_key wins. heygen-cli is
+// agent-first; the api_key path is the dominant use case. Going forward
+// the login runner clears the other block on login, so this scenario
+// mostly matters for pre-this-change users who still have a stale
+// OAuth block co-located with the api_key they re-saved.
+func TestResolveCredential_FileAPIKeyBeatsFileOAuth(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	future := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
-	writeCredentials(t, `{"api_key":"hg_legacy","oauth":{"access_token":"fresh_at","expires_at":"`+future+`"}}`)
+	writeCredentials(t, `{"api_key":"hg_winner","oauth":{"access_token":"fresh_at","expires_at":"`+future+`"}}`)
 
 	r := &FileCredentialResolver{}
 	cred, err := r.ResolveCredential()
 	if err != nil {
 		t.Fatalf("ResolveCredential: %v", err)
 	}
-	if cred.Type != CredentialTypeOAuth {
-		t.Fatalf("Type = %v, want CredentialTypeOAuth (OAuth wins over api_key)", cred.Type)
+	if cred.Type != CredentialTypeAPIKey {
+		t.Fatalf("Type = %v, want CredentialTypeAPIKey (api_key wins over OAuth in file)", cred.Type)
 	}
-	if cred.AccessToken != "fresh_at" {
-		t.Fatalf("AccessToken = %q, want fresh_at", cred.AccessToken)
+	if cred.APIKey != "hg_winner" {
+		t.Fatalf("APIKey = %q, want hg_winner", cred.APIKey)
+	}
+
+	// Legacy string Resolve() also returns the api_key — no more
+	// "OAuth-aware transport required" refusal when api_key is the
+	// selected credential.
+	key, err := r.Resolve()
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if key != "hg_winner" {
+		t.Fatalf("Resolve key = %q, want hg_winner", key)
 	}
 }
 
@@ -218,7 +232,10 @@ func TestFileCredentialResolver_JSON_OAuthExpired_NoRefresh_NoAPIKey(t *testing.
 }
 
 // Expired access_token + no refresh_token but a co-located api_key
-// should fall back to api_key.
+// resolves to api_key. (Under the api-key-first precedence the api_key
+// is selected directly before the OAuth-expiry branch ever runs, but
+// we keep this test so the "expired oauth + api_key" combination has
+// explicit coverage either way.)
 func TestFileCredentialResolver_JSON_OAuthExpired_FallsToAPIKey(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	past := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
