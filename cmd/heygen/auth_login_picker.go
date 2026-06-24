@@ -52,15 +52,16 @@ type loginPickerOption struct {
 
 // loginPickerOptions controls both the order rows render in AND the
 // default highlighted choice (the first entry, cursor index 0). The
-// API-key path is listed first / marked Recommended because heygen-cli
-// is agent-first — most installs feed a pre-provisioned key. OAuth
-// stays a one-arrow-down opt-in for users who want subscription
-// pricing.
+// API-key path is listed first because heygen-cli is agent-first —
+// most installs feed a pre-provisioned key. OAuth stays a
+// one-arrow-down option for users who want subscription pricing.
+// No "Recommended" label per James — position + description carry
+// the suggestion without being prescriptive.
 var loginPickerOptions = []loginPickerOption{
 	{
 		choice:      loginChoiceAPIKey,
 		title:       "Use an API key",
-		description: "Paste an existing key. Uses API credits. (Recommended)",
+		description: "Paste an existing key. Uses API credits.",
 	},
 	{
 		choice:      loginChoiceOAuth,
