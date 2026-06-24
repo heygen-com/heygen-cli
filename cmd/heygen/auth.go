@@ -10,12 +10,17 @@ import (
 // Referenced by auth_login.go, auth_status.go, and the auth group help below.
 var authGuidance = `Two ways to authenticate:
 
-  1. Browser OAuth (default — opens https://app.heygen.com):
-       heygen auth login
+  1. Browser OAuth (uses subscription credits — opens https://app.heygen.com):
+       heygen auth login --oauth
 
-  2. API key (interactive prompt or piped on stdin):
+  2. API key (uses API credits — interactive prompt or piped on stdin):
        heygen auth login --api-key
        echo "$KEY" | heygen auth login --api-key
+
+In an interactive shell, plain "heygen auth login" presents a picker
+that lets you choose between the two. Non-interactive shells (piped
+stdin, CI=true, HEYGEN_NONINTERACTIVE=1) default to the API-key flow
+so agents and scripts keep working unchanged.
 
 The HEYGEN_API_KEY environment variable also takes priority over any
 stored credential when both are set.

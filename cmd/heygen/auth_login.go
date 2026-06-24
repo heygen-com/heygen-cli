@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -39,44 +41,183 @@ var defaultOAuthLoginConfig = oauthLoginConfig{
 // authLoginRedirectPath is the loopback path the browser callback hits.
 const authLoginRedirectPath = "/oauth/callback"
 
+// stdoutIsTerminalFunc and nonInteractiveEnvFunc are overridable in
+// tests so the dispatch logic in runAuthLogin can be exercised without
+// a real TTY or having to mutate the process environment.
+var (
+	stdoutIsTerminalFunc = func() bool {
+		return term.IsTerminal(int(os.Stdout.Fd()))
+	}
+	// nonInteractiveEnvFunc reports whether the environment is asking
+	// us to skip the picker even on a TTY (CI runners, agent shells
+	// that wrap our stdin but still expose a tty, etc).
+	nonInteractiveEnvFunc = func() bool {
+		if v := strings.TrimSpace(os.Getenv("HEYGEN_NONINTERACTIVE")); v != "" && v != "0" && !strings.EqualFold(v, "false") {
+			return true
+		}
+		if v := strings.TrimSpace(os.Getenv("CI")); v != "" && v != "0" && !strings.EqualFold(v, "false") {
+			return true
+		}
+		return false
+	}
+)
+
 func newAuthLoginCmd(ctx *cmdContext) *cobra.Command {
 	var apiKeyMode bool
+	var oauthMode bool
 	var deviceCodeMode bool
 
 	cmd := &cobra.Command{
 		Use:         "login",
-		Short:       "Log in via browser (OAuth) — or with --api-key to paste an API key",
+		Short:       "Log in to HeyGen (interactive picker; --oauth / --api-key to skip)",
 		Annotations: map[string]string{"skipAuth": "true"},
 		Long: `Authenticate the CLI against HeyGen.
 
-Default (no flags): browser-based OAuth + PKCE flow. The CLI opens your
-default browser to https://app.heygen.com/oauth/authorize and waits for
-the redirect on a one-shot loopback HTTP server on 127.0.0.1.
+Interactive shells (stdin + stdout are both TTYs): an interactive
+picker offers two options:
 
-Headless / SSH / CI: the browser cannot open, so the CLI prints the URL
-for you to open elsewhere. Set BROWSER=none or HEYGEN_NO_BROWSER=1 to
-force this behavior.
+  • Login with HeyGen.com (browser OAuth — uses subscription credits)
+  • Use an API key (paste an existing key — uses API credits)
 
---api-key: skip OAuth and paste an API key from stdin (interactive or
-piped). The key is stored at ~/.heygen/credentials with mode 0600.
+Non-interactive shells (piped stdin/stdout, CI=true, or
+HEYGEN_NONINTERACTIVE=1): defaults to the API-key flow so unattended
+agents and scripts keep working unchanged.
 
-The HEYGEN_API_KEY environment variable takes priority over any stored
-credential when both are set.`,
+Flags skip the picker:
+  --oauth     Start the browser OAuth flow directly
+  --api-key   Read an API key from stdin (interactive prompt or pipe)
+
+The OAuth flow opens your default browser to
+https://app.heygen.com/oauth/authorize and waits for the redirect on a
+one-shot loopback HTTP server on 127.0.0.1. Set BROWSER=none or
+HEYGEN_NO_BROWSER=1 to print the URL instead of opening it.
+
+The API-key flow stores the key at ~/.heygen/credentials with mode
+0600. The HEYGEN_API_KEY environment variable takes priority over any
+stored credential when both are set.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if deviceCodeMode {
-				return clierrors.NewUsage(
-					"--device-code is not yet supported; use the default browser flow or --api-key",
-				)
-			}
-			if apiKeyMode {
-				return runAPIKeyLogin(cmd, ctx)
-			}
-			return runOAuthLogin(cmd, ctx, defaultOAuthLoginConfig)
+			return runAuthLogin(cmd, ctx, authLoginFlags{
+				apiKeyMode:     apiKeyMode,
+				oauthMode:      oauthMode,
+				deviceCodeMode: deviceCodeMode,
+			})
 		},
 	}
-	cmd.Flags().BoolVar(&apiKeyMode, "api-key", false, "Use API-key login (read key from stdin) instead of browser OAuth")
+	cmd.Flags().BoolVar(&apiKeyMode, "api-key", false, "Skip the picker and use API-key login (read key from stdin)")
+	cmd.Flags().BoolVar(&oauthMode, "oauth", false, "Skip the picker and start the browser OAuth flow")
 	cmd.Flags().BoolVar(&deviceCodeMode, "device-code", false, "Use device-code OAuth flow (not yet supported)")
+	cmd.MarkFlagsMutuallyExclusive("api-key", "oauth")
 	return cmd
+}
+
+// authLoginFlags packages the user-facing flag selections so the
+// dispatcher (runAuthLogin) is straightforward to unit-test without
+// having to build a full cobra command tree.
+type authLoginFlags struct {
+	apiKeyMode     bool
+	oauthMode      bool
+	deviceCodeMode bool
+}
+
+// runAuthLoginDeps wires runtime dependencies that we want to swap
+// out in tests — TTY detection, environment-based non-interactive
+// overrides, the picker entry point, and the two backing runners.
+// Production callers leave every field zero/nil and we fall back to
+// the package-level defaults.
+type runAuthLoginDeps struct {
+	stdinIsTerminal  func() bool
+	stdoutIsTerminal func() bool
+	nonInteractive   func() bool
+	runPicker        func(ctx context.Context, stdin io.Reader, stderr io.Writer) (loginChoice, error)
+	runOAuth         func(cmd *cobra.Command, ctx *cmdContext) error
+	runAPIKey        func(cmd *cobra.Command, ctx *cmdContext) error
+}
+
+// runAuthLoginTestDeps lets tests inject a fully stubbed dependency
+// bundle for runAuthLogin without going through the package-level
+// dispatch defaults. Left nil in production.
+var runAuthLoginTestDeps *runAuthLoginDeps
+
+// runAuthLogin parses the flags and the environment to decide which
+// login flow to run. Explicit flags always win; otherwise we show the
+// picker if both stdin and stdout are TTYs AND no non-interactive
+// override is in effect, else we default to the API-key flow.
+func runAuthLogin(cmd *cobra.Command, ctx *cmdContext, flags authLoginFlags) error {
+	if flags.deviceCodeMode {
+		return clierrors.NewUsage(
+			"--device-code is not yet supported; use the default browser flow or --api-key",
+		)
+	}
+
+	deps := runAuthLoginDeps{}
+	if runAuthLoginTestDeps != nil {
+		deps = *runAuthLoginTestDeps
+	}
+	if deps.stdinIsTerminal == nil {
+		deps.stdinIsTerminal = stdinIsTerminalFunc
+	}
+	if deps.stdoutIsTerminal == nil {
+		deps.stdoutIsTerminal = stdoutIsTerminalFunc
+	}
+	if deps.nonInteractive == nil {
+		deps.nonInteractive = nonInteractiveEnvFunc
+	}
+	if deps.runPicker == nil {
+		deps.runPicker = runPickerFunc
+	}
+	if deps.runOAuth == nil {
+		deps.runOAuth = func(c *cobra.Command, x *cmdContext) error {
+			return runOAuthLogin(c, x, defaultOAuthLoginConfig)
+		}
+	}
+	if deps.runAPIKey == nil {
+		deps.runAPIKey = runAPIKeyLogin
+	}
+
+	switch {
+	case flags.oauthMode:
+		return deps.runOAuth(cmd, ctx)
+	case flags.apiKeyMode:
+		return deps.runAPIKey(cmd, ctx)
+	}
+
+	// No explicit flag — pick a path from the environment. The picker
+	// only makes sense when stdin AND stdout are real TTYs (otherwise
+	// either the user can't see the menu or Bubble Tea can't read
+	// keystrokes), and only when nothing in the environment has asked
+	// us to behave non-interactively.
+	if deps.stdinIsTerminal() && deps.stdoutIsTerminal() && !deps.nonInteractive() {
+		choice, err := deps.runPicker(cmd.Context(), cmd.InOrStdin(), cmd.ErrOrStderr())
+		if err != nil {
+			if errors.Is(err, pickerCanceledError{}) || errorsAsPickerCanceled(err) {
+				return newCanceledError()
+			}
+			return err
+		}
+		switch choice {
+		case loginChoiceOAuth:
+			return deps.runOAuth(cmd, ctx)
+		case loginChoiceAPIKey:
+			return deps.runAPIKey(cmd, ctx)
+		default:
+			return clierrors.New(fmt.Sprintf("unknown login choice: %d", choice))
+		}
+	}
+
+	// Non-interactive shells default to the API-key flow per the team
+	// decision: agents and CI runners feed keys on stdin, and the
+	// browser-OAuth dance has nowhere to land its loopback callback
+	// when there's no human to click "Allow".
+	return deps.runAPIKey(cmd, ctx)
+}
+
+// errorsAsPickerCanceled lets us treat a pickerCanceledError that has
+// been wrapped (e.g. by errors.New) the same as a direct sentinel
+// match. The picker itself returns the bare value, but defensive code
+// downstream may wrap it.
+func errorsAsPickerCanceled(err error) bool {
+	var target pickerCanceledError
+	return errors.As(err, &target)
 }
 
 // runAPIKeyLogin is the legacy stdin/prompt API-key flow, retained
