@@ -8,9 +8,15 @@ import (
 // jsonCredentials is the on-disk format hyperframes-CLI (and heygen-cli,
 // since the write-side change) persist to ~/.heygen/credentials. Mirror
 // the shape used by packages/cli/src/auth/store.ts in hyperframes-oss.
+//
+// The `user` block is additive friendly-display metadata captured at
+// login time from /v3/users/me — NOT a credential. It is safe to persist
+// alongside either credential type and is cleared whenever the credential
+// itself is cleared.
 type jsonCredentials struct {
 	APIKey string           `json:"api_key,omitempty"`
 	OAuth  *jsonOAuthTokens `json:"oauth,omitempty"`
+	User   *jsonUserInfo    `json:"user,omitempty"`
 }
 
 // jsonOAuthTokens is parsed and round-tripped (so heygen-cli preserves a
@@ -22,6 +28,17 @@ type jsonOAuthTokens struct {
 	ExpiresAt    string `json:"expires_at,omitempty"`
 	Scope        string `json:"scope,omitempty"`
 	TokenType    string `json:"token_type,omitempty"`
+}
+
+// jsonUserInfo is the friendly-display block captured at login time from
+// /v3/users/me. All fields are optional — a credentials file without a
+// user block is fully backwards-compatible (existing logins surface only
+// after re-login).
+type jsonUserInfo struct {
+	Email     string `json:"email,omitempty"`
+	FirstName string `json:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty"`
+	Username  string `json:"username,omitempty"`
 }
 
 // nowFn is the wall-clock source used when comparing OAuth expiry. Tests
