@@ -58,6 +58,11 @@ func newAuthStatusCmd(ctx *cmdContext) *cobra.Command {
 // any of the secret values themselves. Returns nil on any resolution
 // failure so the existing happy path remains unchanged for api-key
 // users.
+//
+// Also folds in the persisted friendly-display block (email / name /
+// username) under a `user` key so callers can surface "Logged in as
+// ..." without re-hitting /v3/users/me. The block is omitted when the
+// credentials file holds no user block (e.g. pre-this-change logins).
 func credentialMetadata() map[string]any {
 	resolver := &auth.ChainCredentialResolver{
 		Resolvers: []auth.CredentialResolver{
@@ -90,6 +95,32 @@ func credentialMetadata() map[string]any {
 		meta["scope"] = cred.Scope
 		if !cred.ExpiresAt.IsZero() {
 			meta["expires_at"] = cred.ExpiresAt.UTC().Format(time.RFC3339)
+		}
+	}
+	// Friendly-display block — only present when the source is the
+	// credentials file AND a user block was persisted at login time.
+	// Env-based credentials (HEYGEN_API_KEY) deliberately don't carry
+	// friendly fields because we never probe /v3/users/me on cold env
+	// reads — the user can re-run `auth login` if they want them.
+	if cred.Source == auth.SourceFile {
+		if ui, loadErr := auth.LoadUserInfo(); loadErr == nil && !ui.IsZero() {
+			userMeta := map[string]any{}
+			if ui.Email != "" {
+				userMeta["email"] = ui.Email
+			}
+			if ui.FirstName != "" {
+				userMeta["first_name"] = ui.FirstName
+			}
+			if ui.LastName != "" {
+				userMeta["last_name"] = ui.LastName
+			}
+			if ui.Username != "" {
+				userMeta["username"] = ui.Username
+			}
+			if display := ui.DisplayName(); display != "" {
+				userMeta["display_name"] = display
+			}
+			meta["user"] = userMeta
 		}
 	}
 	return meta

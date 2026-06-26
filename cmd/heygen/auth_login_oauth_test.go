@@ -193,9 +193,12 @@ func TestAuthLogin_OAuthFlow_PersistsTokens(t *testing.T) {
 		}
 	}
 
-	// Stderr should mention "Logged in as demo" (from /v3/users/me).
-	if !strings.Contains(res.Stderr, "Logged in as demo") {
-		t.Errorf("stderr = %q, want 'Logged in as demo'", res.Stderr)
+	// Stderr should mention "Logged in as demo@example.com" — the
+	// friendly-display change prefers email over username so the
+	// status line surfaces a recognizable identity rather than an
+	// opaque handle. (Falls back to "first last" then username.)
+	if !strings.Contains(res.Stderr, "Logged in as demo@example.com") {
+		t.Errorf("stderr = %q, want 'Logged in as demo@example.com'", res.Stderr)
 	}
 
 	// Stdout JSON should expose the credential metadata so callers can
@@ -484,8 +487,11 @@ func TestAuthLogin_OAuthFlow_HonorsHEYGEN_API_BASEForUsersMeProbe(t *testing.T) 
 	if res.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0\nstderr: %s\nstdout: %s", res.ExitCode, res.Stderr, res.Stdout)
 	}
-	if !strings.Contains(res.Stderr, "Logged in as sandbox-user") {
-		t.Errorf("stderr = %q, want 'Logged in as sandbox-user' (probe should have hit %s, not api.heygen.com)", res.Stderr, usersMe.URL)
+	// The probe should have hit usersMe.URL (via HEYGEN_API_BASE) and
+	// returned u@example.com. Friendly-display prefers email, so the
+	// status line surfaces the email rather than the username.
+	if !strings.Contains(res.Stderr, "Logged in as u@example.com") {
+		t.Errorf("stderr = %q, want 'Logged in as u@example.com' (probe should have hit %s, not api.heygen.com)", res.Stderr, usersMe.URL)
 	}
 }
 

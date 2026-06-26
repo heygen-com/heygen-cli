@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -21,6 +22,22 @@ func writeCredentials(t *testing.T, contents string) string {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	return path
+}
+
+// readRawJSON decodes the on-disk credentials file into a generic map so
+// tests can assert the presence of keys this CLI doesn't model (which the
+// typed jsonCredentials view deliberately hides on its `extra` field).
+func readRawJSON(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("on-disk file is not valid JSON: %v\ncontents: %s", err, data)
+	}
+	return out
 }
 
 // --- legacy plaintext ------------------------------------------------------
@@ -313,10 +330,17 @@ func TestFileCredentialResolver_MultiLineNonJSONIsRejected(t *testing.T) {
 	}
 }
 
-func TestFileCredentialResolver_JSON_DropsUnknownFields(t *testing.T) {
+// Cross-CLI forward compatibility: the credentials file is SHARED with
+// the Node hyperframes CLI. heygen-cli must NOT strip top-level / nested
+// keys it doesn't model when it rewrites the file, or it silently
+// destroys data the other CLI wrote (and vice versa). The reader stashes
+// unrecognized keys and the writer re-emits them verbatim. This mirrors
+// the Node-side hardening in hyperframes#1741.
+func TestFileCredentialResolver_JSON_PreservesUnknownFields(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
-	writeCredentials(t, `{"api_key":"hg_x","future_field":{"nested":true}}`)
+	path := writeCredentials(t, `{"api_key":"hg_x","future_field":{"nested":true}}`)
 
+	// Reading still resolves the known credential cleanly.
 	r := &FileCredentialResolver{}
 	key, err := r.Resolve()
 	if err != nil {
@@ -324,5 +348,83 @@ func TestFileCredentialResolver_JSON_DropsUnknownFields(t *testing.T) {
 	}
 	if key != "hg_x" {
 		t.Fatalf("key = %q, want hg_x", key)
+	}
+
+	// And the unknown key is captured on the parsed value so the next
+	// write round-trips it instead of dropping it.
+	parsed, _, err := loadCredentialsFile(path)
+	if err != nil {
+		t.Fatalf("loadCredentialsFile: %v", err)
+	}
+	if _, ok := parsed.extra["future_field"]; !ok {
+		t.Fatalf("future_field not captured for round-trip, extra = %v", parsed.extra)
+	}
+
+	// Rewrite the file (here: re-save the same parsed value). The
+	// unknown key must survive on disk.
+	if err := writeCredentialsFile(path, parsed); err != nil {
+		t.Fatalf("writeCredentialsFile: %v", err)
+	}
+	onDisk := readRawJSON(t, path)
+	if onDisk["api_key"] != "hg_x" {
+		t.Fatalf("api_key = %v, want hg_x", onDisk["api_key"])
+	}
+	ff, ok := onDisk["future_field"].(map[string]any)
+	if !ok || ff["nested"] != true {
+		t.Fatalf("future_field not preserved on round-trip: %v", onDisk["future_field"])
+	}
+}
+
+// An unknown key INSIDE the oauth sub-object (e.g. a future id_token the
+// hyperframes CLI starts writing) must survive a heygen-cli round-trip.
+func TestFileCredentialResolver_JSON_PreservesUnknownOAuthSubKey(t *testing.T) {
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	path := writeCredentials(t, `{"oauth":{"access_token":"at_1","id_token":"future_id_token_value"}}`)
+
+	parsed, _, err := loadCredentialsFile(path)
+	if err != nil {
+		t.Fatalf("loadCredentialsFile: %v", err)
+	}
+	if err := writeCredentialsFile(path, parsed); err != nil {
+		t.Fatalf("writeCredentialsFile: %v", err)
+	}
+
+	onDisk := readRawJSON(t, path)
+	oauth, ok := onDisk["oauth"].(map[string]any)
+	if !ok {
+		t.Fatalf("oauth block missing after round-trip: %v", onDisk)
+	}
+	if oauth["access_token"] != "at_1" {
+		t.Fatalf("oauth.access_token = %v, want at_1", oauth["access_token"])
+	}
+	if oauth["id_token"] != "future_id_token_value" {
+		t.Fatalf("oauth.id_token not preserved: %v", oauth["id_token"])
+	}
+}
+
+// An unknown key INSIDE the user sub-object (e.g. a future avatar_url)
+// must survive a heygen-cli round-trip.
+func TestFileCredentialResolver_JSON_PreservesUnknownUserSubKey(t *testing.T) {
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	path := writeCredentials(t, `{"api_key":"hg_x","user":{"email":"u@example.com","avatar_url":"https://cdn/x.png"}}`)
+
+	parsed, _, err := loadCredentialsFile(path)
+	if err != nil {
+		t.Fatalf("loadCredentialsFile: %v", err)
+	}
+	if err := writeCredentialsFile(path, parsed); err != nil {
+		t.Fatalf("writeCredentialsFile: %v", err)
+	}
+
+	onDisk := readRawJSON(t, path)
+	user, ok := onDisk["user"].(map[string]any)
+	if !ok {
+		t.Fatalf("user block missing after round-trip: %v", onDisk)
+	}
+	if user["email"] != "u@example.com" {
+		t.Fatalf("user.email = %v, want u@example.com", user["email"])
+	}
+	if user["avatar_url"] != "https://cdn/x.png" {
+		t.Fatalf("user.avatar_url not preserved: %v", user["avatar_url"])
 	}
 }

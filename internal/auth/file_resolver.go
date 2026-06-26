@@ -1,16 +1,39 @@
 package auth
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 )
+
+// Cross-CLI forward compatibility: the ~/.heygen/credentials file is
+// SHARED with the Node hyperframes CLI (and any future tool). Either CLI
+// may write keys this version doesn't model yet. To avoid one CLI
+// silently clobbering the other's data on a read → write round-trip,
+// every struct below captures the unrecognized keys it sees into an
+// unexported `extra` bag at unmarshal time and re-emits them verbatim at
+// marshal time. Known fields stay strictly typed and validated; the
+// passthrough is purely additive and never feeds an HTTP header. This
+// mirrors the Node-side hardening in hyperframes-oss
+// (packages/cli/src/auth/store.ts).
 
 // jsonCredentials is the on-disk format hyperframes-CLI (and heygen-cli,
 // since the write-side change) persist to ~/.heygen/credentials. Mirror
 // the shape used by packages/cli/src/auth/store.ts in hyperframes-oss.
+//
+// The `user` block is additive friendly-display metadata captured at
+// login time from /v3/users/me — NOT a credential. It is safe to persist
+// alongside either credential type and is cleared whenever the credential
+// itself is cleared.
 type jsonCredentials struct {
 	APIKey string           `json:"api_key,omitempty"`
 	OAuth  *jsonOAuthTokens `json:"oauth,omitempty"`
+	User   *jsonUserInfo    `json:"user,omitempty"`
+	// extra holds unknown/foreign top-level keys captured at read time so
+	// the next write round-trips them instead of dropping another CLI's
+	// data. Never serialized as its own key — see (un)marshalExtras.
+	extra map[string]json.RawMessage
 }
 
 // jsonOAuthTokens is parsed and round-tripped (so heygen-cli preserves a
@@ -22,6 +45,160 @@ type jsonOAuthTokens struct {
 	ExpiresAt    string `json:"expires_at,omitempty"`
 	Scope        string `json:"scope,omitempty"`
 	TokenType    string `json:"token_type,omitempty"`
+	// extra holds unknown keys seen inside the oauth sub-object (e.g. a
+	// future `id_token`), round-tripped verbatim.
+	extra map[string]json.RawMessage
+}
+
+// jsonUserInfo is the friendly-display block captured at login time from
+// /v3/users/me. All fields are optional — a credentials file without a
+// user block is fully backwards-compatible (existing logins surface only
+// after re-login).
+type jsonUserInfo struct {
+	Email     string `json:"email,omitempty"`
+	FirstName string `json:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty"`
+	Username  string `json:"username,omitempty"`
+	// extra holds unknown keys seen inside the user sub-object (e.g. a
+	// future `avatar_url`), round-tripped verbatim.
+	extra map[string]json.RawMessage
+}
+
+// unmarshalExtras decodes data into the typed value pointed to by known
+// (the caller passes a recursion-breaking alias) and, separately,
+// captures every top-level key NOT named in knownKeys into a raw bag.
+// Returns the bag (nil when there are no unknown keys) so the caller can
+// stash it on the struct's `extra` field. Known fields stay strictly
+// typed; only the residue is preserved opaquely.
+func unmarshalExtras(data []byte, known any, knownKeys map[string]struct{}) (map[string]json.RawMessage, error) {
+	if err := json.Unmarshal(data, known); err != nil {
+		return nil, err
+	}
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal(data, &all); err != nil {
+		return nil, err
+	}
+	var extra map[string]json.RawMessage
+	for k, v := range all {
+		if _, ok := knownKeys[k]; ok {
+			continue
+		}
+		if extra == nil {
+			extra = make(map[string]json.RawMessage, len(all))
+		}
+		extra[k] = v
+	}
+	return extra, nil
+}
+
+// marshalExtras serializes the typed value pointed to by known (via the
+// caller's alias) and merges the preserved unknown keys back in. Known
+// fields are authoritative — collection already excluded them, so a
+// collision can't normally occur; on the off chance one does, the known
+// field wins. Keys are emitted in sorted order for deterministic,
+// diff-friendly output.
+func marshalExtras(known any, extra map[string]json.RawMessage) ([]byte, error) {
+	knownBytes, err := json.Marshal(known)
+	if err != nil {
+		return nil, err
+	}
+	if len(extra) == 0 {
+		return knownBytes, nil
+	}
+	var merged map[string]json.RawMessage
+	if err := json.Unmarshal(knownBytes, &merged); err != nil {
+		return nil, err
+	}
+	if merged == nil {
+		merged = make(map[string]json.RawMessage, len(extra))
+	}
+	for k, v := range extra {
+		if _, clash := merged[k]; clash {
+			continue // known field wins
+		}
+		merged[k] = v
+	}
+	keys := make([]string, 0, len(merged))
+	for k := range merged {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	buf := []byte{'{'}
+	for i, k := range keys {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+		kb, err := json.Marshal(k)
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, kb...)
+		buf = append(buf, ':')
+		buf = append(buf, merged[k]...)
+	}
+	buf = append(buf, '}')
+	return buf, nil
+}
+
+var (
+	knownCredentialsKeys = map[string]struct{}{"api_key": {}, "oauth": {}, "user": {}}
+	knownOAuthKeys       = map[string]struct{}{
+		"access_token": {}, "refresh_token": {}, "expires_at": {}, "scope": {}, "token_type": {},
+	}
+	knownUserKeys = map[string]struct{}{
+		"email": {}, "first_name": {}, "last_name": {}, "username": {},
+	}
+)
+
+func (c *jsonCredentials) UnmarshalJSON(data []byte) error {
+	type alias jsonCredentials
+	var a alias
+	extra, err := unmarshalExtras(data, &a, knownCredentialsKeys)
+	if err != nil {
+		return err
+	}
+	*c = jsonCredentials(a)
+	c.extra = extra
+	return nil
+}
+
+func (c jsonCredentials) MarshalJSON() ([]byte, error) {
+	type alias jsonCredentials
+	return marshalExtras(alias(c), c.extra)
+}
+
+func (o *jsonOAuthTokens) UnmarshalJSON(data []byte) error {
+	type alias jsonOAuthTokens
+	var a alias
+	extra, err := unmarshalExtras(data, &a, knownOAuthKeys)
+	if err != nil {
+		return err
+	}
+	*o = jsonOAuthTokens(a)
+	o.extra = extra
+	return nil
+}
+
+func (o jsonOAuthTokens) MarshalJSON() ([]byte, error) {
+	type alias jsonOAuthTokens
+	return marshalExtras(alias(o), o.extra)
+}
+
+func (u *jsonUserInfo) UnmarshalJSON(data []byte) error {
+	type alias jsonUserInfo
+	var a alias
+	extra, err := unmarshalExtras(data, &a, knownUserKeys)
+	if err != nil {
+		return err
+	}
+	*u = jsonUserInfo(a)
+	u.extra = extra
+	return nil
+}
+
+func (u jsonUserInfo) MarshalJSON() ([]byte, error) {
+	type alias jsonUserInfo
+	return marshalExtras(alias(u), u.extra)
 }
 
 // nowFn is the wall-clock source used when comparing OAuth expiry. Tests

@@ -38,6 +38,22 @@ var defaultOAuthLoginConfig = oauthLoginConfig{
 	TokenURL:     oauth.DefaultTokenURL,
 }
 
+// apiKeyLoginConfig is overridable in tests so the api-key login flow's
+// friendly-display probe can be driven against an httptest /v3/users/me
+// without depending on the production base URL. Production callers
+// leave every field zero — the dispatcher reads ctx.configProvider for
+// the base URL the same way oauth login does.
+type apiKeyLoginConfig struct {
+	// UsersMeBaseURL pins the /v3/users/me base URL (test-only). When
+	// empty, the dispatcher falls back to ctx.configProvider.BaseURL().
+	UsersMeBaseURL string
+}
+
+// apiKeyLoginConfigForTest is set by tests that need to override the
+// friendly-display probe target. Production callers leave this nil so
+// runAPIKeyLogin walks the standard ctx.configProvider path.
+var apiKeyLoginConfigForTest *apiKeyLoginConfig
+
 // authLoginRedirectPath is the loopback path the browser callback hits.
 const authLoginRedirectPath = "/oauth/callback"
 
@@ -303,6 +319,34 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
 		clearedOAuth = true
 	}
 
+	// Best-effort identity probe so we can surface "Logged in as ..."
+	// for api-key callers too. Same contract as the OAuth probe — a
+	// failure here is non-fatal; the api_key on disk is still usable,
+	// and the user just won't see friendly fields until the next
+	// successful re-login.
+	//
+	// Resolve the base URL the same way the OAuth flow does so a CLI
+	// pointed at a dev sandbox via HEYGEN_API_BASE doesn't accidentally
+	// hit production for the probe.
+	probeBase := ""
+	if apiKeyLoginConfigForTest != nil {
+		probeBase = apiKeyLoginConfigForTest.UsersMeBaseURL
+	}
+	if probeBase == "" && ctx.configProvider != nil {
+		probeBase = ctx.configProvider.BaseURL()
+	}
+	userInfo := lookupCurrentUserAPIKey(cmd.Context(), key, probeBase)
+	if !userInfo.IsZero() {
+		if saveErr := auth.SaveUserInfo(userInfo); saveErr != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "(warning: could not persist user info: %v)\n", saveErr)
+		}
+	} else if clearErr := auth.ClearUserInfo(); clearErr != nil {
+		// Probe failed but a stale user block from a prior login may
+		// still be on disk. Best-effort clear; a failure here is
+		// non-fatal (stale display is a minor UX bug, not security).
+		fmt.Fprintf(cmd.ErrOrStderr(), "(warning: could not clear stale user info: %v)\n", clearErr)
+	}
+
 	credPath := filepath.Join(paths.ConfigDir(), "credentials")
 	message := "API key saved to " + credPath
 	if clearedOAuth {
@@ -312,9 +356,24 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
 		"message":       message,
 		"cleared_oauth": clearedOAuth,
 	}
+	if userInfo.Username != "" {
+		payload["username"] = userInfo.Username
+	}
+	if userInfo.Email != "" {
+		payload["email"] = userInfo.Email
+	}
+	if userInfo.FirstName != "" {
+		payload["first_name"] = userInfo.FirstName
+	}
+	if userInfo.LastName != "" {
+		payload["last_name"] = userInfo.LastName
+	}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
+	}
+	if display := userInfo.DisplayName(); display != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", display)
 	}
 	return ctx.formatter.Data(data, "", nil)
 }
@@ -438,7 +497,24 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	if probeBase == "" && ctx.configProvider != nil {
 		probeBase = ctx.configProvider.BaseURL()
 	}
-	username, email := lookupCurrentUser(cmdCtx, tok.AccessToken, probeBase)
+	userInfo := lookupCurrentUser(cmdCtx, tok.AccessToken, probeBase)
+
+	// Persist the friendly-display block alongside the OAuth tokens so
+	// subsequent `auth status` invocations can show "Logged in as ..."
+	// without re-hitting /v3/users/me. Best-effort: a persist failure is
+	// non-fatal (login proceeds; the user just won't see friendly fields
+	// until the next successful re-login).
+	if !userInfo.IsZero() {
+		if saveErr := auth.SaveUserInfo(userInfo); saveErr != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "(warning: could not persist user info: %v)\n", saveErr)
+		}
+	} else if clearErr := auth.ClearUserInfo(); clearErr != nil {
+		// Probe failed AND the file might still hold a stale user block
+		// from a prior login (different account). Best-effort clear; a
+		// failure here is non-fatal — stale display is a minor UX bug,
+		// not a security issue.
+		fmt.Fprintf(cmd.ErrOrStderr(), "(warning: could not clear stale user info: %v)\n", clearErr)
+	}
 
 	credPath := filepath.Join(paths.ConfigDir(), "credentials")
 	message := "Signed in via OAuth; credentials saved to " + credPath
@@ -454,20 +530,24 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	if !expiresAt.IsZero() {
 		payload["expires_at"] = expiresAt.UTC().Format(time.RFC3339)
 	}
-	if username != "" {
-		payload["username"] = username
+	if userInfo.Username != "" {
+		payload["username"] = userInfo.Username
 	}
-	if email != "" {
-		payload["email"] = email
+	if userInfo.Email != "" {
+		payload["email"] = userInfo.Email
+	}
+	if userInfo.FirstName != "" {
+		payload["first_name"] = userInfo.FirstName
+	}
+	if userInfo.LastName != "" {
+		payload["last_name"] = userInfo.LastName
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
 	}
-	if username != "" {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", username)
-	} else if email != "" {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", email)
+	if display := userInfo.DisplayName(); display != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", display)
 	} else {
 		fmt.Fprintln(cmd.ErrOrStderr(), "Logged in.")
 	}
@@ -475,45 +555,90 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 }
 
 // lookupCurrentUser GETs /v3/users/me with the freshly minted Bearer
-// token and pulls a display name from the response. The CLI doesn't
-// have the regular Client wired up yet at this point (we just minted
-// the credential), so we issue a one-shot http call rather than
-// re-bootstrapping the resolver.
-func lookupCurrentUser(ctx context.Context, accessToken, baseURL string) (username, email string) {
+// token and pulls the friendly-display fields from the response. The
+// CLI doesn't have the regular Client wired up yet at this point (we
+// just minted the credential), so we issue a one-shot http call rather
+// than re-bootstrapping the resolver.
+//
+// On any failure (network, non-200, malformed body) returns a zero
+// UserInfo with no error — the caller treats this as "friendly display
+// unavailable" and proceeds without it. The login itself is NEVER
+// rolled back on a probe failure.
+func lookupCurrentUser(ctx context.Context, accessToken, baseURL string) auth.UserInfo {
+	req, err := buildUsersMeRequest(ctx, baseURL)
+	if err != nil {
+		return auth.UserInfo{}
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("User-Agent", "heygen-cli/oauth-login")
+	return runUsersMeRequest(req)
+}
+
+// lookupCurrentUserAPIKey is the api_key equivalent of
+// lookupCurrentUser. It sends the key on the x-api-key header (the
+// transport that the api_key resolver would use) and pulls the same
+// friendly-display fields. Same best-effort contract — a failure here
+// is non-fatal and yields a zero UserInfo.
+func lookupCurrentUserAPIKey(ctx context.Context, apiKey, baseURL string) auth.UserInfo {
+	req, err := buildUsersMeRequest(ctx, baseURL)
+	if err != nil {
+		return auth.UserInfo{}
+	}
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("User-Agent", "heygen-cli/apikey-login")
+	return runUsersMeRequest(req)
+}
+
+// buildUsersMeRequest assembles the GET /v3/users/me request shared by
+// both lookup paths. Centralized so the OAuth and api_key variants
+// can't drift on URL / headers / context plumbing.
+func buildUsersMeRequest(ctx context.Context, baseURL string) (*http.Request, error) {
 	if baseURL == "" {
 		baseURL = "https://api.heygen.com"
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/v3/users/me", nil)
 	if err != nil {
-		return "", ""
+		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "heygen-cli/oauth-login")
+	return req, nil
+}
 
+// runUsersMeRequest executes the prepared /v3/users/me probe and
+// decodes the friendly-display fields. Returns a zero UserInfo on any
+// failure (network, non-200, malformed body) — the caller treats this
+// as "friendly display unavailable" and proceeds without it.
+func runUsersMeRequest(req *http.Request) auth.UserInfo {
 	hc := &http.Client{Timeout: 10 * time.Second}
 	resp, err := hc.Do(req) //nolint:gosec // G704: short-lived /v3/users/me probe
 	if err != nil {
-		return "", ""
+		return auth.UserInfo{}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", ""
+		return auth.UserInfo{}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return "", ""
+		return auth.UserInfo{}
 	}
 	var envelope struct {
 		Data struct {
-			Username string `json:"username"`
-			Email    string `json:"email"`
+			Username  string `json:"username"`
+			Email     string `json:"email"`
+			FirstName string `json:"first_name"`
+			LastName  string `json:"last_name"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
-		return "", ""
+		return auth.UserInfo{}
 	}
-	return envelope.Data.Username, envelope.Data.Email
+	return auth.UserInfo{
+		Username:  envelope.Data.Username,
+		Email:     envelope.Data.Email,
+		FirstName: envelope.Data.FirstName,
+		LastName:  envelope.Data.LastName,
+	}
 }
 
 func readAPIKey(in io.Reader, errOut io.Writer) (string, error) {

@@ -129,6 +129,55 @@ func TestFileCredentialStore_PreservesExistingOAuth(t *testing.T) {
 	}
 }
 
+func TestFileCredentialStore_PreservesUnknownFieldsThroughSave(t *testing.T) {
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+
+	// The cross-CLI data-loss scenario exercised through the public Save
+	// path: the Node hyperframes CLI wrote a top-level key (and a nested
+	// oauth key) heygen-cli doesn't model. A heygen-cli `auth login`
+	// (FileCredentialStore.Save) must NOT strip them.
+	path := filepath.Join(paths.ConfigDir(), "credentials")
+	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	seed := `{"oauth":{"access_token":"at_keep","id_token":"future_id"},"future_field":{"flag":true}}`
+	if err := os.WriteFile(path, []byte(seed), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	s := &FileCredentialStore{}
+	if err := s.Save("hg_new_key"); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var onDisk map[string]any
+	if err := json.Unmarshal(data, &onDisk); err != nil {
+		t.Fatalf("on-disk file is not valid JSON: %v\ncontents: %s", err, data)
+	}
+
+	if onDisk["api_key"] != "hg_new_key" {
+		t.Fatalf("api_key = %v, want hg_new_key", onDisk["api_key"])
+	}
+	ff, ok := onDisk["future_field"].(map[string]any)
+	if !ok || ff["flag"] != true {
+		t.Fatalf("unknown top-level future_field dropped by Save: %v", onDisk["future_field"])
+	}
+	oauth, ok := onDisk["oauth"].(map[string]any)
+	if !ok {
+		t.Fatalf("oauth block missing after Save: %v", onDisk)
+	}
+	if oauth["access_token"] != "at_keep" {
+		t.Fatalf("oauth.access_token = %v, want at_keep", oauth["access_token"])
+	}
+	if oauth["id_token"] != "future_id" {
+		t.Fatalf("unknown oauth.id_token dropped by Save: %v", oauth["id_token"])
+	}
+}
+
 func TestFileCredentialStore_RefusesToClobberMalformedFile(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 

@@ -122,8 +122,12 @@ func ClearOAuthTokens(alsoAPIKey bool) error {
 		parsed.APIKey = ""
 	}
 	if parsed.APIKey == "" && parsed.OAuth == nil {
+		// No credential left — the friendly-display block is orphaned
+		// metadata. Drop it and remove the now-empty file.
 		return removeCredentialsFile(path)
 	}
+	// At least one credential survives — preserve the user block on
+	// disk so it stays visible to the survivor.
 	return writeCredentialsFile(path, parsed)
 }
 
