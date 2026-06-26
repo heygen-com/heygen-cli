@@ -58,7 +58,7 @@ Run `heygen completion --help` for per-shell install instructions.
 
 ## Authenticate
 
-Choose one of the three options below. The first two are agent- and CI-friendly; the third is for humans.
+Choose one of the options below. The first three are agent- and CI-friendly; the last two are for humans.
 
 **1. Environment variable** — agents, CI; ephemeral, no file on disk:
 
@@ -66,19 +66,35 @@ Choose one of the three options below. The first two are agent- and CI-friendly;
 export HEYGEN_API_KEY=your-key-here
 ```
 
-**2. Pipe to `auth login`** — agents; persists to `~/.heygen/credentials`:
+**2. Pipe to `auth login`** — agents; persists API key to `~/.heygen/credentials`:
 
 ```bash
 echo "$KEY" | heygen auth login
 ```
 
-**3. Interactive `auth login`** — humans; persists to `~/.heygen/credentials`:
+**3. Explicit `--api-key`** — humans paste from a prompt:
+
+```bash
+heygen auth login --api-key
+```
+
+**4. Browser OAuth** — humans, Pro / Max subscription users; persists OAuth tokens to `~/.heygen/credentials`:
+
+```bash
+heygen auth login --oauth
+```
+
+**5. Interactive picker** — humans, no flag: a TTY prompt lets you choose between API key (uses API credits) and OAuth (uses subscription credits):
 
 ```bash
 heygen auth login
 ```
 
-Verify any of the above with `heygen auth status`. Get a key at [app.heygen.com/settings/api](https://app.heygen.com/settings/api).
+Verify any of the above with `heygen auth status`. Get an API key at [app.heygen.com/settings/api](https://app.heygen.com/settings/api).
+
+> **Single-credential file.** The credentials file holds at most **one** of `api_key` / OAuth tokens at any time. Running `heygen auth login` (any method) clears the other on success — re-login overwrites, it does not merge. `heygen auth status` will tell you which one is active.
+>
+> `HEYGEN_API_KEY` in the environment always wins over either file credential.
 
 ## Quick start
 
@@ -162,7 +178,7 @@ Example error envelope:
 
 | File | Purpose |
 |------|---------|
-| `~/.heygen/credentials` | API key |
+| `~/.heygen/credentials` | API key **or** OAuth tokens (one at a time — see [Authenticate](#authenticate)) |
 | `~/.heygen/config.toml` | Output format and other non-secret settings |
 
 `HEYGEN_API_KEY` and `HEYGEN_OUTPUT` env vars override the respective files.

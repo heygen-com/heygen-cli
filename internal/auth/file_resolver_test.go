@@ -128,50 +128,149 @@ func TestFileCredentialResolver_JSON_APIKeyOnly(t *testing.T) {
 	}
 }
 
-// heygen-cli can only transmit an api_key (x-api-key header), so an
-// OAuth-only file is unusable and must surface a clear error rather than
-// returning the access_token to be mis-sent as an API key.
-func TestFileCredentialResolver_JSON_OAuthOnlyIsRejected(t *testing.T) {
+// PR 2: an OAuth-only file is now usable via ResolveCredential — the
+// resolver surfaces a typed OAuth credential the transport sends as
+// `Authorization: Bearer ...`. The legacy string Resolve() still refuses
+// it so older string-only call sites never accidentally feed an
+// access_token into the x-api-key header.
+func TestFileCredentialResolver_JSON_OAuthOnly_TypedIsAccepted(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	future := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
-	writeCredentials(t, `{"oauth":{"access_token":"fresh_at","expires_at":"`+future+`"}}`)
+	writeCredentials(t, `{"oauth":{"access_token":"fresh_at","expires_at":"`+future+`","scope":"openid profile"}}`)
 
 	r := &FileCredentialResolver{}
-	_, err := r.Resolve()
-	if err == nil {
-		t.Fatal("expected error for an OAuth-only file, got nil")
+	cred, err := r.ResolveCredential()
+	if err != nil {
+		t.Fatalf("ResolveCredential: %v", err)
 	}
-	var notConfigured *ErrNotConfigured
-	if errors.As(err, &notConfigured) {
-		t.Fatalf("OAuth-only file should surface a usable error, not ErrNotConfigured: %T", err)
+	if cred.Type != CredentialTypeOAuth {
+		t.Fatalf("Type = %v, want CredentialTypeOAuth", cred.Type)
+	}
+	if cred.AccessToken != "fresh_at" {
+		t.Fatalf("AccessToken = %q, want fresh_at", cred.AccessToken)
+	}
+	if cred.Scope != "openid profile" {
+		t.Fatalf("Scope = %q, want openid profile", cred.Scope)
+	}
+	if cred.Source != SourceFile {
+		t.Fatalf("Source = %q, want file", cred.Source)
+	}
+
+	// String Resolve still refuses — backwards-compat guard.
+	if _, err := r.Resolve(); err == nil {
+		t.Fatal("expected legacy string Resolve to refuse an OAuth credential")
 	}
 }
 
-// When both are present, api_key wins — it's the only credential
-// heygen-cli can actually send.
-func TestFileCredentialResolver_JSON_BothPrefersAPIKey(t *testing.T) {
+// TestResolveCredential_FileAPIKeyBeatsFileOAuth: when both an OAuth
+// session and an api_key are co-located, api_key wins. heygen-cli is
+// agent-first; the api_key path is the dominant use case. Going forward
+// the login runner clears the other block on login, so this scenario
+// mostly matters for pre-this-change users who still have a stale
+// OAuth block co-located with the api_key they re-saved.
+func TestResolveCredential_FileAPIKeyBeatsFileOAuth(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	future := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
-	writeCredentials(t, `{"api_key":"hg_use_me","oauth":{"access_token":"fresh_at","expires_at":"`+future+`"}}`)
+	writeCredentials(t, `{"api_key":"hg_winner","oauth":{"access_token":"fresh_at","expires_at":"`+future+`"}}`)
 
 	r := &FileCredentialResolver{}
+	cred, err := r.ResolveCredential()
+	if err != nil {
+		t.Fatalf("ResolveCredential: %v", err)
+	}
+	if cred.Type != CredentialTypeAPIKey {
+		t.Fatalf("Type = %v, want CredentialTypeAPIKey (api_key wins over OAuth in file)", cred.Type)
+	}
+	if cred.APIKey != "hg_winner" {
+		t.Fatalf("APIKey = %q, want hg_winner", cred.APIKey)
+	}
+
+	// Legacy string Resolve() also returns the api_key — no more
+	// "OAuth-aware transport required" refusal when api_key is the
+	// selected credential.
 	key, err := r.Resolve()
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if key != "hg_use_me" {
-		t.Fatalf("key = %q, want hg_use_me (api_key must win over oauth)", key)
+	if key != "hg_winner" {
+		t.Fatalf("Resolve key = %q, want hg_winner", key)
 	}
 }
 
-func TestFileCredentialResolver_JSON_OAuthOnlyNoExpiryIsRejected(t *testing.T) {
+// Expired access_token + a refresh_token should yield an
+// OAuthExpired credential so the transport refreshes before the
+// first request.
+func TestFileCredentialResolver_JSON_OAuthExpired_HasRefresh(t *testing.T) {
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	past := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	writeCredentials(t, `{"oauth":{"access_token":"stale","refresh_token":"rt_keep","expires_at":"`+past+`"}}`)
+
+	r := &FileCredentialResolver{}
+	cred, err := r.ResolveCredential()
+	if err != nil {
+		t.Fatalf("ResolveCredential: %v", err)
+	}
+	if cred.Type != CredentialTypeOAuthExpired {
+		t.Fatalf("Type = %v, want CredentialTypeOAuthExpired", cred.Type)
+	}
+	if cred.RefreshToken != "rt_keep" {
+		t.Fatalf("RefreshToken = %q, want rt_keep", cred.RefreshToken)
+	}
+}
+
+// Expired access_token AND no refresh_token AND no api_key is unusable.
+func TestFileCredentialResolver_JSON_OAuthExpired_NoRefresh_NoAPIKey(t *testing.T) {
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	past := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	writeCredentials(t, `{"oauth":{"access_token":"stale","expires_at":"`+past+`"}}`)
+
+	r := &FileCredentialResolver{}
+	_, err := r.ResolveCredential()
+	if err == nil {
+		t.Fatal("expected error when access expired + no refresh + no api_key")
+	}
+}
+
+// Expired access_token + no refresh_token but a co-located api_key
+// resolves to api_key. (Under the api-key-first precedence the api_key
+// is selected directly before the OAuth-expiry branch ever runs, but
+// we keep this test so the "expired oauth + api_key" combination has
+// explicit coverage either way.)
+func TestFileCredentialResolver_JSON_OAuthExpired_FallsToAPIKey(t *testing.T) {
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	past := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	writeCredentials(t, `{"api_key":"hg_backup","oauth":{"access_token":"stale","expires_at":"`+past+`"}}`)
+
+	r := &FileCredentialResolver{}
+	cred, err := r.ResolveCredential()
+	if err != nil {
+		t.Fatalf("ResolveCredential: %v", err)
+	}
+	if cred.Type != CredentialTypeAPIKey {
+		t.Fatalf("Type = %v, want CredentialTypeAPIKey", cred.Type)
+	}
+	if cred.APIKey != "hg_backup" {
+		t.Fatalf("APIKey = %q, want hg_backup", cred.APIKey)
+	}
+}
+
+// An OAuth block with no expiry information at all is treated as "no
+// information" and the access_token is used optimistically — the
+// transport will fall back to refresh-on-401.
+func TestFileCredentialResolver_JSON_OAuthNoExpiry(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 	writeCredentials(t, `{"oauth":{"access_token":"at_no_expiry"}}`)
 
 	r := &FileCredentialResolver{}
-	_, err := r.Resolve()
-	if err == nil {
-		t.Fatal("expected error for an OAuth-only file, got nil")
+	cred, err := r.ResolveCredential()
+	if err != nil {
+		t.Fatalf("ResolveCredential: %v", err)
+	}
+	if cred.Type != CredentialTypeOAuth {
+		t.Fatalf("Type = %v, want CredentialTypeOAuth", cred.Type)
+	}
+	if cred.AccessToken != "at_no_expiry" {
+		t.Fatalf("AccessToken = %q, want at_no_expiry", cred.AccessToken)
 	}
 }
 

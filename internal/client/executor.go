@@ -156,6 +156,7 @@ func (c *Client) ExecuteAndPoll(
 		}
 	}
 }
+
 // Execute sends an HTTP request described by the Spec (static metadata)
 // and Invocation (resolved user values). Returns the raw JSON response.
 //
@@ -192,6 +193,14 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 
 	resp, err := c.Do(req)
 	if err != nil {
+		if errors.Is(err, ErrReLoginNeeded) {
+			return nil, &clierrors.CLIError{
+				Code:     "auth_error",
+				Message:  "OAuth session expired or rejected",
+				Hint:     "Run: heygen auth login",
+				ExitCode: clierrors.ExitAuth,
+			}
+		}
 		return nil, &clierrors.CLIError{
 			Code:     "network_error",
 			Message:  fmt.Sprintf("request failed: %v", err),

@@ -104,3 +104,13 @@ func writeCredentialsFile(path string, creds jsonCredentials) error {
 	}
 	return nil
 }
+
+// removeCredentialsFile deletes the credentials file. A missing file is
+// not an error — the desired post-condition is "no file on disk."
+func removeCredentialsFile(path string) error {
+	err := os.Remove(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to remove credentials file: %w", err)
+	}
+	return nil
+}
