@@ -9,6 +9,12 @@ func intPtr(v int) *int { return &v }
 // Groups maps group name → slice of command specs.
 // Used by the command builder to register generated commands.
 var Groups = map[string][]*command.Spec{
+	"ai-clipping": {
+		AiClippingCreate,
+		AiClippingDelete,
+		AiClippingGet,
+		AiClippingList,
+	},
 	"asset": {
 		AssetCompleteCreate,
 		AssetCreate,
@@ -101,6 +107,7 @@ var Groups = map[string][]*command.Spec{
 
 // GroupDescriptions maps group name → help text from OpenAPI tag descriptions.
 var GroupDescriptions = map[string]string{
+	"ai-clipping":     "Turn long-form videos into ready-to-share short clips with captions",
 	"asset":           "Upload files for use in video creation",
 	"audio":           "Search the background-music and sound-effects catalog",
 	"avatar":          "List and manage avatars and looks",
