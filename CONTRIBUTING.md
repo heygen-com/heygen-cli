@@ -85,7 +85,7 @@ Generated commands are pure data. To add behavior on top:
 },
 ```
 
-**Custom commands** (not in the API spec) — add a new file in `cmd/heygen/` and register in `root.go`. See `video_download.go` for an example.
+**Custom commands** (not in the API spec) — add a new file in `cmd/heygen/` and register in `root.go`. See `video_download.go` for an example. Commands that don't hit the API (e.g. `feedback`, which emits an anonymous analytics event via `internal/analytics`) annotate with `skipAuth: true` so `initContext` doesn't require credentials, and call `ctx.formatter.Data(data, "", nil)` for JSON output. Register in **both** `newRootCmd` and `newRootCmdWithSpecs`.
 
 **Deprecated aliases** (backward compatibility after a spec-driven rename) — register in `cmd/heygen/aliases.go`. Command names are derived from the upstream OpenAPI spec, so an upstream tag or path change can rename a command that already shipped in a stable release. An `Alias` re-registers the canonical `Spec` at its old path, hidden from help and marked deprecated, so the old invocation still resolves to the same handler while a stderr notice points to the new name:
 

@@ -26,6 +26,7 @@ Full reference and examples: **[developers.heygen.com/cli](https://developers.he
 - **JSON on stdout, structured errors on stderr, stable exit codes.**
 - **Self-describing.** `--request-schema` and `--response-schema` return JSON Schema without auth or API calls.
 - **Non-interactive by default.** Set `HEYGEN_API_KEY` and nothing reads a TTY.
+- **Tell us how it went.** After a flow works (or when you hit a bug), run `heygen feedback --rating <1-5> --comment "..."`. It sends an anonymous rating + note (no API key needed); honors the analytics opt-out. Agents should use this for bugs rather than opening GitHub issues automatically (see [Reporting bugs](#reporting-bugs)).
 
 ## Install
 
@@ -186,6 +187,13 @@ Example error envelope:
 ```bash
 heygen config list       # show all settings with sources
 ```
+
+## Reporting bugs
+
+- **Quick signal (recommended for agents):** `heygen feedback --rating <1-5> --comment "..."`. Goes to private, anonymous analytics. Safe to run unattended.
+- **Tracked bug a maintainer should see:** open a [GitHub issue](https://github.com/heygen-com/heygen-cli/issues). This repo is **public**, so review what you paste first and omit anything sensitive (API keys, prompts, internal URLs, personal data).
+
+**Agents:** do not open GitHub issues automatically. Use `heygen feedback` for bug signal; if something seems worth tracking, surface it to the user and let a human file the issue after reviewing it for sensitive content.
 
 ## Contributing
 

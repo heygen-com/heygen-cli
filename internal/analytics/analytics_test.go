@@ -131,6 +131,78 @@ func TestCommandRun_OmitsClientOriginWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestFeedback_Properties(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+	client.distinctID = "anon-id"
+
+	if !client.Feedback(5, "love it") {
+		t.Fatal("Feedback returned false for an enabled client")
+	}
+	if len(stub.messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(stub.messages))
+	}
+
+	msg, ok := stub.messages[0].(posthog.Capture)
+	if !ok {
+		t.Fatalf("message type = %T, want posthog.Capture", stub.messages[0])
+	}
+	if msg.Event != "CLI_FEEDBACK" {
+		t.Fatalf("Event = %q, want %q", msg.Event, "CLI_FEEDBACK")
+	}
+	if msg.DistinctId != "anon-id" {
+		t.Fatalf("DistinctId = %q, want %q", msg.DistinctId, "anon-id")
+	}
+	if got := msg.Properties["rating"]; got != 5 {
+		t.Fatalf("rating = %v, want 5", got)
+	}
+	if got := msg.Properties["comment"]; got != "love it" {
+		t.Fatalf("comment = %v, want %q", got, "love it")
+	}
+	if got := msg.Properties["cli_version"]; got != "v1.2.3" {
+		t.Fatalf("cli_version = %v, want %q", got, "v1.2.3")
+	}
+}
+
+// An empty comment must not land as comment:"" — the absent and empty cohorts
+// are distinct in analysis (same reasoning as client_origin).
+func TestFeedback_OmitsCommentWhenEmpty(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+
+	client.Feedback(3, "")
+
+	msg := stub.messages[0].(posthog.Capture)
+	if _, present := msg.Properties["comment"]; present {
+		t.Fatalf("comment present (%v) despite empty input", msg.Properties["comment"])
+	}
+}
+
+// Anonymity guarantee: every event must carry $ip=null so PostHog neither
+// stores nor geolocates the caller's IP.
+func TestBaseProperties_SuppressesIP(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+
+	client.CommandRun("heygen video list")
+	client.Feedback(5, "ok")
+
+	for i, m := range stub.messages {
+		props := m.(posthog.Capture).Properties
+		ip, present := props["$ip"]
+		if !present || ip != nil {
+			t.Fatalf("message %d: $ip = %v (present=%v), want present and nil", i, ip, present)
+		}
+	}
+}
+
+func TestFeedback_DisabledReturnsFalse(t *testing.T) {
+	client := New("test", false)
+	if client.Feedback(5, "x") {
+		t.Fatal("Feedback returned true for a disabled client")
+	}
+}
+
 func TestClose_DisabledNoop(t *testing.T) {
 	client := New("test", false)
 	client.Close()
