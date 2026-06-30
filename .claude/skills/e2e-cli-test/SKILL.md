@@ -48,6 +48,7 @@ Save the JSON output from each -- Phase 3 will extract IDs from these results.
 
 ```bash
 ./bin/heygen video list --limit 1
+./bin/heygen ai-clipping list --limit 1
 ./bin/heygen avatar list --limit 1
 ./bin/heygen avatar looks list --limit 1
 ./bin/heygen voice list --limit 1
@@ -74,6 +75,7 @@ sufficient data for meaningful get/detail coverage.
 
 ```bash
 ./bin/heygen video get <video-id>              # .data[0].id from video list
+./bin/heygen ai-clipping get <job-id>          # .data[0].id from ai-clipping list
 ./bin/heygen avatar get <group-id>             # .data[0].id from avatar list
 ./bin/heygen avatar looks get <look-id>        # .data[0].id from avatar looks list
 ./bin/heygen video-agent get <session-id>      # .data[0].session_id from video-agent list

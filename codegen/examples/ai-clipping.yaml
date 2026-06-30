@@ -1,0 +1,12 @@
+"POST /v3/ai-clipping":
+  - desc: "Clip a source video by URL (use --request-schema for output_settings)"
+    cmd: "heygen ai-clipping create -d request.json"
+"GET /v3/ai-clipping":
+  - desc: "List AI clip jobs"
+    cmd: "heygen ai-clipping list --limit 10"
+"GET /v3/ai-clipping/{job_id}":
+  - desc: "Check job status and download URLs"
+    cmd: "heygen ai-clipping get <job-id>"
+"DELETE /v3/ai-clipping/{job_id}":
+  - desc: "Delete an AI clip job and its clips"
+    cmd: "heygen ai-clipping delete <job-id>"

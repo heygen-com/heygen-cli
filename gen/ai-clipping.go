@@ -13,6 +13,9 @@ var AiClippingCreate = &command.Spec{
 	Endpoint:      "/v3/ai-clipping",
 	Method:        "POST",
 	BodyEncoding:  "json",
+	Examples: []string{
+		"# Clip a source video by URL (use --request-schema for output_settings)\n  heygen ai-clipping create -d request.json",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "callback-id",
@@ -75,6 +78,9 @@ var AiClippingDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Examples: []string{
+		"# Delete an AI clip job and its clips\n  heygen ai-clipping delete <job-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "job-id", Param: "job_id", Help: ""},
 	},
@@ -89,6 +95,9 @@ var AiClippingGet = &command.Spec{
 	Endpoint:       "/v3/ai-clipping/{job_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Check job status and download URLs\n  heygen ai-clipping get <job-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "job-id", Param: "job_id", Help: ""},
 	},
@@ -104,6 +113,9 @@ var AiClippingList = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Paginated:      true,
+	Examples: []string{
+		"# List AI clip jobs\n  heygen ai-clipping list --limit 10",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "limit",

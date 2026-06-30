@@ -5,6 +5,13 @@ import "github.com/heygen-com/heygen-cli/internal/command"
 // DefaultColumns defines curated table columns for --human mode.
 // Keys use the full generated command path: "group/spec.Name".
 var DefaultColumns = map[string][]command.Column{
+	"ai-clipping/list": {
+		{Header: "ID", Field: "id"},
+		{Header: "Status", Field: "status"},
+		{Header: "Progress", Field: "progress"},
+		{Header: "Title", Field: "title"},
+		{Header: "Created", Field: "created_at"},
+	},
 	"video/list": {
 		{Header: "ID", Field: "id"},
 		{Header: "Title", Field: "title"},
