@@ -85,6 +85,27 @@ func (c *Client) CommandRunComplete(command string, exitCode int, duration time.
 	})
 }
 
+// Feedback records a satisfaction rating (1-5) with an optional free-text
+// comment as a CLI_FEEDBACK event. Returns false when analytics is disabled
+// (opt-out), so the caller can tell the user nothing was sent.
+func (c *Client) Feedback(rating int, comment string) bool {
+	if !c.enabled || c.ph == nil {
+		return false
+	}
+	props := c.baseProperties("feedback").Set("rating", rating)
+	// Omit an empty comment rather than sending "" — an empty value and an
+	// absent one are different cohorts in analysis (cf. client_origin).
+	if comment != "" {
+		props = props.Set("comment", comment)
+	}
+	_ = c.ph.Enqueue(posthog.Capture{
+		DistinctId: c.distinctID,
+		Event:      "CLI_FEEDBACK",
+		Properties: props,
+	})
+	return true
+}
+
 // baseProperties is the per-event property bundle every CLI event carries.
 // Kept in one place so client_origin / cli_version / os / arch can't drift
 // between COMMAND_RUN and COMMAND_RUN_COMPLETE — funnel queries break when
@@ -94,7 +115,11 @@ func (c *Client) baseProperties(command string) posthog.Properties {
 		Set("command", command).
 		Set("cli_version", c.version).
 		Set("os", runtime.GOOS).
-		Set("arch", runtime.GOARCH)
+		Set("arch", runtime.GOARCH).
+		// Send $ip: null so PostHog neither stores the caller's IP nor geolocates
+		// it. The CLI is opt-in anonymous telemetry; IP would undermine that. PostHog
+		// otherwise derives IP from the ingest request, so this must be set explicitly.
+		Set("$ip", nil)
 	if c.clientOrigin != "" {
 		props = props.Set("client_origin", c.clientOrigin)
 	}
