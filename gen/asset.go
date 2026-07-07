@@ -230,5 +230,17 @@ var AssetSearch = &command.Spec{
 			Source:   "query",
 			JSONName: "type",
 		},
+		{
+			Name:     "scope",
+			Type:     "string",
+			Default:  "public",
+			Help:     "Which assets to search: 'public' (the shared catalog, default) or 'personal' (your own space's assets).",
+			Required: false,
+			Enum:     []string{"public", "personal"},
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "scope",
+		},
 	},
 }
