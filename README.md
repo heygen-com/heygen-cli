@@ -165,7 +165,7 @@ Every command supports `--help`.
 |--------|----------|
 | **stdout** | Always JSON. Even `video download` — binary writes to disk; stdout emits `{"asset", "message", "path"}` so you can chain on `.path`. |
 | **stderr** | Structured envelope on error: `{"error": {"code", "message", "hint"}}`. Stable `code` values for programmatic branching. |
-| **Exit codes** | `0` ok · `1` API or network · `2` usage · `3` auth · `4` timeout under `--wait` (stdout contains partial resource for resume) |
+| **Exit codes** | `0` ok · `1` API or network · `2` usage · `3` auth / not permitted · `4` timeout under `--wait` (stdout contains partial resource for resume) |
 | **Request bodies** | Flags for simple inputs; `-d` for nested JSON (inline, file path, or `-` for stdin). Flags override matching fields. |
 | **Async jobs** | `--wait` blocks with exponential backoff; `--timeout` sets max (default 20m). 429s and 5xx retry automatically. |
 

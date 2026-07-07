@@ -94,3 +94,54 @@ func TestEnrichAuthHint_ExistingHint_Preserved(t *testing.T) {
 		t.Fatalf("no-key error should preserve authGuidance hint:\n%s", res.Stderr)
 	}
 }
+
+// A 403 (forbidden) exits 3 but must NOT be given a login / invalid-key hint by
+// enrichAuthHint — it keeps its permission-oriented hint.
+func TestEnrichAuthHint_Forbidden_NotOverwritten(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos": {
+			StatusCode: 403,
+			Body:       `{"error":{"code":"forbidden","message":"not allowed"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "some-key", "video", "list")
+
+	if res.ExitCode != clierrors.ExitAuth {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitAuth, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, `"code":"forbidden"`) {
+		t.Fatalf("stderr should carry the forbidden code:\n%s", res.Stderr)
+	}
+	if strings.Contains(res.Stderr, "HEYGEN_API_KEY environment variable") || strings.Contains(res.Stderr, "auth login") {
+		t.Fatalf("a 403 must not get a login/invalid-key hint:\n%s", res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "not permitted") {
+		t.Fatalf("a 403 should carry a permission hint:\n%s", res.Stderr)
+	}
+}
+
+// A non-envelope (HTML) 403 — status-derived forbidden — must also avoid the
+// login hint end-to-end, exercising the derived-code path through the formatter.
+func TestForbidden_NonEnvelope_NoLoginHint(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/videos": {
+			StatusCode: 403,
+			Body:       `<html>403 Forbidden</html>`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "some-key", "video", "list")
+
+	if res.ExitCode != clierrors.ExitAuth {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitAuth, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, `"code":"forbidden"`) {
+		t.Fatalf("stderr should carry the derived forbidden code:\n%s", res.Stderr)
+	}
+	if strings.Contains(res.Stderr, "HEYGEN_API_KEY environment variable") || strings.Contains(res.Stderr, "auth login") {
+		t.Fatalf("a non-envelope 403 must not get a login hint:\n%s", res.Stderr)
+	}
+}

@@ -921,3 +921,66 @@ func emptyInvocation() *command.Invocation {
 		QueryParams: make(url.Values),
 	}
 }
+
+func TestParseErrorResponse_NonEnvelope(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   int
+		body     string
+		wantCode string
+	}{
+		{"gateway HTML 502", 502, "<html>502 Bad Gateway</html>", "unclassified_server_error"},
+		{"empty body 503", 503, "", "unclassified_server_error"},
+		{"empty body 404", 404, "", "not_found"},
+		{"unmapped 4xx 405", 405, "<html>405 Method Not Allowed</html>", "unclassified_client_error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := parseErrorResponse(tt.status, []byte(tt.body), "req_1")
+			if err.Code != tt.wantCode {
+				t.Errorf("Code = %q, want %q", err.Code, tt.wantCode)
+			}
+			if err.Message == "" {
+				t.Errorf("Message must never be empty (status %d)", tt.status)
+			}
+		})
+	}
+}
+
+func TestParseErrorResponse_CodeOnlyEnvelope(t *testing.T) {
+	// An envelope with a code but no message must keep the code (relaxed gate),
+	// not collapse to a generic error.
+	err := parseErrorResponse(409, []byte(`{"error":{"code":"conflict"}}`), "req_1")
+	if err.Code != "conflict" {
+		t.Errorf("Code = %q, want conflict", err.Code)
+	}
+	if err.Message == "" {
+		t.Errorf("Message should be synthesized when the envelope has none")
+	}
+}
+
+// The intended behavior change: a non-envelope 401/403 (opaque or HTML body) now
+// classifies as unauthorized/forbidden with ExitAuth, through the parseErrorResponse
+// gate that changed in this PR (previously it fell to generic error / ExitGeneral).
+func TestParseErrorResponse_NonEnvelope_AuthExit(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   int
+		body     string
+		wantCode string
+	}{
+		{"empty 401", 401, "", "unauthorized"},
+		{"HTML 403", 403, "<html>403 Forbidden</html>", "forbidden"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := parseErrorResponse(tt.status, []byte(tt.body), "req_1")
+			if err.Code != tt.wantCode {
+				t.Errorf("Code = %q, want %q", err.Code, tt.wantCode)
+			}
+			if err.ExitCode != clierrors.ExitAuth {
+				t.Errorf("ExitCode = %d, want %d (ExitAuth)", err.ExitCode, clierrors.ExitAuth)
+			}
+		})
+	}
+}

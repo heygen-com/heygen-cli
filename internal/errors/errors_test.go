@@ -88,14 +88,18 @@ func TestFromAPIError_ExitCodes(t *testing.T) {
 		wantExit   int
 		wantCode   string
 	}{
-		{"401 → auth", 401, ExitAuth, "auth_error"},
-		{"403 → auth", 403, ExitAuth, "auth_error"},
-		{"400 → general", 400, ExitGeneral, "validation_error"},
-		{"404 → general", 404, ExitGeneral, "not_found"},
-		{"429 → general", 429, ExitGeneral, "rate_limited"},
-		{"500 → general", 500, ExitGeneral, "server_error"},
-		{"502 → general", 502, ExitGeneral, "server_error"},
-		{"503 → general", 503, ExitGeneral, "server_error"},
+		{"401 → unauthorized", 401, ExitAuth, "unauthorized"},
+		{"403 → forbidden", 403, ExitAuth, "forbidden"},
+		{"400 → validation", 400, ExitGeneral, "validation_error"},
+		{"402 → insufficient_credit", 402, ExitGeneral, "insufficient_credit"},
+		{"404 → not_found", 404, ExitGeneral, "not_found"},
+		{"409 → conflict", 409, ExitGeneral, "conflict"},
+		{"413 → payload_too_large", 413, ExitGeneral, "payload_too_large"},
+		{"429 → rate_limited", 429, ExitGeneral, "rate_limited"},
+		{"500 → unclassified_server_error", 500, ExitGeneral, "unclassified_server_error"},
+		{"502 → unclassified_server_error", 502, ExitGeneral, "unclassified_server_error"},
+		{"503 → unclassified_server_error", 503, ExitGeneral, "unclassified_server_error"},
+		{"405 (unmapped 4xx) → unclassified_client_error", 405, ExitGeneral, "unclassified_client_error"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -175,6 +179,13 @@ func TestHintForAPICode_AllMappedCodes(t *testing.T) {
 		{"not_found", "does not exist"},
 		{"asset_not_available", "may still be processing"},
 		{"timeout", "may still be in progress"},
+		{"forbidden", "not permitted"},
+		{"resource_access_denied", "not permitted"},
+		{"ai_vendor_access_restricted", "not permitted"},
+		{"voice_not_usable", "heygen voice list"},
+		{"payload_too_large", "size limit"},
+		{"conflict", "conflicts with the current state"},
+		{"unclassified_server_error", "no details"},
 	}
 	for _, tt := range codes {
 		t.Run(tt.code, func(t *testing.T) {
@@ -189,12 +200,82 @@ func TestHintForAPICode_AllMappedCodes(t *testing.T) {
 	}
 }
 
-func TestFromAPIError_Generic404_NoPermanenceHint(t *testing.T) {
+// A 404 with no specific API code is now classified as not_found and carries the
+// standard not_found hint. The hint lookup uses the effective (status-derived) code,
+// so status-derived codes like insufficient_credit (402) also get their hints.
+func TestFromAPIError_Generic404_GetsNotFoundHint(t *testing.T) {
 	apiErr := &APIError{Message: "not found"}
 	cliErr := FromAPIError(404, apiErr, "")
 
-	if strings.Contains(cliErr.Hint, "unlikely to help") {
-		t.Errorf("Hint = %q, generic 404 without API code should not claim permanence", cliErr.Hint)
+	if cliErr.Code != "not_found" {
+		t.Errorf("Code = %q, want not_found", cliErr.Code)
+	}
+	if !strings.Contains(cliErr.Hint, "does not exist") {
+		t.Errorf("Hint = %q, want the not_found hint", cliErr.Hint)
+	}
+}
+
+// A non-specific API code (empty or literal "error") is treated as absent and the
+// code is derived from the HTTP status instead.
+func TestFromAPIError_NonSpecificCodeOverriddenByStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		apiCode    string
+		statusCode int
+		wantCode   string
+	}{
+		{"literal error at 402", "error", 402, "insufficient_credit"},
+		{"literal error at 500", "error", 500, "unclassified_server_error"},
+		{"empty at 409", "", 409, "conflict"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cliErr := FromAPIError(tt.statusCode, &APIError{Code: tt.apiCode, Message: "x"}, "")
+			if cliErr.Code != tt.wantCode {
+				t.Errorf("Code = %q, want %q", cliErr.Code, tt.wantCode)
+			}
+		})
+	}
+}
+
+// A non-envelope response routed here with an empty APIError must still render a
+// non-empty message including the HTTP status.
+func TestFromAPIError_SynthesizesMessageWhenEmpty(t *testing.T) {
+	cliErr := FromAPIError(502, &APIError{}, "req_1")
+	if !strings.Contains(cliErr.Message, "502") {
+		t.Errorf("Message = %q, want it to mention HTTP 502", cliErr.Message)
+	}
+	if cliErr.Code != "unclassified_server_error" {
+		t.Errorf("Code = %q, want unclassified_server_error", cliErr.Code)
+	}
+}
+
+// A 403 is auth-family (exit 3) but must NOT get a "log in" hint — it carries a
+// permission-oriented hint instead.
+func TestFromAPIError_Forbidden_NonLoginHint(t *testing.T) {
+	cliErr := FromAPIError(403, &APIError{Message: "nope"}, "")
+	if cliErr.Code != "forbidden" {
+		t.Errorf("Code = %q, want forbidden", cliErr.Code)
+	}
+	if cliErr.ExitCode != ExitAuth {
+		t.Errorf("ExitCode = %d, want %d", cliErr.ExitCode, ExitAuth)
+	}
+	if !strings.Contains(cliErr.Hint, "not permitted") {
+		t.Errorf("Hint = %q, want a permission hint", cliErr.Hint)
+	}
+	if strings.Contains(strings.ToLower(cliErr.Hint), "auth login") {
+		t.Errorf("Hint = %q, must not suggest logging in for a 403", cliErr.Hint)
+	}
+}
+
+// An unknown 403 code (not in hintForAPICode) still gets the generic non-login hint.
+func TestFromAPIError_Unknown403_GetsGenericForbiddenHint(t *testing.T) {
+	cliErr := FromAPIError(403, &APIError{Code: "some_new_403_code", Message: "nope"}, "")
+	if cliErr.Code != "some_new_403_code" {
+		t.Errorf("Code = %q, want preserved", cliErr.Code)
+	}
+	if !strings.Contains(cliErr.Hint, "not permitted") {
+		t.Errorf("Hint = %q, want generic forbidden hint", cliErr.Hint)
 	}
 }
 
