@@ -362,3 +362,24 @@ func TestToErrorEnvelope_OmitsDocURLAndParamWhenEmpty(t *testing.T) {
 		t.Error("doc_url should be omitted when empty")
 	}
 }
+
+func TestFromAPIError_SourceAndHTTPStatus(t *testing.T) {
+	// A preserved (specific) API code originates from the API envelope.
+	got := FromAPIError(402, &APIError{Code: "insufficient_credit", Message: "x"}, "")
+	if got.Source != "api" || got.HTTPStatus != 402 {
+		t.Errorf("Source/HTTPStatus = %q/%d, want api/402", got.Source, got.HTTPStatus)
+	}
+	// A status-derived (non-specific) code is CLI-generated.
+	derived := FromAPIError(500, &APIError{Message: "x"}, "")
+	if derived.Source != "cli" || derived.HTTPStatus != 500 {
+		t.Errorf("Source/HTTPStatus = %q/%d, want cli/500", derived.Source, derived.HTTPStatus)
+	}
+	// Source/HTTPStatus are telemetry-only — never serialized in the envelope.
+	inner := got.ToErrorEnvelope()["error"].(map[string]any)
+	if _, ok := inner["source"]; ok {
+		t.Error("source must not appear in the error envelope")
+	}
+	if _, ok := inner["http_status"]; ok {
+		t.Error("http_status must not appear in the error envelope")
+	}
+}

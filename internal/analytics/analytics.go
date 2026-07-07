@@ -70,18 +70,28 @@ func (c *Client) CommandRun(command string) {
 	})
 }
 
-func (c *Client) CommandRunComplete(command string, exitCode int, duration time.Duration, errorCode string) {
+// CommandRunComplete records a completed command. On error, source is "api" (the
+// error came from an API response envelope) or "cli" (CLI-generated), and httpStatus
+// is the upstream status when known (0 otherwise); both are omitted on success.
+func (c *Client) CommandRunComplete(command string, exitCode int, duration time.Duration, errorCode, source string, httpStatus int) {
 	if !c.enabled || c.ph == nil {
 		return
+	}
+	props := c.baseProperties(command).
+		Set("exit_code", exitCode).
+		Set("duration_ms", duration.Milliseconds()).
+		Set("success", exitCode == 0).
+		Set("error_code", errorCode)
+	if source != "" {
+		props = props.Set("source", source)
+	}
+	if httpStatus > 0 {
+		props = props.Set("http_status", httpStatus)
 	}
 	_ = c.ph.Enqueue(posthog.Capture{
 		DistinctId: c.distinctID,
 		Event:      "COMMAND_RUN_COMPLETE",
-		Properties: c.baseProperties(command).
-			Set("exit_code", exitCode).
-			Set("duration_ms", duration.Milliseconds()).
-			Set("success", exitCode == 0).
-			Set("error_code", errorCode),
+		Properties: props,
 	})
 }
 

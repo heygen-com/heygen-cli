@@ -81,10 +81,13 @@ func (c *Client) ExecuteAndPoll(
 
 	resourceID, err := extractJSONPath(createResp, spec.PollConfig.IDField)
 	if err != nil {
-		return nil, clierrors.New(fmt.Sprintf(
-			"failed to extract resource ID from %q: %v. This command may require manual polling for batch responses",
-			spec.PollConfig.IDField, err,
-		))
+		return nil, &clierrors.CLIError{
+			Code: "response_parse_error",
+			Message: fmt.Sprintf(
+				"failed to extract resource ID from %q: %v", spec.PollConfig.IDField, err),
+			Hint:     "The create response did not have the expected shape. This command may require manual polling for batch responses.",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 
 	// If IDField uses an array index (e.g., "data.ids.0"), reject batch
@@ -131,10 +134,13 @@ func (c *Client) ExecuteAndPoll(
 
 		status, err := extractJSONPath(statusResp, spec.PollConfig.StatusField)
 		if err != nil {
-			return nil, clierrors.New(fmt.Sprintf(
-				"failed to extract status from %q: %v",
-				spec.PollConfig.StatusField, err,
-			))
+			return nil, &clierrors.CLIError{
+				Code: "response_parse_error",
+				Message: fmt.Sprintf(
+					"failed to extract status from %q: %v", spec.PollConfig.StatusField, err),
+				Hint:     "The status response did not have the expected shape. Retry; if it persists, report it.",
+				ExitCode: clierrors.ExitGeneral,
+			}
 		}
 
 		if slices.Contains(spec.PollConfig.TerminalOK, status) {
@@ -212,11 +218,17 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, clierrors.New(fmt.Sprintf("failed to read response body: %v", err))
+		// Mid-response read failure is a dropped connection, not a parse issue.
+		return nil, &clierrors.CLIError{
+			Code:     "network_error",
+			Message:  fmt.Sprintf("failed to read response body: %v", err),
+			Hint:     "This is usually a temporary network issue. Check your connection and retry.",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, parseErrorResponse(resp.StatusCode, respBody, resp.Header.Get("X-Request-Id"))
+		return nil, parseErrorResponse(resp.StatusCode, respBody, requestIDFromHeaders(resp.Header))
 	}
 
 	return json.RawMessage(respBody), nil
@@ -394,7 +406,12 @@ func extractJSONPath(raw json.RawMessage, path string) (string, error) {
 
 	var current any
 	if err := json.Unmarshal(raw, &current); err != nil {
-		return "", clierrors.New(fmt.Sprintf("failed to parse JSON response: %v", err))
+		return "", &clierrors.CLIError{
+			Code:     "response_parse_error",
+			Message:  fmt.Sprintf("failed to parse JSON response: %v", err),
+			Hint:     "The API response could not be parsed. Retry; if it persists, report it (possible CLI/API mismatch).",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 
 	for _, part := range strings.Split(path, ".") {
@@ -514,4 +531,16 @@ func parseErrorResponse(statusCode int, body []byte, requestID string) *clierror
 	}
 
 	return clierrors.FromAPIError(statusCode, &clierrors.APIError{}, requestID)
+}
+
+// requestIDFromHeaders returns the best available request/trace id for support
+// correlation. The v3 app does not set X-Request-Id; the AWS ALB sets x-amzn-*, so
+// prefer the app header when present, then fall back to the ALB's.
+func requestIDFromHeaders(h http.Header) string {
+	for _, k := range []string{"X-Request-Id", "X-Amzn-Request-Id", "X-Amzn-Trace-Id"} {
+		if v := h.Get(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }

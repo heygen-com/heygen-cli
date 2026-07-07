@@ -26,6 +26,8 @@ func main() {
 
 	exitCode := 0
 	errorCode := ""
+	source := ""
+	httpStatus := 0
 	if err != nil {
 		var cliErr *clierrors.CLIError
 		if errors.As(err, &cliErr) {
@@ -33,6 +35,11 @@ func main() {
 			formatter.Error(cliErr)
 			exitCode = cliErr.ExitCode
 			errorCode = cliErr.Code
+			source = cliErr.Source
+			if source == "" {
+				source = "cli" // any error the CLI raised without an explicit origin
+			}
+			httpStatus = cliErr.HTTPStatus
 		} else {
 			// Cobra returns plain errors for unknown commands and arg validation.
 			// Detect these and wrap as usage errors (exit 2).
@@ -40,11 +47,12 @@ func main() {
 			formatter.Error(wrapped)
 			exitCode = wrapped.ExitCode
 			errorCode = wrapped.Code
+			source = "cli"
 		}
 	}
 
 	if analyticsClient.Started() && executedCmd != nil {
-		analyticsClient.CommandRunComplete(executedCmd.CommandPath(), exitCode, time.Since(start), errorCode)
+		analyticsClient.CommandRunComplete(executedCmd.CommandPath(), exitCode, time.Since(start), errorCode, source, httpStatus)
 	}
 	analyticsClient.Close()
 	os.Exit(exitCode)
