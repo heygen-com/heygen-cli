@@ -19,6 +19,8 @@ type CLIError struct {
 	Code      string // machine-readable: "auth_error", "not_found", "network_error"
 	Message   string // human-readable description
 	Hint      string // actionable fix: "Run heygen auth login"
+	Param     string // API: request field that caused the error (validation errors)
+	DocURL    string // API: link to this error code's documentation
 	RequestID string // from API X-Request-Id header (if applicable)
 	ExitCode  int    // process exit code (0/1/2/3/4)
 }
@@ -40,6 +42,12 @@ func (e *CLIError) ToErrorEnvelope() map[string]any {
 	}
 	if e.Hint != "" {
 		inner["hint"] = e.Hint
+	}
+	if e.Param != "" {
+		inner["param"] = e.Param
+	}
+	if e.DocURL != "" {
+		inner["doc_url"] = e.DocURL
 	}
 	if e.RequestID != "" {
 		inner["request_id"] = e.RequestID
@@ -133,7 +141,7 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 		}
 	case statusCode == 429:
 		if code == "" {
-			code = "rate_limited"
+			code = "rate_limit_exceeded"
 		}
 	case statusCode >= 500:
 		// A v3 app 5xx carries its own code (internal_error); a 5xx with no specific
@@ -165,10 +173,23 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 		hint = forbiddenHint
 	}
 
+	// Surface the API's own param / doc_url so agents and users get the field that
+	// failed and a link to the error's documentation (present only on API errors).
+	param := ""
+	if apiErr.Param != nil {
+		param = *apiErr.Param
+	}
+	docURL := ""
+	if apiErr.DocURL != nil {
+		docURL = *apiErr.DocURL
+	}
+
 	return &CLIError{
 		Code:      code,
 		Message:   message,
 		Hint:      hint,
+		Param:     param,
+		DocURL:    docURL,
 		RequestID: requestID,
 		ExitCode:  exitCode,
 	}
@@ -191,7 +212,7 @@ func hintForAPICode(code string) string {
 		return "Check your credit balance: heygen user me get. Purchase API credits: " + APIKeySettingsURL
 	case "invalid_parameter":
 		return "Use --request-schema on the command to see expected fields"
-	case "rate_limited":
+	case "rate_limit_exceeded", "quota_exceeded":
 		return "The CLI retries rate-limited requests automatically. If this persists, reduce request frequency"
 	case "resource_not_found", "not_found":
 		return "The requested resource does not exist. Retrying the same ID is unlikely to help"
