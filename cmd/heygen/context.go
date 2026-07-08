@@ -77,6 +77,14 @@ func enrichAuthHint(cliErr *clierrors.CLIError, source auth.CredentialSource) {
 	if cliErr.ExitCode != clierrors.ExitAuth {
 		return
 	}
+	// Only enrich genuine not-authenticated errors. 403 (forbidden / permission)
+	// also exits 3, but re-authenticating won't help, so never stamp a "log in"
+	// hint on it — it carries its own permission-oriented hint.
+	switch cliErr.Code {
+	case "auth_error", "unauthorized", "invalid_credentials":
+	default:
+		return
+	}
 	if cliErr.Hint != "" {
 		return
 	}

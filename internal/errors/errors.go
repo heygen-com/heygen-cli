@@ -75,47 +75,99 @@ func NewUsage(message string) *CLIError {
 	}
 }
 
+// isNonSpecific reports whether an API-provided error code is too generic to
+// trust for classification. v3 always sends a specific code; an empty or literal
+// "error" code means we should classify from the HTTP status instead.
+func isNonSpecific(code string) bool {
+	return code == "" || code == "error"
+}
+
+// forbiddenHint is the shared non-login guidance for 403 responses: the caller is
+// authenticated but not permitted, so re-authenticating will not help.
+const forbiddenHint = "Your credentials are valid but not permitted for this. Check your plan, permissions, or workspace — re-authenticating will not help. Contact support if this is unexpected."
+
 // FromAPIError converts an API error envelope and HTTP status code into a CLIError.
+//
+// The v3 API always returns a specific lowercase code, which is preserved. When the
+// code is absent or non-specific (empty or literal "error" — e.g. a non-envelope
+// edge/gateway response routed here by parseErrorResponse), the code is derived from
+// the HTTP status instead.
 func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError {
 	exitCode := ExitGeneral
 	code := apiErr.Code
+	if isNonSpecific(code) {
+		code = "" // fall through to status-derived classification
+	}
 
 	switch {
-	case statusCode == 401 || statusCode == 403:
+	case statusCode == 401:
 		exitCode = ExitAuth
 		if code == "" {
-			code = "auth_error"
+			code = "unauthorized"
+		}
+	case statusCode == 403:
+		// Authenticated but not permitted — auth-family exit, but NOT "log in".
+		exitCode = ExitAuth
+		if code == "" {
+			code = "forbidden"
 		}
 	case statusCode == 400:
 		if code == "" {
 			code = "validation_error"
 		}
+	case statusCode == 402:
+		if code == "" {
+			code = "insufficient_credit"
+		}
 	case statusCode == 404:
 		if code == "" {
 			code = "not_found"
+		}
+	case statusCode == 409:
+		if code == "" {
+			code = "conflict"
+		}
+	case statusCode == 413:
+		if code == "" {
+			code = "payload_too_large"
 		}
 	case statusCode == 429:
 		if code == "" {
 			code = "rate_limited"
 		}
 	case statusCode >= 500:
+		// A v3 app 5xx carries its own code (internal_error); a 5xx with no specific
+		// code did not come through the app's normal error path.
 		if code == "" {
-			code = "server_error"
+			code = "unclassified_server_error"
 		}
 	default:
+		// Unmapped 4xx (405, 410, 415, 422, ...) with no specific code: the request
+		// was rejected in a way we don't classify — client-side.
 		if code == "" {
-			code = "error"
+			code = "unclassified_client_error"
 		}
 	}
 
-	hint := hintForAPICode(apiErr.Code)
-	if apiErr.Code == "invalid_parameter" && apiErr.Param != nil && *apiErr.Param != "" {
+	message := apiErr.Message
+	if message == "" {
+		// Never render an empty message (e.g. a non-envelope body routed here).
+		message = fmt.Sprintf("API returned HTTP %d", statusCode)
+	}
+
+	hint := hintForAPICode(code)
+	if code == "invalid_parameter" && apiErr.Param != nil && *apiErr.Param != "" {
 		hint = fmt.Sprintf("Invalid field %q. %s", *apiErr.Param, hint)
+	}
+	// Generic non-login hint for any unmapped 403 code (hintForAPICode is code-only
+	// and cannot see the status).
+	if hint == "" && statusCode == 403 {
+		hint = forbiddenHint
 	}
 
 	return &CLIError{
 		Code:      code,
-		Message:   apiErr.Message,
+		Message:   message,
 		Hint:      hint,
 		RequestID: requestID,
 		ExitCode:  exitCode,
@@ -124,6 +176,9 @@ func FromAPIError(statusCode int, apiErr *APIError, requestID string) *CLIError 
 
 // hintForAPICode returns a CLI-specific actionable hint for known API error
 // codes. Returns "" if the code has no associated hint.
+//
+// Note: "unauthorized" deliberately has NO hint here — the source-aware
+// enrichAuthHint (cmd/heygen) supplies better guidance (which credential is bad).
 func hintForAPICode(code string) string {
 	switch code {
 	case "avatar_not_found":
@@ -144,6 +199,16 @@ func hintForAPICode(code string) string {
 		return "The asset may still be processing or was deleted"
 	case "timeout":
 		return "The operation may still be in progress. Check status with the corresponding get command"
+	case "forbidden", "resource_access_denied", "ai_vendor_access_restricted":
+		return forbiddenHint
+	case "voice_not_usable":
+		return "This voice can't be used for this request (e.g. not permitted on your plan). Choose another: heygen voice list"
+	case "payload_too_large":
+		return "The request or upload exceeds the size limit. Reduce the file size or payload"
+	case "conflict":
+		return "This conflicts with the current state (e.g. a duplicate or in-progress request). Retrying the same request is unlikely to help"
+	case "unclassified_server_error":
+		return "The server returned an error with no details. This is often transient — retry shortly; if it persists, contact support"
 	}
 	return ""
 }

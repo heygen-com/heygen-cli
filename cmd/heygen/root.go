@@ -89,7 +89,7 @@ Exit Codes:
   0   Success
   1   General error (API error, network failure)
   2   Usage error (invalid flags, missing arguments)
-  3   Authentication error (missing or invalid API key)
+  3   Authentication / permission error (not authenticated, or not permitted)
   4   Timeout (resource created but operation not yet complete)
 
 Tip: Use --request-schema on any command to see the expected JSON input fields.

@@ -181,7 +181,7 @@ func TestGeneratedRoot_Help_ShowsExitCodesAndHidesCompletion(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stdout, "Exit Codes:") || !strings.Contains(res.Stdout, "3   Authentication error") {
+	if !strings.Contains(res.Stdout, "Exit Codes:") || !strings.Contains(res.Stdout, "3   Authentication / permission error") {
 		t.Errorf("root help missing documented exit codes\nstdout: %s", res.Stdout)
 	}
 	if strings.Contains(res.Stdout, "completion") {

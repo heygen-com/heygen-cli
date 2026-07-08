@@ -496,18 +496,22 @@ func classifyPollContextError(err error, resourceID string, lastResp json.RawMes
 }
 
 // parseErrorResponse parses an API error response into a CLIError.
+//
+// A body that unmarshals into the v3 envelope with a code OR message is a real app
+// error (the code-or-message gate is relaxed from the old message-only check so a
+// code-only envelope keeps its code instead of collapsing to generic "error"). Any
+// other body — gateway/WAF HTML, an empty body, or a foreign JSON shape — did not
+// come from the v3 app; it is classified by HTTP status via FromAPIError (which maps
+// 4xx to client codes, 5xx to unclassified_server_error, unmapped to
+// unclassified_client_error, and synthesizes a non-empty message).
 func parseErrorResponse(statusCode int, body []byte, requestID string) *clierrors.CLIError {
 	var envelope struct {
 		Error clierrors.APIError `json:"error"`
 	}
-	if err := json.Unmarshal(body, &envelope); err == nil && envelope.Error.Message != "" {
+	if err := json.Unmarshal(body, &envelope); err == nil &&
+		(envelope.Error.Code != "" || envelope.Error.Message != "") {
 		return clierrors.FromAPIError(statusCode, &envelope.Error, requestID)
 	}
 
-	return &clierrors.CLIError{
-		Code:      "error",
-		Message:   fmt.Sprintf("API returned HTTP %d", statusCode),
-		RequestID: requestID,
-		ExitCode:  clierrors.ExitGeneral,
-	}
+	return clierrors.FromAPIError(statusCode, &clierrors.APIError{}, requestID)
 }

@@ -53,8 +53,8 @@ func TestAuthStatus_InvalidKey(t *testing.T) {
 	if res.ExitCode != clierrors.ExitAuth {
 		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitAuth, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, `"code":"auth_error"`) {
-		t.Fatalf("stderr = %s, want auth_error code", res.Stderr)
+	if !strings.Contains(res.Stderr, `"code":"unauthorized"`) {
+		t.Fatalf("stderr = %s, want unauthorized code", res.Stderr)
 	}
 	if !strings.Contains(res.Stderr, `"message":"invalid API key"`) {
 		t.Fatalf("stderr = %s, want invalid API key message", res.Stderr)
