@@ -104,7 +104,12 @@ func newVideoDownloadCmd(ctx *cmdContext) *cobra.Command {
 				"path":    dest,
 			})
 			if err != nil {
-				return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
+				return &clierrors.CLIError{
+					Code:     "cli_response_encode_error",
+					Message:  fmt.Sprintf("failed to encode response: %v", err),
+					Hint:     "Please report this CLI bug with the command you ran.",
+					ExitCode: clierrors.ExitGeneral,
+				}
 			}
 
 			return ctx.formatter.Data(data, "", nil)
@@ -122,7 +127,12 @@ func extractAssetURL(raw json.RawMessage, videoID string, info assetInfo) (strin
 		Data map[string]json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return "", clierrors.New("failed to parse video response")
+		return "", &clierrors.CLIError{
+			Code:     "cli_response_parse_error",
+			Message:  "failed to parse the video response",
+			Hint:     "The API response could not be parsed. Retry; if it persists, report it (possible CLI/API mismatch).",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 
 	var status string
@@ -180,17 +190,46 @@ func assetHint(field string) string {
 func downloadFile(ctx context.Context, videoURL, dest string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, videoURL, nil)
 	if err != nil {
-		return clierrors.New(fmt.Sprintf("failed to build download request: %v", err))
+		return &clierrors.CLIError{
+			Code:     "cli_response_parse_error",
+			Message:  fmt.Sprintf("the download URL returned by the API is unusable: %v", err),
+			Hint:     "Re-fetch a fresh URL: heygen video get <video_id>",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 
 	resp, err := downloadClient.Do(req)
 	if err != nil {
-		return clierrors.New(fmt.Sprintf("failed to download video: %v", err))
+		// network_error is intentionally NOT cli_-prefixed. It is a shared code
+		// also emitted by the API-executor transport path
+		// (internal/client/executor.go); kept bare so both sites agree. Do not
+		// prefix one site without the other.
+		return &clierrors.CLIError{
+			Code:     "network_error",
+			Message:  fmt.Sprintf("failed to download video: %v", err),
+			Hint:     "This is usually a temporary network issue. Check your connection and retry.",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return clierrors.New(fmt.Sprintf("download failed with HTTP %d", resp.StatusCode))
+		// A presigned asset URL that 403s/404s is expired or revoked (client can
+		// re-fetch); any other status is the asset host (our storage/CDN) failing.
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
+			return &clierrors.CLIError{
+				Code:     "cli_download_url_expired",
+				Message:  fmt.Sprintf("download link expired or unavailable (HTTP %d)", resp.StatusCode),
+				Hint:     "This download link has expired. Re-fetch a fresh URL: heygen video get <video_id>",
+				ExitCode: clierrors.ExitGeneral,
+			}
+		}
+		return &clierrors.CLIError{
+			Code:     "cli_download_failed",
+			Message:  fmt.Sprintf("download failed with HTTP %d", resp.StatusCode),
+			Hint:     "The asset host returned an error fetching the file. This is usually transient — retry shortly.",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 
 	// Write to a temp file in the same directory, then rename on success.
@@ -198,7 +237,12 @@ func downloadFile(ctx context.Context, videoURL, dest string) error {
 	dir := filepath.Dir(dest)
 	tmp, err := os.CreateTemp(dir, ".heygen-download-*.tmp")
 	if err != nil {
-		return clierrors.New(fmt.Sprintf("failed to create temp file in %q: %v", dir, err))
+		return &clierrors.CLIError{
+			Code:     "cli_file_io_error",
+			Message:  fmt.Sprintf("failed to create temp file in %q: %v", dir, err),
+			Hint:     "Could not write locally. Check the destination path and free disk space.",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 	tmpPath := tmp.Name()
 
@@ -206,11 +250,21 @@ func downloadFile(ctx context.Context, videoURL, dest string) error {
 	closeErr := tmp.Close()
 	if copyErr != nil {
 		_ = os.Remove(tmpPath)
-		return clierrors.New(fmt.Sprintf("download interrupted: %v", copyErr))
+		return &clierrors.CLIError{
+			Code:     "cli_download_interrupted",
+			Message:  fmt.Sprintf("download interrupted: %v", copyErr),
+			Hint:     "The transfer was cut off. Retry the download. The partial file was cleaned up.",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 	if closeErr != nil {
 		_ = os.Remove(tmpPath)
-		return clierrors.New(fmt.Sprintf("failed to finalize download: %v", closeErr))
+		return &clierrors.CLIError{
+			Code:     "cli_file_io_error",
+			Message:  fmt.Sprintf("failed to finalize download: %v", closeErr),
+			Hint:     "Could not finalize the file locally. Check free disk space.",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 
 	// Atomic rename. On Windows this may fail if dest is open elsewhere;
@@ -218,7 +272,12 @@ func downloadFile(ctx context.Context, videoURL, dest string) error {
 	// same directory so this is safe.
 	if err := os.Rename(tmpPath, dest); err != nil {
 		_ = os.Remove(tmpPath)
-		return clierrors.New(fmt.Sprintf("failed to move download to %q: %v", dest, err))
+		return &clierrors.CLIError{
+			Code:     "cli_file_io_error",
+			Message:  fmt.Sprintf("failed to move download to %q: %v", dest, err),
+			Hint:     "Could not write to the destination path. Check permissions and free disk space.",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 
 	return nil
