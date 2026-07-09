@@ -232,7 +232,7 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, parseErrorResponse(resp.StatusCode, respBody, requestIDFromHeaders(resp.Header))
+		return nil, parseErrorResponse(resp.StatusCode, respBody, resp.Header.Get("X-Request-Id"))
 	}
 
 	return json.RawMessage(respBody), nil
@@ -535,16 +535,4 @@ func parseErrorResponse(statusCode int, body []byte, requestID string) *clierror
 	}
 
 	return clierrors.FromAPIError(statusCode, &clierrors.APIError{}, requestID)
-}
-
-// requestIDFromHeaders returns the best available request/trace id for support
-// correlation. The v3 app does not set X-Request-Id; the AWS ALB sets x-amzn-*, so
-// prefer the app header when present, then fall back to the ALB's.
-func requestIDFromHeaders(h http.Header) string {
-	for _, k := range []string{"X-Request-Id", "X-Amzn-Request-Id", "X-Amzn-Trace-Id"} {
-		if v := h.Get(k); v != "" {
-			return v
-		}
-	}
-	return ""
 }

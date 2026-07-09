@@ -998,26 +998,6 @@ func TestParseErrorResponse_SurfacesParamAndDocURL(t *testing.T) {
 	}
 }
 
-func TestRequestIDFromHeaders(t *testing.T) {
-	tests := []struct {
-		name string
-		h    http.Header
-		want string
-	}{
-		{"app X-Request-Id preferred", http.Header{"X-Request-Id": {"app-1"}, "X-Amzn-Request-Id": {"amzn-1"}}, "app-1"},
-		{"falls back to x-amzn-request-id", http.Header{"X-Amzn-Request-Id": {"amzn-1"}}, "amzn-1"},
-		{"falls back to x-amzn-trace-id", http.Header{"X-Amzn-Trace-Id": {"trace-1"}}, "trace-1"},
-		{"none present", http.Header{}, ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := requestIDFromHeaders(tt.h); got != tt.want {
-				t.Errorf("requestIDFromHeaders = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestExtractJSONPath_ParseError(t *testing.T) {
 	_, err := extractJSONPath([]byte("{not valid json"), "data.id")
 	var cliErr *clierrors.CLIError
@@ -1044,14 +1024,5 @@ func TestExecute_ResponseBodyReadError_NetworkError(t *testing.T) {
 	var cliErr *clierrors.CLIError
 	if !errors.As(err, &cliErr) || cliErr.Code != "network_error" {
 		t.Fatalf("err = %v, want a network_error CLIError", err)
-	}
-}
-
-func TestRequestIDFromHeaders_CaseInsensitive(t *testing.T) {
-	// A lowercase ALB header (as parsed/canonicalized by net/http) is still found.
-	h := http.Header{}
-	h.Set("x-amzn-request-id", "amzn-lower")
-	if got := requestIDFromHeaders(h); got != "amzn-lower" {
-		t.Errorf("requestIDFromHeaders = %q, want amzn-lower", got)
 	}
 }
