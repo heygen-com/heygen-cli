@@ -257,7 +257,7 @@ func TestExecute_RetryOn429(t *testing.T) {
 		calls++
 		if calls == 1 {
 			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write([]byte(`{"error":{"code":"rate_limited","message":"too many requests"}}`))
+			_, _ = w.Write([]byte(`{"error":{"code":"rate_limit_exceeded","message":"too many requests"}}`))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -292,7 +292,7 @@ func TestExecute_RetryPreservesBody(t *testing.T) {
 		calls++
 		if calls == 1 {
 			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write([]byte(`{"error":{"code":"rate_limited","message":"too many requests"}}`))
+			_, _ = w.Write([]byte(`{"error":{"code":"rate_limit_exceeded","message":"too many requests"}}`))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -982,5 +982,18 @@ func TestParseErrorResponse_NonEnvelope_AuthExit(t *testing.T) {
 				t.Errorf("ExitCode = %d, want %d (ExitAuth)", err.ExitCode, clierrors.ExitAuth)
 			}
 		})
+	}
+}
+
+// Integration: param/doc_url in an HTTP error body survive JSON parsing all the way
+// to the CLIError (not just when passed a pre-built APIError struct).
+func TestParseErrorResponse_SurfacesParamAndDocURL(t *testing.T) {
+	body := []byte(`{"error":{"code":"invalid_parameter","message":"bad value","param":"avatar_id","doc_url":"https://developers.heygen.com/docs/error-codes#invalid-parameter"}}`)
+	err := parseErrorResponse(400, body, "req_1")
+	if err.Param != "avatar_id" {
+		t.Errorf("Param = %q, want avatar_id", err.Param)
+	}
+	if !strings.Contains(err.DocURL, "error-codes") {
+		t.Errorf("DocURL = %q, want the doc URL", err.DocURL)
 	}
 }
