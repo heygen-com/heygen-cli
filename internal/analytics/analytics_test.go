@@ -242,7 +242,7 @@ func TestCommandRunComplete_SourceAndHTTPStatus(t *testing.T) {
 	t.Run("cli source omits http_status when 0", func(t *testing.T) {
 		stub := &stubCaptureClient{}
 		client := newWithCapture("v1.2.3", stub)
-		client.CommandRunComplete("heygen video create", 1, time.Second, "file_io_error", "cli", 0)
+		client.CommandRunComplete("heygen video create", 1, time.Second, "cli_file_io_error", "cli", 0)
 		msg := stub.messages[0].(posthog.Capture)
 		if got := msg.Properties["source"]; got != "cli" {
 			t.Fatalf("source = %v, want cli", got)

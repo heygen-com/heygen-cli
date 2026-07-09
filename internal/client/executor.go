@@ -82,7 +82,7 @@ func (c *Client) ExecuteAndPoll(
 	resourceID, err := extractJSONPath(createResp, spec.PollConfig.IDField)
 	if err != nil {
 		return nil, &clierrors.CLIError{
-			Code: "response_parse_error",
+			Code: "cli_response_parse_error",
 			Message: fmt.Sprintf(
 				"failed to extract resource ID from %q: %v", spec.PollConfig.IDField, err),
 			Hint:     "The create response did not have the expected shape. This command may require manual polling for batch responses.",
@@ -135,7 +135,7 @@ func (c *Client) ExecuteAndPoll(
 		status, err := extractJSONPath(statusResp, spec.PollConfig.StatusField)
 		if err != nil {
 			return nil, &clierrors.CLIError{
-				Code: "response_parse_error",
+				Code: "cli_response_parse_error",
 				Message: fmt.Sprintf(
 					"failed to extract status from %q: %v", spec.PollConfig.StatusField, err),
 				Hint:     "The status response did not have the expected shape. Retry; if it persists, report it.",
@@ -207,6 +207,10 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 				ExitCode: clierrors.ExitAuth,
 			}
 		}
+		// network_error is a grandfathered bare code (not cli_-prefixed): it is
+		// shared with the download-command transport path (cmd/heygen/video_download.go)
+		// and predates the cli_ convention. See the grandfathered set in
+		// internal/errors/codes.go; keep both emission sites bare and in sync.
 		return nil, &clierrors.CLIError{
 			Code:     "network_error",
 			Message:  fmt.Sprintf("request failed: %v", err),
@@ -407,7 +411,7 @@ func extractJSONPath(raw json.RawMessage, path string) (string, error) {
 	var current any
 	if err := json.Unmarshal(raw, &current); err != nil {
 		return "", &clierrors.CLIError{
-			Code:     "response_parse_error",
+			Code:     "cli_response_parse_error",
 			Message:  fmt.Sprintf("failed to parse JSON response: %v", err),
 			Hint:     "The API response could not be parsed. Retry; if it persists, report it (possible CLI/API mismatch).",
 			ExitCode: clierrors.ExitGeneral,

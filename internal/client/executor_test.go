@@ -1021,8 +1021,8 @@ func TestRequestIDFromHeaders(t *testing.T) {
 func TestExtractJSONPath_ParseError(t *testing.T) {
 	_, err := extractJSONPath([]byte("{not valid json"), "data.id")
 	var cliErr *clierrors.CLIError
-	if !errors.As(err, &cliErr) || cliErr.Code != "response_parse_error" {
-		t.Fatalf("err = %v, want a response_parse_error CLIError", err)
+	if !errors.As(err, &cliErr) || cliErr.Code != "cli_response_parse_error" {
+		t.Fatalf("err = %v, want a cli_response_parse_error CLIError", err)
 	}
 }
 
