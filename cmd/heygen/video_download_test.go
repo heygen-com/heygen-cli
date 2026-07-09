@@ -406,8 +406,8 @@ func TestVideoDownload_DownloadFails(t *testing.T) {
 	if res.ExitCode != 1 {
 		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, `"code":"asset_download_failed"`) {
-		t.Fatalf("stderr should carry asset_download_failed (asset-host 5xx):\n%s", res.Stderr)
+	if !strings.Contains(res.Stderr, `"code":"cli_download_failed"`) {
+		t.Fatalf("stderr should carry cli_download_failed (asset-host 5xx):\n%s", res.Stderr)
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
 		t.Fatalf("expected no output file, stat err = %v", err)
@@ -415,7 +415,7 @@ func TestVideoDownload_DownloadFails(t *testing.T) {
 }
 
 // A presigned asset URL that 403s or 404s is expired/revoked — a client-side
-// download_url_expired, distinct from the asset host failing (asset_download_failed).
+// cli_download_url_expired, distinct from the asset host failing (cli_download_failed).
 func TestVideoDownload_ExpiredURL(t *testing.T) {
 	for _, status := range []int{http.StatusForbidden, http.StatusNotFound} {
 		t.Run(fmt.Sprintf("HTTP_%d", status), func(t *testing.T) {
@@ -444,8 +444,8 @@ func TestVideoDownload_ExpiredURL(t *testing.T) {
 			if res.ExitCode != 1 {
 				t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
 			}
-			if !strings.Contains(res.Stderr, `"code":"download_url_expired"`) {
-				t.Fatalf("stderr should carry download_url_expired (HTTP %d on presigned URL):\n%s", status, res.Stderr)
+			if !strings.Contains(res.Stderr, `"code":"cli_download_url_expired"`) {
+				t.Fatalf("stderr should carry cli_download_url_expired (HTTP %d on presigned URL):\n%s", status, res.Stderr)
 			}
 			if !strings.Contains(res.Stderr, "video get") {
 				t.Fatalf("expired-URL hint should point to re-fetching via video get:\n%s", res.Stderr)
@@ -455,7 +455,7 @@ func TestVideoDownload_ExpiredURL(t *testing.T) {
 }
 
 // The video-get response failing to parse, or yielding an unusable download URL,
-// classifies as response_parse_error (not the opaque error code).
+// classifies as cli_response_parse_error (not the opaque error code).
 func TestVideoDownload_ResponseParseError(t *testing.T) {
 	t.Run("malformed video-get JSON", func(t *testing.T) {
 		dest := filepath.Join(t.TempDir(), "x.mp4")
@@ -473,8 +473,8 @@ func TestVideoDownload_ResponseParseError(t *testing.T) {
 		if res.ExitCode != 1 {
 			t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
 		}
-		if !strings.Contains(res.Stderr, `"code":"response_parse_error"`) {
-			t.Fatalf("stderr should carry response_parse_error:\n%s", res.Stderr)
+		if !strings.Contains(res.Stderr, `"code":"cli_response_parse_error"`) {
+			t.Fatalf("stderr should carry cli_response_parse_error:\n%s", res.Stderr)
 		}
 	})
 
@@ -495,8 +495,8 @@ func TestVideoDownload_ResponseParseError(t *testing.T) {
 		if res.ExitCode != 1 {
 			t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
 		}
-		if !strings.Contains(res.Stderr, `"code":"response_parse_error"`) {
-			t.Fatalf("stderr should carry response_parse_error for an unusable URL:\n%s", res.Stderr)
+		if !strings.Contains(res.Stderr, `"code":"cli_response_parse_error"`) {
+			t.Fatalf("stderr should carry cli_response_parse_error for an unusable URL:\n%s", res.Stderr)
 		}
 	})
 }
@@ -519,4 +519,101 @@ func writeJSON(t *testing.T, w http.ResponseWriter, payload any) {
 		t.Fatalf("Marshal: %v", err)
 	}
 	_, _ = w.Write(raw)
+}
+
+// Transport failure reaching the asset host classifies as network_error (the
+// grandfathered shared transport code, intentionally unprefixed).
+func TestVideoDownload_NetworkError(t *testing.T) {
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close() // deadURL now refuses connections
+
+	dest := filepath.Join(t.TempDir(), "x.mp4")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v3/videos/vid_123" {
+			writeJSON(t, w, map[string]any{
+				"data": map[string]any{"video_url": deadURL + "/x.mp4", "status": "completed"},
+			})
+			return
+		}
+		t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "download", "vid_123", "--output-path", dest)
+	if res.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, `"code":"network_error"`) {
+		t.Fatalf("stderr should carry network_error (transport failure):\n%s", res.Stderr)
+	}
+}
+
+// A response that promises more bytes than it delivers, then drops, cuts io.Copy
+// off mid-stream and classifies as cli_download_interrupted.
+func TestVideoDownload_Interrupted(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "x.mp4")
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/videos/vid_123":
+			writeJSON(t, w, map[string]any{
+				"data": map[string]any{"video_url": srv.URL + "/download/x.mp4", "status": "completed"},
+			})
+		case "/download/x.mp4":
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				t.Fatal("test server does not support hijacking")
+			}
+			conn, buf, err := hj.Hijack()
+			if err != nil {
+				t.Fatalf("hijack: %v", err)
+			}
+			// Promise 1000 bytes, send 7, then drop the connection → the client's
+			// io.Copy hits an unexpected EOF.
+			_, _ = buf.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\npartial")
+			_ = buf.Flush()
+			_ = conn.Close()
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "download", "vid_123", "--output-path", dest)
+	if res.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, `"code":"cli_download_interrupted"`) {
+		t.Fatalf("stderr should carry cli_download_interrupted (mid-stream cutoff):\n%s", res.Stderr)
+	}
+}
+
+// A destination whose parent directory does not exist fails temp-file creation
+// and classifies as cli_file_io_error.
+func TestVideoDownload_FileIOError(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "no-such-dir", "x.mp4") // parent dir absent
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/videos/vid_123":
+			writeJSON(t, w, map[string]any{
+				"data": map[string]any{"video_url": srv.URL + "/download/x.mp4", "status": "completed"},
+			})
+		case "/download/x.mp4":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("video-bytes"))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "video", "download", "vid_123", "--output-path", dest)
+	if res.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, `"code":"cli_file_io_error"`) {
+		t.Fatalf("stderr should carry cli_file_io_error (temp-create in missing dir):\n%s", res.Stderr)
+	}
 }
