@@ -309,13 +309,29 @@ func errorsAsPickerCanceled(err error) bool {
 // cleared so the file holds at most one of api_key / oauth (the
 // single-credential normalization invariant). Pre-this-change users
 // with both blocks self-heal on their next login.
-func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
+func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) (err error) {
+	// reported tracks whether this attempt already emitted a terminal
+	// analytics event (AuthLoginCompleted/AuthLoginFailed) on one of the
+	// explicitly-instrumented paths below. The deferred check is a
+	// safety net for every OTHER error return in this function (e.g. a
+	// future early return nobody remembers to instrument): without it,
+	// the AuthLoginStarted event the caller already fired would never
+	// reconcile.
+	reported := false
+	defer func() {
+		if err != nil && !reported {
+			loginAnalytics.AuthLoginFailed("api_key", "internal_error")
+		}
+	}()
+
 	key, err := readAPIKey(cmd.InOrStdin(), cmd.ErrOrStderr())
 	if err != nil {
+		reported = true
 		loginAnalytics.AuthLoginFailed("api_key", "api_key_aborted")
 		return err
 	}
 	if key == "" {
+		reported = true
 		loginAnalytics.AuthLoginFailed("api_key", "api_key_invalid_input")
 		if stdinIsTerminalFunc() {
 			return clierrors.NewUsage(
@@ -416,6 +432,7 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
 	if err != nil {
 		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
 	}
+	reported = true
 	loginAnalytics.AuthLoginCompleted("api_key")
 	if display := userInfo.DisplayName(); display != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", display)
@@ -425,7 +442,21 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
 
 // runOAuthLogin drives the browser + PKCE + loopback dance and persists
 // the resulting tokens.
-func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) error {
+func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) (err error) {
+	// reported tracks whether this attempt already emitted a terminal
+	// analytics event (AuthLoginCompleted/AuthLoginFailed) on one of the
+	// explicitly-instrumented paths below. The deferred check is a
+	// safety net for every OTHER error return in this function (e.g. a
+	// future early return nobody remembers to instrument): without it,
+	// the AuthLoginStarted event the caller already fired would never
+	// reconcile.
+	reported := false
+	defer func() {
+		if err != nil && !reported {
+			loginAnalytics.AuthLoginFailed("oauth", "internal_error")
+		}
+	}()
+
 	// Headless-shell fast-fail: when explicit --oauth lands in a shell
 	// with no TTY on stdin AND the environment opts out of opening a
 	// browser (BROWSER=none or HEYGEN_NO_BROWSER=1), the callback can
@@ -434,6 +465,7 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	// guard when cfg.OpenBrowser is injected (test path drives the
 	// callback synthetically). (N1)
 	if cfg.OpenBrowser == nil && isHeadlessOAuthShell() {
+		reported = true
 		loginAnalytics.AuthLoginFailed("oauth", "headless_shell")
 		return clierrors.NewUsage(
 			"cannot complete browser OAuth flow in a headless shell " +
@@ -492,21 +524,25 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	var loopbackResult oauth.LoopbackResult
 	select {
 	case <-cmdCtx.Done():
+		reported = true
 		loginAnalytics.AuthLoginFailed("oauth", "oauth_timeout")
 		return clierrors.New(fmt.Sprintf("oauth: timed out waiting for browser callback: %v", cmdCtx.Err()))
 	case loopbackResult = <-results:
 	}
 	if loopbackResult.Err != nil {
+		reported = true
 		loginAnalytics.AuthLoginFailed("oauth", "oauth_flow_error")
 		return clierrors.New(loopbackResult.Err.Error())
 	}
 
 	tok, err := oc.ExchangeAuthorizationCode(cmdCtx, loopbackResult.Code, verifier, loopbackResult.RedirectURI)
 	if err != nil {
+		reported = true
 		loginAnalytics.AuthLoginFailed("oauth", "token_exchange_failed")
 		return clierrors.New(fmt.Sprintf("oauth: token exchange failed: %v", err))
 	}
 	if tok.AccessToken == "" {
+		reported = true
 		loginAnalytics.AuthLoginFailed("oauth", "token_exchange_failed")
 		return clierrors.New("oauth: token endpoint returned no access_token")
 	}
@@ -599,6 +635,7 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	if err != nil {
 		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
 	}
+	reported = true
 	loginAnalytics.AuthLoginCompleted("oauth")
 	if display := userInfo.DisplayName(); display != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", display)
