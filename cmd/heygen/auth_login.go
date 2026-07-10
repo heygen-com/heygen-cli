@@ -43,11 +43,14 @@ var loginAnalytics loginAnalyticsClient = &analytics.Client{}
 // email if present, otherwise username. Deliberately narrower than
 // UserInfo.DisplayName() (which also falls back to "first last") — this
 // links a PostHog person to a stable login handle, not a display string.
+// Lowercased so this joins with hyperframes-oss's own identify call
+// regardless of the account's stored casing — an uppercase-email user would
+// otherwise split across two PostHog profiles.
 func identityKey(userInfo auth.UserInfo) string {
 	if userInfo.Email != "" {
-		return userInfo.Email
+		return strings.ToLower(userInfo.Email)
 	}
-	return userInfo.Username
+	return strings.ToLower(userInfo.Username)
 }
 
 // oauthLoginConfig is overridable in tests so the login flow can be

@@ -923,6 +923,38 @@ func TestRunOAuthLogin_IdentifyAccount_UsernameFallback(t *testing.T) {
 	}
 }
 
+// identityKey lowercases the resolved email so this joins the same PostHog
+// person regardless of the account's stored casing.
+func TestRunOAuthLogin_IdentifyAccount_EmailLowercased(t *testing.T) {
+	spy := withLoginAnalyticsSpy(t)
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	t.Setenv("HEYGEN_API_KEY", "")
+
+	idp := newFakeIdP(t)
+	usersMe := fakeUsersMeServer(t, `{"data":{"username":"Demo","email":"Demo@Example.com"}}`)
+	cfg := oauthLoginConfig{
+		TokenURL: idp.server.URL + "/v1/oauth/token",
+		OpenBrowser: func(authURL string) error {
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				hitBrowserCallback(t, idp.expectedCode, authURL)
+			}()
+			return nil
+		},
+		UsersMeBaseURL: usersMe.URL,
+		Now:            time.Now,
+	}
+
+	res := runOAuthLoginForTest(t, cfg)
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+
+	if got := spy.identifyCalls; len(got) != 1 || got[0] != "demo@example.com" {
+		t.Fatalf("identifyCalls = %v, want [demo@example.com]", got)
+	}
+}
+
 // U3: the identity probe failing entirely (login still succeeds per
 // existing behavior) must not call IdentifyAccount.
 func TestRunOAuthLogin_IdentifyAccount_ProbeFailure_NoIdentify(t *testing.T) {
