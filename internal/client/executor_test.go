@@ -997,3 +997,32 @@ func TestParseErrorResponse_SurfacesParamAndDocURL(t *testing.T) {
 		t.Errorf("DocURL = %q, want the doc URL", err.DocURL)
 	}
 }
+
+func TestExtractJSONPath_ParseError(t *testing.T) {
+	_, err := extractJSONPath([]byte("{not valid json"), "data.id")
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) || cliErr.Code != "cli_response_parse_error" {
+		t.Fatalf("err = %v, want a cli_response_parse_error CLIError", err)
+	}
+}
+
+// errReadCloser fails on Read, simulating a connection dropped mid-response.
+type errReadCloser struct{}
+
+func (errReadCloser) Read([]byte) (int, error) { return 0, errors.New("connection reset mid-body") }
+func (errReadCloser) Close() error             { return nil }
+
+type errBodyTransport struct{}
+
+func (errBodyTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: 200, Body: errReadCloser{}, Header: make(http.Header)}, nil
+}
+
+func TestExecute_ResponseBodyReadError_NetworkError(t *testing.T) {
+	c := New("key", WithBaseURL("http://example.invalid"), WithHTTPClient(&http.Client{Transport: errBodyTransport{}}))
+	_, err := c.Execute(&command.Spec{Endpoint: "/v3/videos", Method: "GET"}, &command.Invocation{PathParams: map[string]string{}})
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) || cliErr.Code != "network_error" {
+		t.Fatalf("err = %v, want a network_error CLIError", err)
+	}
+}

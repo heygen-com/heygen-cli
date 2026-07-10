@@ -59,7 +59,7 @@ func TestCommandRunComplete_Properties(t *testing.T) {
 	client := newWithCapture("v1.2.3", stub)
 	client.distinctID = "anon-id"
 
-	client.CommandRunComplete("heygen video create", 4, 1500*time.Millisecond, "timeout")
+	client.CommandRunComplete("heygen video create", 4, 1500*time.Millisecond, "timeout", "cli", 0)
 
 	if len(stub.messages) != 1 {
 		t.Fatalf("messages = %d, want 1", len(stub.messages))
@@ -107,7 +107,7 @@ func TestCommandRunComplete_IncludesClientOrigin(t *testing.T) {
 	client := newWithCapture("v1.2.3", stub)
 	client.clientOrigin = "claude_code"
 
-	client.CommandRunComplete("heygen video create", 0, time.Second, "")
+	client.CommandRunComplete("heygen video create", 0, time.Second, "", "", 0)
 
 	msg := stub.messages[0].(posthog.Capture)
 	if got := msg.Properties["client_origin"]; got != "claude_code" {
@@ -224,4 +224,40 @@ func TestDistinctID_Persists(t *testing.T) {
 	if second != first {
 		t.Fatalf("second distinct ID = %q, want %q", second, first)
 	}
+}
+
+func TestCommandRunComplete_SourceAndHTTPStatus(t *testing.T) {
+	t.Run("api source carries http_status", func(t *testing.T) {
+		stub := &stubCaptureClient{}
+		client := newWithCapture("v1.2.3", stub)
+		client.CommandRunComplete("heygen video create", 1, time.Second, "insufficient_credit", "api", 402)
+		msg := stub.messages[0].(posthog.Capture)
+		if got := msg.Properties["source"]; got != "api" {
+			t.Fatalf("source = %v, want api", got)
+		}
+		if got := msg.Properties["http_status"]; got != 402 {
+			t.Fatalf("http_status = %v, want 402", got)
+		}
+	})
+	t.Run("cli source omits http_status when 0", func(t *testing.T) {
+		stub := &stubCaptureClient{}
+		client := newWithCapture("v1.2.3", stub)
+		client.CommandRunComplete("heygen video create", 1, time.Second, "cli_file_io_error", "cli", 0)
+		msg := stub.messages[0].(posthog.Capture)
+		if got := msg.Properties["source"]; got != "cli" {
+			t.Fatalf("source = %v, want cli", got)
+		}
+		if _, ok := msg.Properties["http_status"]; ok {
+			t.Fatalf("http_status should be omitted when 0")
+		}
+	})
+	t.Run("success omits source", func(t *testing.T) {
+		stub := &stubCaptureClient{}
+		client := newWithCapture("v1.2.3", stub)
+		client.CommandRunComplete("heygen video list", 0, time.Second, "", "", 0)
+		msg := stub.messages[0].(posthog.Capture)
+		if _, ok := msg.Properties["source"]; ok {
+			t.Fatalf("source should be omitted on success")
+		}
+	})
 }

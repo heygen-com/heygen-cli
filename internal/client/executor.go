@@ -81,10 +81,13 @@ func (c *Client) ExecuteAndPoll(
 
 	resourceID, err := extractJSONPath(createResp, spec.PollConfig.IDField)
 	if err != nil {
-		return nil, clierrors.New(fmt.Sprintf(
-			"failed to extract resource ID from %q: %v. This command may require manual polling for batch responses",
-			spec.PollConfig.IDField, err,
-		))
+		return nil, &clierrors.CLIError{
+			Code: "cli_response_parse_error",
+			Message: fmt.Sprintf(
+				"failed to extract resource ID from %q: %v", spec.PollConfig.IDField, err),
+			Hint:     "The create response did not have the expected shape. This command may require manual polling for batch responses.",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 
 	// If IDField uses an array index (e.g., "data.ids.0"), reject batch
@@ -131,10 +134,13 @@ func (c *Client) ExecuteAndPoll(
 
 		status, err := extractJSONPath(statusResp, spec.PollConfig.StatusField)
 		if err != nil {
-			return nil, clierrors.New(fmt.Sprintf(
-				"failed to extract status from %q: %v",
-				spec.PollConfig.StatusField, err,
-			))
+			return nil, &clierrors.CLIError{
+				Code: "cli_response_parse_error",
+				Message: fmt.Sprintf(
+					"failed to extract status from %q: %v", spec.PollConfig.StatusField, err),
+				Hint:     "The status response did not have the expected shape. Retry; if it persists, report it.",
+				ExitCode: clierrors.ExitGeneral,
+			}
 		}
 
 		if slices.Contains(spec.PollConfig.TerminalOK, status) {
@@ -201,6 +207,10 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 				ExitCode: clierrors.ExitAuth,
 			}
 		}
+		// network_error is a grandfathered bare code (not cli_-prefixed): it is
+		// shared with the download-command transport path (cmd/heygen/video_download.go)
+		// and predates the cli_ convention. See the grandfathered set in
+		// internal/errors/codes.go; keep both emission sites bare and in sync.
 		return nil, &clierrors.CLIError{
 			Code:     "network_error",
 			Message:  fmt.Sprintf("request failed: %v", err),
@@ -212,7 +222,17 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, clierrors.New(fmt.Sprintf("failed to read response body: %v", err))
+		// Mid-response read failure is a dropped connection, not a parse issue.
+		// The response arrived (status known) before the body dropped, so record
+		// it: dashboards can then tell this from the pre-response transport failure
+		// above (where resp is nil and the status is genuinely 0).
+		return nil, &clierrors.CLIError{
+			Code:       "network_error",
+			Message:    fmt.Sprintf("failed to read response body: %v", err),
+			Hint:       "This is usually a temporary network issue. Check your connection and retry.",
+			HTTPStatus: resp.StatusCode,
+			ExitCode:   clierrors.ExitGeneral,
+		}
 	}
 
 	if resp.StatusCode >= 400 {
@@ -394,7 +414,12 @@ func extractJSONPath(raw json.RawMessage, path string) (string, error) {
 
 	var current any
 	if err := json.Unmarshal(raw, &current); err != nil {
-		return "", clierrors.New(fmt.Sprintf("failed to parse JSON response: %v", err))
+		return "", &clierrors.CLIError{
+			Code:     "cli_response_parse_error",
+			Message:  fmt.Sprintf("failed to parse JSON response: %v", err),
+			Hint:     "The API response could not be parsed. Retry; if it persists, report it (possible CLI/API mismatch).",
+			ExitCode: clierrors.ExitGeneral,
+		}
 	}
 
 	for _, part := range strings.Split(path, ".") {

@@ -218,17 +218,19 @@ func downloadFile(ctx context.Context, videoURL, dest string) error {
 		// re-fetch); any other status is the asset host (our storage/CDN) failing.
 		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
 			return &clierrors.CLIError{
-				Code:     "cli_download_url_expired",
-				Message:  fmt.Sprintf("download link expired or unavailable (HTTP %d)", resp.StatusCode),
-				Hint:     "This download link has expired. Re-fetch a fresh URL: heygen video get <video_id>",
-				ExitCode: clierrors.ExitGeneral,
+				Code:       "cli_download_url_expired",
+				Message:    fmt.Sprintf("download link expired or unavailable (HTTP %d)", resp.StatusCode),
+				Hint:       "This download link has expired. Re-fetch a fresh URL: heygen video get <video_id>",
+				HTTPStatus: resp.StatusCode,
+				ExitCode:   clierrors.ExitGeneral,
 			}
 		}
 		return &clierrors.CLIError{
-			Code:     "cli_download_failed",
-			Message:  fmt.Sprintf("download failed with HTTP %d", resp.StatusCode),
-			Hint:     "The asset host returned an error fetching the file. This is usually transient — retry shortly.",
-			ExitCode: clierrors.ExitGeneral,
+			Code:       "cli_download_failed",
+			Message:    fmt.Sprintf("download failed with HTTP %d", resp.StatusCode),
+			Hint:       "The asset host returned an error fetching the file. This is usually transient. Retry shortly.",
+			HTTPStatus: resp.StatusCode,
+			ExitCode:   clierrors.ExitGeneral,
 		}
 	}
 
