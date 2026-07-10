@@ -9,11 +9,12 @@ import (
 	"testing"
 )
 
-// codeLiteral matches a CLI-minted error-code string literal: either a `Code:`
-// struct field or a `code =` assignment (the two forms the CLI uses to
-// synthesize a code). API codes relayed from a response come from a variable
-// (apiErr.Code), not a literal, so they do not match.
-var codeLiteral = regexp.MustCompile(`(?:\bCode:\s*|\bcode\s*=\s*)"([a-z][a-z0-9_]*)"`)
+// codeLiteral matches a CLI-minted error-code string literal: a `Code:` struct
+// field, or a `code =` / `code :=` assignment (the forms the CLI uses to
+// synthesize a code). The `:?=` covers both `=` and `:=` without matching the
+// `==` comparison in isNonSpecific. API codes relayed from a response come from
+// a variable (apiErr.Code), not a literal, so they do not match.
+var codeLiteral = regexp.MustCompile(`(?:\bCode:\s*|\bcode\s*:?=\s*)"([a-z][a-z0-9_]*)"`)
 
 func registrySet(t *testing.T) map[string]string {
 	t.Helper()
@@ -138,4 +139,29 @@ func repoRoot(t *testing.T) string {
 	}
 	// this file lives at <root>/internal/errors/codes_test.go
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
+
+// TestCodeLiteral_MatchesDeclarationForms locks the source-scan regex to the
+// three ways the CLI declares a code literal (Code: / code = / code :=) and
+// confirms it does not match the `code == "..."` comparison in isNonSpecific.
+func TestCodeLiteral_MatchesDeclarationForms(t *testing.T) {
+	src := `
+		Code:     "cli_alpha",
+		code = "cli_beta"
+		code := "cli_gamma"
+		if code == "error" {
+		}
+	`
+	got := map[string]bool{}
+	for _, m := range codeLiteral.FindAllStringSubmatch(src, -1) {
+		got[m[1]] = true
+	}
+	for _, want := range []string{"cli_alpha", "cli_beta", "cli_gamma"} {
+		if !got[want] {
+			t.Errorf("codeLiteral missed declaration form for %q", want)
+		}
+	}
+	if got["error"] {
+		t.Error(`codeLiteral matched the code == "error" comparison; it must not`)
+	}
 }
