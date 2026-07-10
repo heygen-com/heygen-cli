@@ -432,12 +432,19 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) (err error) {
 	if err != nil {
 		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
 	}
-	reported = true
-	loginAnalytics.AuthLoginCompleted("api_key")
 	if display := userInfo.DisplayName(); display != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", display)
 	}
-	return ctx.formatter.Data(data, "", nil)
+	// Only report the login as completed once the response has actually
+	// been written out successfully: if the formatter fails (e.g. a
+	// broken pipe on stdout), the command still exits non-zero and the
+	// deferred check above reports AuthLoginFailed instead.
+	if err = ctx.formatter.Data(data, "", nil); err != nil {
+		return err
+	}
+	reported = true
+	loginAnalytics.AuthLoginCompleted("api_key")
+	return nil
 }
 
 // runOAuthLogin drives the browser + PKCE + loopback dance and persists
@@ -635,14 +642,21 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) (e
 	if err != nil {
 		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
 	}
-	reported = true
-	loginAnalytics.AuthLoginCompleted("oauth")
 	if display := userInfo.DisplayName(); display != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", display)
 	} else {
 		fmt.Fprintln(cmd.ErrOrStderr(), "Logged in.")
 	}
-	return ctx.formatter.Data(data, "", nil)
+	// Only report the login as completed once the response has actually
+	// been written out successfully: if the formatter fails (e.g. a
+	// broken pipe on stdout), the command still exits non-zero and the
+	// deferred check above reports AuthLoginFailed instead.
+	if err = ctx.formatter.Data(data, "", nil); err != nil {
+		return err
+	}
+	reported = true
+	loginAnalytics.AuthLoginCompleted("oauth")
+	return nil
 }
 
 // lookupCurrentUser GETs /v3/users/me with the freshly minted Bearer

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,9 +18,25 @@ import (
 	"github.com/heygen-com/heygen-cli/internal/analytics"
 	"github.com/heygen-com/heygen-cli/internal/auth"
 	"github.com/heygen-com/heygen-cli/internal/auth/oauth"
+	"github.com/heygen-com/heygen-cli/internal/command"
 	"github.com/heygen-com/heygen-cli/internal/config"
+	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
+
+// errorFormatter is a test double for output.Formatter whose Data call
+// always fails, simulating e.g. a broken-pipe stdout write (piping the
+// CLI's output through something that closes early, like `head -1`).
+// Used to confirm that a formatter failure on the success path is
+// reflected in login telemetry: the attempt must NOT be recorded as
+// AuthLoginCompleted if the CLI itself exits non-zero.
+type errorFormatter struct{}
+
+func (errorFormatter) Data(_ json.RawMessage, _ string, _ []command.Column) error {
+	return errors.New("write: broken pipe")
+}
+
+func (errorFormatter) Error(_ *clierrors.CLIError) {}
 
 // fakeIdP serves a minimal subset of the HeyGen OAuth endpoints for the
 // PR 2 login integration test. It accepts a single authorization_code
@@ -704,6 +722,65 @@ func TestRunAuthLogin_OAuthSuccess_Telemetry(t *testing.T) {
 	}
 }
 
+// Regression test: a login that otherwise succeeds but whose final
+// response write fails (e.g. stdout piped into something that closes
+// early) must NOT be recorded as AuthLoginCompleted — the CLI itself
+// exits non-zero, so telemetry must agree and report AuthLoginFailed
+// instead. Previously runOAuthLogin set reported=true and called
+// AuthLoginCompleted BEFORE calling ctx.formatter.Data, so a formatter
+// failure here still recorded a completed login.
+func TestRunAuthLogin_OAuthFormatterFailure_Telemetry(t *testing.T) {
+	spy := withLoginAnalyticsSpy(t)
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	t.Setenv("HEYGEN_API_KEY", "")
+
+	idp := newFakeIdP(t)
+	usersMe := fakeUsersMeServer(t, `{"data":{"username":"demo","email":"demo@example.com"}}`)
+	cfg := oauthLoginConfig{
+		TokenURL: idp.server.URL + "/v1/oauth/token",
+		OpenBrowser: func(authURL string) error {
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				hitBrowserCallback(t, idp.expectedCode, authURL)
+			}()
+			return nil
+		},
+		UsersMeBaseURL: usersMe.URL,
+		Now:            time.Now,
+	}
+
+	runAuthLoginTestDeps = &runAuthLoginDeps{
+		stdinIsTerminal:  func() bool { return true },
+		stdoutIsTerminal: func() bool { return true },
+		nonInteractive:   func() bool { return false },
+		runOAuth: func(c *cobra.Command, x *cmdContext) error {
+			return runOAuthLogin(c, x, cfg)
+		},
+	}
+	t.Cleanup(func() { runAuthLoginTestDeps = nil })
+
+	cmd := &cobra.Command{Use: "login"}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetContext(context.Background())
+	ctx := &cmdContext{formatter: errorFormatter{}, version: "test"}
+
+	err := runAuthLogin(cmd, ctx, authLoginFlags{oauthMode: true})
+	if err == nil {
+		t.Fatal("runAuthLogin: want the formatter error, got nil")
+	}
+	if !strings.Contains(err.Error(), "broken pipe") {
+		t.Fatalf("err = %q, want it to surface the formatter failure", err.Error())
+	}
+
+	if len(spy.completed) != 0 {
+		t.Fatalf("completed = %v, want none (formatter failed after login succeeded)", spy.completed)
+	}
+	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "internal_error"}) {
+		t.Fatalf("failed = %v, want [{oauth internal_error}]", got)
+	}
+}
+
 // U4: the loopback timing out (no browser callback ever arrives) emits
 // failed(oauth, oauth_timeout). Uses a short-deadline parent context
 // instead of waiting out oauth.DefaultLoopbackTimeout (~5min) — runOAuthLogin
@@ -907,5 +984,57 @@ func TestRunAuthLogin_APIKey_IdentifyAccount(t *testing.T) {
 	}
 	if got := spy.completed; len(got) != 1 || got[0] != "api_key" {
 		t.Fatalf("completed = %v, want [api_key]", got)
+	}
+}
+
+// Regression test, api-key path: same as
+// TestRunAuthLogin_OAuthFormatterFailure_Telemetry but through
+// runAPIKeyLogin. A formatter failure on the success path must surface
+// as the function's return error (non-zero exit) AND must be reported
+// as AuthLoginFailed(api_key, internal_error), never
+// AuthLoginCompleted.
+func TestRunAuthLogin_APIKeyFormatterFailure_Telemetry(t *testing.T) {
+	spy := withLoginAnalyticsSpy(t)
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+
+	srv, _ := usersMeServerForKey(t, "hg_test_key", `{"data":{"username":"jdoe","email":"jane@example.com"}}`)
+	t.Setenv("HEYGEN_API_BASE", srv.URL)
+	t.Setenv("HEYGEN_ALLOW_HTTP", "1")
+
+	runAuthLoginTestDeps = &runAuthLoginDeps{
+		stdinIsTerminal:  func() bool { return true },
+		stdoutIsTerminal: func() bool { return true },
+		nonInteractive:   func() bool { return false },
+		runAPIKey:        runAPIKeyLogin,
+	}
+	t.Cleanup(func() { runAuthLoginTestDeps = nil })
+
+	cmd := &cobra.Command{Use: "login"}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetIn(strings.NewReader("hg_test_key\n"))
+	cmd.SetContext(context.Background())
+	ctx := &cmdContext{
+		formatter: errorFormatter{},
+		version:   "test",
+		configProvider: &config.LayeredProvider{
+			Env:  &config.EnvProvider{},
+			File: &config.FileProvider{},
+		},
+	}
+
+	err := runAuthLogin(cmd, ctx, authLoginFlags{apiKeyMode: true})
+	if err == nil {
+		t.Fatal("runAuthLogin: want the formatter error, got nil")
+	}
+	if !strings.Contains(err.Error(), "broken pipe") {
+		t.Fatalf("err = %q, want it to surface the formatter failure", err.Error())
+	}
+
+	if len(spy.completed) != 0 {
+		t.Fatalf("completed = %v, want none (formatter failed after login succeeded)", spy.completed)
+	}
+	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"api_key", "internal_error"}) {
+		t.Fatalf("failed = %v, want [{api_key internal_error}]", got)
 	}
 }
