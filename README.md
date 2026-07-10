@@ -164,7 +164,7 @@ Every command supports `--help`.
 | Aspect | Behavior |
 |--------|----------|
 | **stdout** | Always JSON. Even `video download` — binary writes to disk; stdout emits `{"asset", "message", "path"}` so you can chain on `.path`. |
-| **stderr** | Structured envelope on error: `{"error": {"code", "message", "hint"}}`. Stable `code` values for programmatic branching. |
+| **stderr** | Structured envelope on error: `{"error": {"code", "message", "hint", "param", "doc_url", "request_id"}}`. `code`/`message` are always present; `hint`/`param`/`doc_url`/`request_id` appear when applicable (`param`/`doc_url` are surfaced from the API for validation and documented errors). Stable `code` values for programmatic branching. |
 | **Exit codes** | `0` ok · `1` API or network · `2` usage · `3` auth / not permitted · `4` timeout under `--wait` (stdout contains partial resource for resume) |
 | **Request bodies** | Flags for simple inputs; `-d` for nested JSON (inline, file path, or `-` for stdin). Flags override matching fields. |
 | **Async jobs** | `--wait` blocks with exponential backoff; `--timeout` sets max (default 20m). 429s and 5xx retry automatically. |
@@ -172,7 +172,7 @@ Every command supports `--help`.
 Example error envelope:
 
 ```json
-{"error": {"code": "not_found", "message": "Video not found", "hint": "Check ID with: heygen video list"}}
+{"error": {"code": "not_found", "message": "Video not found", "hint": "Check ID with: heygen video list", "doc_url": "https://developers.heygen.com/docs/error-codes#not-found"}}
 ```
 
 ## Configuration

@@ -69,7 +69,7 @@ heygen video get --response-schema
 ## Output Contract
 
 - **stdout**: JSON (always). This is the only output agents should consume.
-- **stderr**: JSON error envelope on failure: `{"error":{"code":"...","message":"...","hint":"..."}}`
+- **stderr**: JSON error envelope on failure: `{"error":{"code":"...","message":"...","hint":"...","doc_url":"...","param":"..."}}` (`hint`/`doc_url`/`param`/`request_id` present when applicable)
 - Do not pass `--human`. It produces unstructured text that cannot be parsed.
 
 ## Notes

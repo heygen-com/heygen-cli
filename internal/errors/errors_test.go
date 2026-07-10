@@ -95,7 +95,7 @@ func TestFromAPIError_ExitCodes(t *testing.T) {
 		{"404 → not_found", 404, ExitGeneral, "not_found"},
 		{"409 → conflict", 409, ExitGeneral, "conflict"},
 		{"413 → payload_too_large", 413, ExitGeneral, "payload_too_large"},
-		{"429 → rate_limited", 429, ExitGeneral, "rate_limited"},
+		{"429 → rate_limit_exceeded", 429, ExitGeneral, "rate_limit_exceeded"},
 		{"500 → unclassified_server_error", 500, ExitGeneral, "unclassified_server_error"},
 		{"502 → unclassified_server_error", 502, ExitGeneral, "unclassified_server_error"},
 		{"503 → unclassified_server_error", 503, ExitGeneral, "unclassified_server_error"},
@@ -174,7 +174,8 @@ func TestHintForAPICode_AllMappedCodes(t *testing.T) {
 		{"voice_not_found", "heygen voice list"},
 		{"insufficient_credit", "heygen user me get"},
 		{"invalid_parameter", "--request-schema"},
-		{"rate_limited", "retries rate-limited"},
+		{"rate_limit_exceeded", "retries rate-limited"},
+		{"quota_exceeded", "retries rate-limited"},
 		{"resource_not_found", "does not exist"},
 		{"not_found", "does not exist"},
 		{"asset_not_available", "may still be processing"},
@@ -328,4 +329,36 @@ func TestConstructors(t *testing.T) {
 			t.Errorf("ExitCode = %d, want %d", err.ExitCode, ExitUsage)
 		}
 	})
+}
+
+func TestFromAPIError_SurfacesDocURLAndParam(t *testing.T) {
+	param := "avatar_id"
+	docURL := "https://developers.heygen.com/docs/error-codes#invalid-parameter"
+	apiErr := &APIError{Code: "invalid_parameter", Message: "bad value", Param: &param, DocURL: &docURL}
+	cliErr := FromAPIError(400, apiErr, "req_1")
+
+	if cliErr.Param != "avatar_id" {
+		t.Errorf("Param = %q, want avatar_id", cliErr.Param)
+	}
+	if cliErr.DocURL != docURL {
+		t.Errorf("DocURL = %q, want %q", cliErr.DocURL, docURL)
+	}
+
+	inner := cliErr.ToErrorEnvelope()["error"].(map[string]any)
+	if inner["param"] != "avatar_id" {
+		t.Errorf("envelope param = %v, want avatar_id", inner["param"])
+	}
+	if inner["doc_url"] != docURL {
+		t.Errorf("envelope doc_url = %v, want %q", inner["doc_url"], docURL)
+	}
+}
+
+func TestToErrorEnvelope_OmitsDocURLAndParamWhenEmpty(t *testing.T) {
+	inner := (&CLIError{Code: "network_error", Message: "x"}).ToErrorEnvelope()["error"].(map[string]any)
+	if _, ok := inner["param"]; ok {
+		t.Error("param should be omitted when empty")
+	}
+	if _, ok := inner["doc_url"]; ok {
+		t.Error("doc_url should be omitted when empty")
+	}
 }
