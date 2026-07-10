@@ -47,7 +47,7 @@ func main() {
 			formatter.Error(wrapped)
 			exitCode = wrapped.ExitCode
 			errorCode = wrapped.Code
-			source = "cli"
+			source = wrapped.Source
 		}
 	}
 
@@ -63,15 +63,19 @@ func main() {
 // everything else gets exit 1.
 func classifyError(err error) *clierrors.CLIError {
 	msg := err.Error()
+	var wrapped *clierrors.CLIError
 	if strings.HasPrefix(msg, "unknown command") ||
 		strings.HasPrefix(msg, "unknown flag") ||
 		strings.HasPrefix(msg, "unknown shorthand flag") ||
 		strings.Contains(msg, "accepts ") ||
 		strings.HasPrefix(msg, "required flag") ||
 		strings.HasPrefix(msg, "invalid argument") {
-		return clierrors.NewUsage(msg)
+		wrapped = clierrors.NewUsage(msg)
+	} else {
+		wrapped = clierrors.New(msg)
 	}
-	return clierrors.New(msg)
+	wrapped.Source = "cli" // Cobra-wrapped errors are always CLI-origin.
+	return wrapped
 }
 
 func analyticsEnabled() bool {

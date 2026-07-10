@@ -223,11 +223,15 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		// Mid-response read failure is a dropped connection, not a parse issue.
+		// The response arrived (status known) before the body dropped, so record
+		// it: dashboards can then tell this from the pre-response transport failure
+		// above (where resp is nil and the status is genuinely 0).
 		return nil, &clierrors.CLIError{
-			Code:     "network_error",
-			Message:  fmt.Sprintf("failed to read response body: %v", err),
-			Hint:     "This is usually a temporary network issue. Check your connection and retry.",
-			ExitCode: clierrors.ExitGeneral,
+			Code:       "network_error",
+			Message:    fmt.Sprintf("failed to read response body: %v", err),
+			Hint:       "This is usually a temporary network issue. Check your connection and retry.",
+			HTTPStatus: resp.StatusCode,
+			ExitCode:   clierrors.ExitGeneral,
 		}
 	}
 

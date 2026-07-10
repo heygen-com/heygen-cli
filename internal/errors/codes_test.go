@@ -165,3 +165,55 @@ func TestCodeLiteral_MatchesDeclarationForms(t *testing.T) {
 		t.Error(`codeLiteral matched the code == "error" comparison; it must not`)
 	}
 }
+
+// cliLiteral matches a whole double-quoted cli_-prefixed token (at least one
+// char after the prefix, so the "cli_" prefix constant itself doesn't match). A
+// literal that merely contains "cli_" mid-string (e.g. a log message) does not
+// match, since the closing quote must immediately follow the token.
+var cliLiteral = regexp.MustCompile(`"(cli_[a-z0-9_]+)"`)
+
+// cliNonCodeLiterals are cli_-prefixed string literals that are deliberately NOT
+// error codes (e.g. telemetry property keys). A new cli_ literal that surfaces
+// must be triaged: if it's a code, register it in cliPrefixedCodes; if not, add
+// it here with a reason.
+var cliNonCodeLiterals = map[string]bool{
+	"cli_version": true, // PostHog analytics property key, not an error code
+}
+
+// TestAllCliLiteralsRegistered inverts the scan: any cli_-prefixed string
+// literal in production source, regardless of how it is assigned (Code:,
+// code :=, errCode =, a slice/map/switch initializer, ...), must be a
+// registered cliPrefixedCode or an explicit non-code literal. This closes the
+// identifier-coupling gap in the Code:/code= scan for the cli_ side of the
+// reservation guarantee.
+func TestAllCliLiteralsRegistered(t *testing.T) {
+	reg := map[string]bool{}
+	for _, c := range cliPrefixedCodes {
+		reg[c] = true
+	}
+	root := repoRoot(t)
+	for _, dir := range []string{"cmd", "internal"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			src, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, m := range cliLiteral.FindAllStringSubmatch(string(src), -1) {
+				if !reg[m[1]] && !cliNonCodeLiterals[m[1]] {
+					rel, _ := filepath.Rel(root, path)
+					t.Errorf("cli_-prefixed literal %q in %s is not registered in cliPrefixedCodes (codes.go); if it is a code, register it, else add it to cliNonCodeLiterals", m[1], rel)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", dir, err)
+		}
+	}
+}
