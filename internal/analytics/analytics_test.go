@@ -4,11 +4,22 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/posthog/posthog-go"
 )
+
+// setHomeDirForTest sandboxes the home directory os.UserHomeDir resolves,
+// which on Windows reads USERPROFILE rather than HOME.
+func setHomeDirForTest(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", dir)
+	}
+}
 
 type stubCaptureClient struct {
 	messages []posthog.Message
@@ -226,7 +237,7 @@ func TestClose_DisabledNoop(t *testing.T) {
 // HEYGEN_CONFIG_DIR — never touch a developer's real shared config file.
 
 func TestDistinctID_Persists(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setHomeDirForTest(t, t.TempDir())
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
 	first := distinctID()
@@ -280,7 +291,7 @@ func TestCommandRunComplete_SourceAndHTTPStatus(t *testing.T) {
 // verbatim.
 func TestDistinctID_UsesSharedConfigAnonymousId(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDirForTest(t, home)
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
 	hfDir := filepath.Join(home, ".hyperframes")
@@ -300,7 +311,7 @@ func TestDistinctID_UsesSharedConfigAnonymousId(t *testing.T) {
 // value is promoted into a newly written shared config file and used.
 func TestDistinctID_PromotesLegacyId(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDirForTest(t, home)
 	configDir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", configDir)
 
@@ -330,7 +341,7 @@ func TestDistinctID_PromotesLegacyId(t *testing.T) {
 // minted and written to the shared config file.
 func TestDistinctID_MintsFreshId(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDirForTest(t, home)
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
 	got := distinctID()
@@ -355,7 +366,7 @@ func TestDistinctID_MintsFreshId(t *testing.T) {
 // through to the legacy-then-mint path) and must never panic.
 func TestDistinctID_MalformedSharedConfigTreatedAsAbsent(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDirForTest(t, home)
 	configDir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", configDir)
 
@@ -380,7 +391,7 @@ func TestDistinctID_MalformedSharedConfigTreatedAsAbsent(t *testing.T) {
 // path resolution stays anchored to HOME regardless.
 func TestDistinctID_HeygenConfigDirIndependentOfSharedPath(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDirForTest(t, home)
 	configDir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", configDir)
 
@@ -405,7 +416,7 @@ func TestDistinctID_HeygenConfigDirIndependentOfSharedPath(t *testing.T) {
 // read-merge-write, not a blind overwrite.
 func TestDistinctID_PreservesUnrelatedSharedConfigKeys(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDirForTest(t, home)
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
 	hfDir := filepath.Join(home, ".hyperframes")
