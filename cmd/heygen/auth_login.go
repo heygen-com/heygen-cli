@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/heygen-com/heygen-cli/internal/analytics"
 	"github.com/heygen-com/heygen-cli/internal/auth"
 	"github.com/heygen-com/heygen-cli/internal/auth/oauth"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
@@ -19,6 +20,35 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
+
+// loginAnalyticsClient is the subset of *analytics.Client this file calls,
+// factored out as an interface so tests can inject a spy without needing a
+// real PostHog capture client (internal/analytics's own stubCaptureClient
+// is the lower-level equivalent used in that package's tests).
+type loginAnalyticsClient interface {
+	IdentifyAccount(distinctId string)
+	AuthLoginStarted(method string)
+	AuthLoginCompleted(method string)
+	AuthLoginFailed(method, reason string)
+}
+
+// loginAnalytics is the process-wide analytics client login telemetry
+// calls into. main() sets it to the real client once at startup; left at
+// its inert zero value here so any test that builds the login commands
+// directly (bypassing main()) gets a no-op, matching analytics.New(_,
+// false)'s existing disabled-client contract.
+var loginAnalytics loginAnalyticsClient = &analytics.Client{}
+
+// identityKey picks the identity a successful login links analytics to:
+// email if present, otherwise username. Deliberately narrower than
+// UserInfo.DisplayName() (which also falls back to "first last") — this
+// links a PostHog person to a stable login handle, not a display string.
+func identityKey(userInfo auth.UserInfo) string {
+	if userInfo.Email != "" {
+		return userInfo.Email
+	}
+	return userInfo.Username
+}
 
 // oauthLoginConfig is overridable in tests so the login flow can be
 // driven against an httptest IdP without spawning a real browser.
@@ -187,6 +217,8 @@ var runAuthLoginTestDeps *runAuthLoginDeps
 // override is in effect, else we default to the API-key flow.
 func runAuthLogin(cmd *cobra.Command, ctx *cmdContext, flags authLoginFlags) error {
 	if flags.deviceCodeMode {
+		loginAnalytics.AuthLoginStarted("device_code")
+		loginAnalytics.AuthLoginFailed("device_code", "device_code_unsupported")
 		return clierrors.NewUsage(
 			"--device-code is not yet supported; use the default browser flow or --api-key",
 		)
@@ -219,8 +251,10 @@ func runAuthLogin(cmd *cobra.Command, ctx *cmdContext, flags authLoginFlags) err
 
 	switch {
 	case flags.oauthMode:
+		loginAnalytics.AuthLoginStarted("oauth")
 		return deps.runOAuth(cmd, ctx)
 	case flags.apiKeyMode:
+		loginAnalytics.AuthLoginStarted("api_key")
 		return deps.runAPIKey(cmd, ctx)
 	}
 
@@ -230,6 +264,8 @@ func runAuthLogin(cmd *cobra.Command, ctx *cmdContext, flags authLoginFlags) err
 	// keystrokes), and only when nothing in the environment has asked
 	// us to behave non-interactively.
 	if deps.stdinIsTerminal() && deps.stdoutIsTerminal() && !deps.nonInteractive() {
+		// No AuthLoginStarted here — the picker hasn't resolved a method
+		// yet. A cancel below must emit no started/failed pair at all.
 		choice, err := deps.runPicker(cmd.Context(), cmd.InOrStdin(), cmd.ErrOrStderr())
 		if err != nil {
 			if errors.Is(err, pickerCanceledError{}) || errorsAsPickerCanceled(err) {
@@ -239,8 +275,10 @@ func runAuthLogin(cmd *cobra.Command, ctx *cmdContext, flags authLoginFlags) err
 		}
 		switch choice {
 		case loginChoiceOAuth:
+			loginAnalytics.AuthLoginStarted("oauth")
 			return deps.runOAuth(cmd, ctx)
 		case loginChoiceAPIKey:
+			loginAnalytics.AuthLoginStarted("api_key")
 			return deps.runAPIKey(cmd, ctx)
 		default:
 			return clierrors.New(fmt.Sprintf("unknown login choice: %d", choice))
@@ -251,6 +289,7 @@ func runAuthLogin(cmd *cobra.Command, ctx *cmdContext, flags authLoginFlags) err
 	// decision: agents and CI runners feed keys on stdin, and the
 	// browser-OAuth dance has nowhere to land its loopback callback
 	// when there's no human to click "Allow".
+	loginAnalytics.AuthLoginStarted("api_key")
 	return deps.runAPIKey(cmd, ctx)
 }
 
@@ -273,9 +312,11 @@ func errorsAsPickerCanceled(err error) bool {
 func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
 	key, err := readAPIKey(cmd.InOrStdin(), cmd.ErrOrStderr())
 	if err != nil {
+		loginAnalytics.AuthLoginFailed("api_key", "api_key_aborted")
 		return err
 	}
 	if key == "" {
+		loginAnalytics.AuthLoginFailed("api_key", "api_key_invalid_input")
 		if stdinIsTerminalFunc() {
 			return clierrors.NewUsage(
 				"no API key entered — type your key after the prompt, or paste it.",
@@ -340,6 +381,9 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
 		if saveErr := auth.SaveUserInfo(userInfo); saveErr != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "(warning: could not persist user info: %v)\n", saveErr)
 		}
+		if id := identityKey(userInfo); id != "" {
+			loginAnalytics.IdentifyAccount(id)
+		}
 	} else if clearErr := auth.ClearUserInfo(); clearErr != nil {
 		// Probe failed but a stale user block from a prior login may
 		// still be on disk. Best-effort clear; a failure here is
@@ -372,6 +416,7 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) error {
 	if err != nil {
 		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
 	}
+	loginAnalytics.AuthLoginCompleted("api_key")
 	if display := userInfo.DisplayName(); display != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", display)
 	}
@@ -389,6 +434,7 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	// guard when cfg.OpenBrowser is injected (test path drives the
 	// callback synthetically). (N1)
 	if cfg.OpenBrowser == nil && isHeadlessOAuthShell() {
+		loginAnalytics.AuthLoginFailed("oauth", "headless_shell")
 		return clierrors.NewUsage(
 			"cannot complete browser OAuth flow in a headless shell " +
 				"(no TTY and BROWSER=none / HEYGEN_NO_BROWSER=1).\n" +
@@ -446,18 +492,22 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	var loopbackResult oauth.LoopbackResult
 	select {
 	case <-cmdCtx.Done():
+		loginAnalytics.AuthLoginFailed("oauth", "oauth_timeout")
 		return clierrors.New(fmt.Sprintf("oauth: timed out waiting for browser callback: %v", cmdCtx.Err()))
 	case loopbackResult = <-results:
 	}
 	if loopbackResult.Err != nil {
+		loginAnalytics.AuthLoginFailed("oauth", "oauth_flow_error")
 		return clierrors.New(loopbackResult.Err.Error())
 	}
 
 	tok, err := oc.ExchangeAuthorizationCode(cmdCtx, loopbackResult.Code, verifier, loopbackResult.RedirectURI)
 	if err != nil {
+		loginAnalytics.AuthLoginFailed("oauth", "token_exchange_failed")
 		return clierrors.New(fmt.Sprintf("oauth: token exchange failed: %v", err))
 	}
 	if tok.AccessToken == "" {
+		loginAnalytics.AuthLoginFailed("oauth", "token_exchange_failed")
 		return clierrors.New("oauth: token endpoint returned no access_token")
 	}
 
@@ -508,6 +558,9 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 		if saveErr := auth.SaveUserInfo(userInfo); saveErr != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "(warning: could not persist user info: %v)\n", saveErr)
 		}
+		if id := identityKey(userInfo); id != "" {
+			loginAnalytics.IdentifyAccount(id)
+		}
 	} else if clearErr := auth.ClearUserInfo(); clearErr != nil {
 		// Probe failed AND the file might still hold a stale user block
 		// from a prior login (different account). Best-effort clear; a
@@ -546,6 +599,7 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) er
 	if err != nil {
 		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
 	}
+	loginAnalytics.AuthLoginCompleted("oauth")
 	if display := userInfo.DisplayName(); display != "" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", display)
 	} else {
