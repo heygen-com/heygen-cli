@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -34,6 +35,51 @@ func (s *stubCaptureClient) Enqueue(msg posthog.Message) error {
 func (s *stubCaptureClient) Close() error {
 	s.closed++
 	return nil
+}
+
+// Dual-write: every event reaches both the shared hyperframes-oss project
+// and heygen-cli's own pre-existing project, so that project's dashboard
+// keeps receiving data instead of flatlining as clients upgrade.
+func TestMultiClient_FansOutEnqueueAndClose(t *testing.T) {
+	a := &stubCaptureClient{}
+	b := &stubCaptureClient{}
+	m := &multiClient{clients: []captureClient{a, b}}
+
+	msg := posthog.Capture{DistinctId: "anon-id", Event: "COMMAND_RUN"}
+	if err := m.Enqueue(msg); err != nil {
+		t.Fatalf("Enqueue() error = %v, want nil", err)
+	}
+	if len(a.messages) != 1 || len(b.messages) != 1 {
+		t.Fatalf("messages = %d, %d, want 1, 1", len(a.messages), len(b.messages))
+	}
+
+	if err := m.Close(); err != nil {
+		t.Fatalf("Close() error = %v, want nil", err)
+	}
+	if a.closed != 1 || b.closed != 1 {
+		t.Fatalf("closed = %d, %d, want 1, 1", a.closed, b.closed)
+	}
+}
+
+type erroringCaptureClient struct {
+	err error
+}
+
+func (e *erroringCaptureClient) Enqueue(posthog.Message) error { return e.err }
+func (e *erroringCaptureClient) Close() error                  { return e.err }
+
+// One destination failing must not stop the others from receiving the event.
+func TestMultiClient_ContinuesPastFailingClient(t *testing.T) {
+	failing := &erroringCaptureClient{err: errors.New("boom")}
+	ok := &stubCaptureClient{}
+	m := &multiClient{clients: []captureClient{failing, ok}}
+
+	if err := m.Enqueue(posthog.Capture{Event: "COMMAND_RUN"}); err == nil {
+		t.Fatal("Enqueue() error = nil, want the failing client's error surfaced")
+	}
+	if len(ok.messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (the healthy client must still receive the event)", len(ok.messages))
+	}
 }
 
 func TestCommandRun_Properties(t *testing.T) {

@@ -21,9 +21,45 @@ import (
 const posthogAPIKey = "phc_zjjbX0PnWxERXrMHhkEJWj9A9BhGVLRReICgsfTMmpx"
 const posthogEndpoint = "https://us.i.posthog.com"
 
+// legacyPosthogAPIKey is heygen-cli's own pre-existing PostHog project,
+// predating this identity/destination unification. Every event is
+// dual-written here too so its existing dashboard keeps receiving fresh
+// data (rather than flatlining as clients upgrade) until it's migrated to
+// query the shared project instead.
+const legacyPosthogAPIKey = "phc_Bvsz7U8BvVxZtguuTGiBcbRUCkX46MwqdZ9t8LQ7cBGr"
+
 type captureClient interface {
 	Enqueue(posthog.Message) error
 	Close() error
+}
+
+// multiClient fans every Enqueue/Close out to every wrapped client, so a
+// single call site (CommandRun, IdentifyAccount, etc.) can dual-write to
+// more than one PostHog destination without any event-emitting method
+// knowing about it. Continues past a failing client so one destination
+// being down never blocks the others.
+type multiClient struct {
+	clients []captureClient
+}
+
+func (m *multiClient) Enqueue(msg posthog.Message) error {
+	var firstErr error
+	for _, c := range m.clients {
+		if err := c.Enqueue(msg); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func (m *multiClient) Close() error {
+	var firstErr error
+	for _, c := range m.clients {
+		if err := c.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 // Client wraps PostHog event capture behind a small no-op-friendly surface.
@@ -43,15 +79,24 @@ func New(version string, enabled bool) *Client {
 		return &Client{}
 	}
 
-	ph, err := posthog.NewWithConfig(posthogAPIKey, posthog.Config{
-		BatchSize: 1,
-		Endpoint:  posthogEndpoint,
-	})
-	if err != nil {
+	var clients []captureClient
+	for _, key := range [...]string{posthogAPIKey, legacyPosthogAPIKey} {
+		if key == "" {
+			continue
+		}
+		ph, err := posthog.NewWithConfig(key, posthog.Config{
+			BatchSize: 1,
+			Endpoint:  posthogEndpoint,
+		})
+		if err == nil {
+			clients = append(clients, ph)
+		}
+	}
+	if len(clients) == 0 {
 		return &Client{}
 	}
 
-	return newWithCapture(version, ph)
+	return newWithCapture(version, &multiClient{clients: clients})
 }
 
 func newWithCapture(version string, ph captureClient) *Client {
