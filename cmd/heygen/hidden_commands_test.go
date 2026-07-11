@@ -9,16 +9,16 @@ import (
 
 func TestIsHiddenCommand(t *testing.T) {
 	hidden := &command.Spec{Group: "asset", Name: "search", Method: "GET", Endpoint: "/v3/assets/search"}
-	if !isHiddenCommand(hidden) {
+	if !hidden.IsHidden() {
 		t.Error("GET /v3/assets/search should be hidden")
 	}
 	// Method match is case-insensitive (specs may carry a lowercased method).
 	lower := &command.Spec{Group: "asset", Name: "search", Method: "get", Endpoint: "/v3/assets/search"}
-	if !isHiddenCommand(lower) {
+	if !lower.IsHidden() {
 		t.Error("method match should be case-insensitive")
 	}
 	visible := &command.Spec{Group: "video", Name: "list", Method: "GET", Endpoint: "/v3/videos"}
-	if isHiddenCommand(visible) {
+	if visible.IsHidden() {
 		t.Error("GET /v3/videos should not be hidden")
 	}
 }
