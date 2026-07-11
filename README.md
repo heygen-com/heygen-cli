@@ -190,7 +190,7 @@ heygen config list       # show all settings with sources
 
 ## Reporting bugs
 
-- **Quick signal (recommended for agents):** `heygen feedback --rating <1-5> --comment "..."`. Goes to private, anonymous analytics. Safe to run unattended.
+- **Quick signal (recommended for agents):** `heygen feedback --rating <1-5> --comment "..."`. Goes to private, anonymous analytics. Safe to run unattended. Usage telemetry is anonymous until you sign in: running `heygen auth login` links it to your account email or username. A one-time notice prints the first time analytics runs; opt out anytime with `HEYGEN_NO_ANALYTICS=1` (or `heygen config set analytics false`).
 - **Tracked bug a maintainer should see:** open a [GitHub issue](https://github.com/heygen-com/heygen-cli/issues). This repo is **public**, so review what you paste first and omit anything sensitive (API keys, prompts, internal URLs, personal data).
 
 **Agents:** do not open GitHub issues automatically. Use `heygen feedback` for bug signal; if something seems worth tracking, surface it to the user and let a human file the issue after reviewing it for sensitive content.

@@ -1,11 +1,26 @@
 package analytics
 
 import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/posthog/posthog-go"
 )
+
+// setHomeDirForTest sandboxes the home directory os.UserHomeDir resolves,
+// which on Windows reads USERPROFILE rather than HOME.
+func setHomeDirForTest(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", dir)
+	}
+}
 
 type stubCaptureClient struct {
 	messages []posthog.Message
@@ -20,6 +35,51 @@ func (s *stubCaptureClient) Enqueue(msg posthog.Message) error {
 func (s *stubCaptureClient) Close() error {
 	s.closed++
 	return nil
+}
+
+// Dual-write: every event reaches both the shared hyperframes-oss project
+// and heygen-cli's own pre-existing project, so that project's dashboard
+// keeps receiving data instead of flatlining as clients upgrade.
+func TestMultiClient_FansOutEnqueueAndClose(t *testing.T) {
+	a := &stubCaptureClient{}
+	b := &stubCaptureClient{}
+	m := &multiClient{clients: []captureClient{a, b}}
+
+	msg := posthog.Capture{DistinctId: "anon-id", Event: "COMMAND_RUN"}
+	if err := m.Enqueue(msg); err != nil {
+		t.Fatalf("Enqueue() error = %v, want nil", err)
+	}
+	if len(a.messages) != 1 || len(b.messages) != 1 {
+		t.Fatalf("messages = %d, %d, want 1, 1", len(a.messages), len(b.messages))
+	}
+
+	if err := m.Close(); err != nil {
+		t.Fatalf("Close() error = %v, want nil", err)
+	}
+	if a.closed != 1 || b.closed != 1 {
+		t.Fatalf("closed = %d, %d, want 1, 1", a.closed, b.closed)
+	}
+}
+
+type erroringCaptureClient struct {
+	err error
+}
+
+func (e *erroringCaptureClient) Enqueue(posthog.Message) error { return e.err }
+func (e *erroringCaptureClient) Close() error                  { return e.err }
+
+// One destination failing must not stop the others from receiving the event.
+func TestMultiClient_ContinuesPastFailingClient(t *testing.T) {
+	failing := &erroringCaptureClient{err: errors.New("boom")}
+	ok := &stubCaptureClient{}
+	m := &multiClient{clients: []captureClient{failing, ok}}
+
+	if err := m.Enqueue(posthog.Capture{Event: "COMMAND_RUN"}); err == nil {
+		t.Fatal("Enqueue() error = nil, want the failing client's error surfaced")
+	}
+	if len(ok.messages) != 1 {
+		t.Fatalf("messages = %d, want 1 (the healthy client must still receive the event)", len(ok.messages))
+	}
 }
 
 func TestCommandRun_Properties(t *testing.T) {
@@ -51,6 +111,9 @@ func TestCommandRun_Properties(t *testing.T) {
 	}
 	if got := msg.Properties["cli_version"]; got != "v1.2.3" {
 		t.Fatalf("cli_version = %v, want %q", got, "v1.2.3")
+	}
+	if got := msg.Properties["surface"]; got != "heygen-cli" {
+		t.Fatalf("surface = %v, want %q", got, "heygen-cli")
 	}
 }
 
@@ -86,6 +149,9 @@ func TestCommandRunComplete_Properties(t *testing.T) {
 	}
 	if got := msg.Properties["error_code"]; got != "timeout" {
 		t.Fatalf("error_code = %v, want %q", got, "timeout")
+	}
+	if got := msg.Properties["surface"]; got != "heygen-cli" {
+		t.Fatalf("surface = %v, want %q", got, "heygen-cli")
 	}
 }
 
@@ -212,7 +278,12 @@ func TestClose_DisabledNoop(t *testing.T) {
 	}
 }
 
+// distinctID now reads/writes ~/.hyperframes/config.json (resolved via
+// os.UserHomeDir, i.e. $HOME), so every test below isolates both HOME and
+// HEYGEN_CONFIG_DIR — never touch a developer's real shared config file.
+
 func TestDistinctID_Persists(t *testing.T) {
+	setHomeDirForTest(t, t.TempDir())
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
 	first := distinctID()
@@ -260,4 +331,318 @@ func TestCommandRunComplete_SourceAndHTTPStatus(t *testing.T) {
 			t.Fatalf("source should be omitted on success")
 		}
 	})
+}
+
+// U1: shared config file exists with an anonymousId → that value is used
+// verbatim.
+func TestDistinctID_UsesSharedConfigAnonymousId(t *testing.T) {
+	home := t.TempDir()
+	setHomeDirForTest(t, home)
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+
+	hfDir := filepath.Join(home, ".hyperframes")
+	if err := os.MkdirAll(hfDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hfDir, "config.json"), []byte(`{"anonymousId":"shared-id-123"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	if got := distinctID(); got != "shared-id-123" {
+		t.Fatalf("distinctID() = %q, want %q", got, "shared-id-123")
+	}
+}
+
+// U1: shared config absent, legacy ~/.heygen/analytics_id exists → its
+// value is promoted into a newly written shared config file and used.
+func TestDistinctID_PromotesLegacyId(t *testing.T) {
+	home := t.TempDir()
+	setHomeDirForTest(t, home)
+	configDir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", configDir)
+
+	if err := os.WriteFile(filepath.Join(configDir, "analytics_id"), []byte("legacy-id-456\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got := distinctID()
+	if got != "legacy-id-456" {
+		t.Fatalf("distinctID() = %q, want %q", got, "legacy-id-456")
+	}
+
+	raw, err := os.ReadFile(filepath.Join(home, ".hyperframes", "config.json"))
+	if err != nil {
+		t.Fatalf("ReadFile shared config: %v", err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("Unmarshal shared config: %v", err)
+	}
+	if config["anonymousId"] != "legacy-id-456" {
+		t.Fatalf("shared config anonymousId = %v, want %q", config["anonymousId"], "legacy-id-456")
+	}
+}
+
+// U1: neither the shared config nor a legacy id exists → a fresh id is
+// minted and written to the shared config file.
+func TestDistinctID_MintsFreshId(t *testing.T) {
+	home := t.TempDir()
+	setHomeDirForTest(t, home)
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+
+	got := distinctID()
+	if got == "" {
+		t.Fatal("distinctID() is empty")
+	}
+
+	raw, err := os.ReadFile(filepath.Join(home, ".hyperframes", "config.json"))
+	if err != nil {
+		t.Fatalf("ReadFile shared config: %v", err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("Unmarshal shared config: %v", err)
+	}
+	if config["anonymousId"] != got {
+		t.Fatalf("shared config anonymousId = %v, want %q", config["anonymousId"], got)
+	}
+}
+
+// U1: a malformed shared config file must be treated as absent (falls
+// through to the legacy-then-mint path) and must never panic.
+func TestDistinctID_MalformedSharedConfigTreatedAsAbsent(t *testing.T) {
+	home := t.TempDir()
+	setHomeDirForTest(t, home)
+	configDir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", configDir)
+
+	hfDir := filepath.Join(home, ".hyperframes")
+	if err := os.MkdirAll(hfDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hfDir, "config.json"), []byte("{not valid json"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "analytics_id"), []byte("legacy-from-malformed\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got := distinctID()
+	if got != "legacy-from-malformed" {
+		t.Fatalf("distinctID() = %q, want %q (malformed config should fall through)", got, "legacy-from-malformed")
+	}
+}
+
+// U1: HEYGEN_CONFIG_DIR only affects the legacy-id read; the shared config
+// path resolution stays anchored to HOME regardless.
+func TestDistinctID_HeygenConfigDirIndependentOfSharedPath(t *testing.T) {
+	home := t.TempDir()
+	setHomeDirForTest(t, home)
+	configDir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", configDir)
+
+	if err := os.WriteFile(filepath.Join(configDir, "analytics_id"), []byte("from-override-dir\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got := distinctID()
+	if got != "from-override-dir" {
+		t.Fatalf("distinctID() = %q, want %q", got, "from-override-dir")
+	}
+	if _, err := os.Stat(filepath.Join(home, ".hyperframes", "config.json")); err != nil {
+		t.Fatalf("shared config not written under HOME: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, "config.json")); err == nil {
+		t.Fatal("shared config incorrectly written under HEYGEN_CONFIG_DIR")
+	}
+}
+
+// U1: unrelated keys already in the shared config (written by hyperframes
+// CLI or media-use) must survive a heygen-cli write untouched — proves
+// read-merge-write, not a blind overwrite.
+func TestDistinctID_PreservesUnrelatedSharedConfigKeys(t *testing.T) {
+	home := t.TempDir()
+	setHomeDirForTest(t, home)
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+
+	hfDir := filepath.Join(home, ".hyperframes")
+	if err := os.MkdirAll(hfDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(hfDir, "config.json"), []byte(`{"telemetryNoticeShown":true}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got := distinctID()
+	if got == "" {
+		t.Fatal("distinctID() is empty")
+	}
+
+	raw, err := os.ReadFile(filepath.Join(hfDir, "config.json"))
+	if err != nil {
+		t.Fatalf("ReadFile shared config: %v", err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("Unmarshal shared config: %v", err)
+	}
+	if config["telemetryNoticeShown"] != true {
+		t.Fatalf("telemetryNoticeShown = %v, want true (must survive heygen-cli's write)", config["telemetryNoticeShown"])
+	}
+	if config["anonymousId"] != got {
+		t.Fatalf("anonymousId = %v, want %q", config["anonymousId"], got)
+	}
+}
+
+// IdentifyAccount (U3): enqueues Alias then Identify, exactly once per
+// process, no-ops on an empty distinct id or a disabled client.
+
+func TestIdentifyAccount_EnqueuesAliasThenIdentify(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+	client.distinctID = "anon-id"
+
+	client.IdentifyAccount("person@example.com")
+
+	if len(stub.messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(stub.messages))
+	}
+	alias, ok := stub.messages[0].(posthog.Alias)
+	if !ok {
+		t.Fatalf("message 0 type = %T, want posthog.Alias", stub.messages[0])
+	}
+	if alias.DistinctId != "person@example.com" {
+		t.Fatalf("Alias.DistinctId = %q, want %q", alias.DistinctId, "person@example.com")
+	}
+	if alias.Alias != "anon-id" {
+		t.Fatalf("Alias.Alias = %q, want %q", alias.Alias, "anon-id")
+	}
+	identify, ok := stub.messages[1].(posthog.Identify)
+	if !ok {
+		t.Fatalf("message 1 type = %T, want posthog.Identify", stub.messages[1])
+	}
+	if identify.DistinctId != "person@example.com" {
+		t.Fatalf("Identify.DistinctId = %q, want %q", identify.DistinctId, "person@example.com")
+	}
+}
+
+func TestIdentifyAccount_UsernameFallback(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+	client.distinctID = "anon-id"
+
+	client.IdentifyAccount("someusername")
+
+	alias := stub.messages[0].(posthog.Alias)
+	if alias.DistinctId != "someusername" || alias.Alias != "anon-id" {
+		t.Fatalf("Alias = %+v, want DistinctId=someusername Alias=anon-id", alias)
+	}
+	identify := stub.messages[1].(posthog.Identify)
+	if identify.DistinctId != "someusername" {
+		t.Fatalf("Identify.DistinctId = %q, want %q", identify.DistinctId, "someusername")
+	}
+}
+
+func TestIdentifyAccount_FiresOnlyOncePerProcess(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+
+	client.IdentifyAccount("first@example.com")
+	client.IdentifyAccount("second@example.com")
+
+	if len(stub.messages) != 2 {
+		t.Fatalf("messages = %d, want 2 (second call must no-op)", len(stub.messages))
+	}
+}
+
+func TestIdentifyAccount_EmptyDistinctIdNoops(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+
+	client.IdentifyAccount("")
+
+	if len(stub.messages) != 0 {
+		t.Fatalf("messages = %d, want 0 for an empty distinct id", len(stub.messages))
+	}
+}
+
+func TestIdentifyAccount_DisabledClientNoops(t *testing.T) {
+	client := New("test", false)
+	// Must not panic on a nil capture client.
+	client.IdentifyAccount("person@example.com")
+}
+
+// AuthLoginStarted/Completed/Failed (U4): each fires a single Capture
+// event carrying method (and reason, for Failed).
+
+func TestAuthLoginStarted_Properties(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+	client.distinctID = "anon-id"
+
+	client.AuthLoginStarted("oauth")
+
+	if len(stub.messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(stub.messages))
+	}
+	msg, ok := stub.messages[0].(posthog.Capture)
+	if !ok {
+		t.Fatalf("message type = %T, want posthog.Capture", stub.messages[0])
+	}
+	if msg.Event != "AUTH_LOGIN_STARTED" {
+		t.Fatalf("Event = %q, want %q", msg.Event, "AUTH_LOGIN_STARTED")
+	}
+	if got := msg.Properties["method"]; got != "oauth" {
+		t.Fatalf("method = %v, want %q", got, "oauth")
+	}
+	if got := msg.Properties["surface"]; got != "heygen-cli" {
+		t.Fatalf("surface = %v, want %q", got, "heygen-cli")
+	}
+}
+
+func TestAuthLoginCompleted_Properties(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+
+	client.AuthLoginCompleted("api_key")
+
+	msg, ok := stub.messages[0].(posthog.Capture)
+	if !ok {
+		t.Fatalf("message type = %T, want posthog.Capture", stub.messages[0])
+	}
+	if msg.Event != "AUTH_LOGIN_COMPLETED" {
+		t.Fatalf("Event = %q, want %q", msg.Event, "AUTH_LOGIN_COMPLETED")
+	}
+	if got := msg.Properties["method"]; got != "api_key" {
+		t.Fatalf("method = %v, want %q", got, "api_key")
+	}
+}
+
+func TestAuthLoginFailed_Properties(t *testing.T) {
+	stub := &stubCaptureClient{}
+	client := newWithCapture("v1.2.3", stub)
+
+	client.AuthLoginFailed("oauth", "oauth_timeout")
+
+	msg, ok := stub.messages[0].(posthog.Capture)
+	if !ok {
+		t.Fatalf("message type = %T, want posthog.Capture", stub.messages[0])
+	}
+	if msg.Event != "AUTH_LOGIN_FAILED" {
+		t.Fatalf("Event = %q, want %q", msg.Event, "AUTH_LOGIN_FAILED")
+	}
+	if got := msg.Properties["method"]; got != "oauth" {
+		t.Fatalf("method = %v, want %q", got, "oauth")
+	}
+	if got := msg.Properties["reason"]; got != "oauth_timeout" {
+		t.Fatalf("reason = %v, want %q", got, "oauth_timeout")
+	}
+}
+
+func TestAuthLoginEvents_DisabledClientNoop(t *testing.T) {
+	client := New("test", false)
+	// Must not panic on a nil capture client.
+	client.AuthLoginStarted("oauth")
+	client.AuthLoginCompleted("oauth")
+	client.AuthLoginFailed("oauth", "oauth_timeout")
 }
