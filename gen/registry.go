@@ -43,6 +43,11 @@ var Groups = map[string][]*command.Spec{
 		BackgroundRemovalGet,
 		BackgroundRemovalList,
 	},
+	"batch": {
+		BatchBatchesCreate,
+		BatchBatchesGet,
+		BatchStatusesList,
+	},
 	"brand": {
 		BrandGlossariesList,
 		BrandKitsList,
@@ -53,6 +58,11 @@ var Groups = map[string][]*command.Spec{
 		LipsyncGet,
 		LipsyncList,
 		LipsyncUpdate,
+	},
+	"template": {
+		TemplateCreate,
+		TemplateGet,
+		TemplateList,
 	},
 	"user": {
 		UserMeGet,
@@ -111,8 +121,10 @@ var GroupDescriptions = map[string]string{
 	"asset":           "Upload files for use in video creation",
 	"audio":           "Search the background-music and sound-effects catalog",
 	"avatar":          "List and manage avatars and looks",
+	"batch":           "Create and track batches of videos.",
 	"brand":           "Brand-related resources — brand kits (colors, fonts, logos) and brand glossaries (custom term translations)",
 	"lipsync":         "Dub or replace audio on existing videos",
+	"template":        "Generate videos from reusable templates by replacing their variables",
 	"user":            "Account information and billing",
 	"video":           "Create, list, retrieve, and delete videos",
 	"video-agent":     "Create videos from text prompts using AI",
