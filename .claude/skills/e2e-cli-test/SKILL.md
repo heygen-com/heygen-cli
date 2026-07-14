@@ -48,6 +48,7 @@ Save the JSON output from each -- Phase 3 will extract IDs from these results.
 
 ```bash
 ./bin/heygen video list --limit 1
+./bin/heygen template list --limit 1
 ./bin/heygen ai-clipping list --limit 1
 ./bin/heygen avatar list --limit 1
 ./bin/heygen avatar looks list --limit 1
@@ -83,7 +84,13 @@ sufficient data for meaningful get/detail coverage.
 ./bin/heygen video-translate get <id>          # .data[0].id from video-translate list
 ./bin/heygen lipsync get <id>                  # .data[0].id from lipsync list
 ./bin/heygen voice get <voice-id>              # .data[0].voice_id from voice list
+./bin/heygen template get <template-id>        # .data[0].id from template list
+./bin/heygen video statuses list --video-ids <video-id>   # a video-id from video list (bulk status lookup)
 ```
+
+`video batches get <batch-id>` needs a batch id, which has no read-only list
+source (batches are created via the write path). Run it only if a batch id is
+available from a prior `video batches create`; otherwise skip.
 
 For `video-agent resources get`: first run `./bin/heygen video-agent get <session-id>`,
 then look for a `resource_id` in `messages[*].resource_ids[*]`. Only run
@@ -96,6 +103,7 @@ Assert exit 0 and valid JSON for each command that runs.
 
 ```bash
 ./bin/heygen video list --limit 1 --human
+./bin/heygen template list --limit 1 --human
 ./bin/heygen avatar list --limit 1 --human
 ./bin/heygen voice list --limit 1 --human
 ```
@@ -172,13 +180,17 @@ Print a summary table:
 Phase                    Result
 -----                    ------
 1. Auth and account      PASS
-2. List commands         PASS (12/12)
-3. Get/detail commands   PASS (6/7, 1 skipped)   # or WARN if >50% skipped
+2. List commands         PASS (<passed>/<total>)
+3. Get/detail commands   PASS (<passed>/<ran>, <skipped> skipped)   # or WARN if >50% skipped
 4. --human output        PASS
 5. Schema introspection  PASS
 6. Error handling        PASS
 7. Write path            PASS
 ```
+
+Counts are the actual number of commands executed in each phase (Phase 2/3
+grow as new list/get commands are added) — compute them from the run, don't
+hard-code totals.
 
 If any phase is FAIL, end with a clear message identifying which phase(s) failed
 and the first failing command with its exit code and stderr.
