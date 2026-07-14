@@ -13,6 +13,10 @@ var BatchBatchesCreate = &command.Spec{
 	Endpoint:      "/v3/videos/batches",
 	Method:        "POST",
 	BodyEncoding:  "json",
+	Examples: []string{
+		"# Submit a batch of avatar videos in one request (up to 100 items)\n  heygen batch batches create --title 'Launch batch' -d '{\"videos\":[{\"type\":\"avatar\",\"avatar_id\":\"<avatar-id>\",\"script\":\"Hello world\",\"voice_id\":\"<voice-id>\"}]}'",
+		"# See the full batch request shape (per-item video payloads)\n  heygen batch batches create --request-schema",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "callback-url",
@@ -51,6 +55,9 @@ var BatchBatchesGet = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Paginated:      true,
+	Examples: []string{
+		"# Check a batch's per-item video ids and statuses\n  heygen batch batches get <batch-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "batch-id", Param: "batch_id", Help: ""},
 	},
@@ -91,6 +98,10 @@ var BatchStatusesList = &command.Spec{
 	Endpoint:       "/v3/videos/statuses",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Look up statuses for specific video ids\n  heygen batch statuses list --video-ids <video-id-1>,<video-id-2>",
+		"# Expand batches into their member video statuses\n  heygen batch statuses list --batch-ids <batch-id-1>,<batch-id-2>",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "video-ids",

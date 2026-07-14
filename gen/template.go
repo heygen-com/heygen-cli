@@ -14,6 +14,11 @@ var TemplateCreate = &command.Spec{
 	Endpoint:       "/v3/templates/{template_id}",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Generate a video from a template (body = variable replacements; discover names via 'template get')\n  heygen template create <template-id> -d @variables.json",
+		"# Render only specific scenes, in order\n  heygen template create <template-id> --scene-ids <scene-id-1>,<scene-id-2> -d @variables.json",
+		"# See the request shape (variables are template-specific)\n  heygen template create <template-id> --request-schema",
+	},
 	Args: []command.ArgSpec{
 		{Name: "template-id", Param: "template_id", Help: ""},
 	},
@@ -174,6 +179,9 @@ var TemplateGet = &command.Spec{
 	Endpoint:       "/v3/templates/{template_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Inspect a template's variables and scenes\n  heygen template get <template-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "template-id", Param: "template_id", Help: ""},
 	},
@@ -189,6 +197,9 @@ var TemplateList = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Paginated:      true,
+	Examples: []string{
+		"# List available templates\n  heygen template list --limit 10",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "limit",
