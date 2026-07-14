@@ -79,6 +79,12 @@ var nameOverrides = map[string]string{
 	// "heygen brand kits list" and "heygen brand glossaries list".
 	"GET /v3/brand-kits":       "kits list",
 	"GET /v3/brand-glossaries": "glossaries list",
+	// POST /v3/templates/{template_id} generates a video FROM an existing
+	// template (EF handler: template_generate); it does not create a template.
+	// The default POST→"create" verb is misleading — there is no create-template
+	// endpoint in the API (templates are authored in the HeyGen app), so "create"
+	// would imply a capability that doesn't exist.
+	"POST /v3/templates/{template_id}": "generate",
 }
 
 func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDescriptions, error) {

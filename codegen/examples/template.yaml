@@ -6,8 +6,8 @@
     cmd: "heygen template get <template-id>"
 "POST /v3/templates/{template_id}":
   - desc: "Generate a video from a template (body = variable replacements; discover names via 'template get')"
-    cmd: "heygen template create <template-id> -d @variables.json"
+    cmd: "heygen template generate <template-id> -d @variables.json"
   - desc: "Render only specific scenes, in order"
-    cmd: "heygen template create <template-id> --scene-ids <scene-id-1>,<scene-id-2> -d @variables.json"
+    cmd: "heygen template generate <template-id> --scene-ids <scene-id-1>,<scene-id-2> -d @variables.json"
   - desc: "See the request shape (variables are template-specific)"
-    cmd: "heygen template create <template-id> --request-schema"
+    cmd: "heygen template generate <template-id> --request-schema"

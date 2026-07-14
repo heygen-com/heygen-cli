@@ -60,7 +60,7 @@ var Groups = map[string][]*command.Spec{
 		LipsyncUpdate,
 	},
 	"template": {
-		TemplateCreate,
+		TemplateGenerate,
 		TemplateGet,
 		TemplateList,
 	},
