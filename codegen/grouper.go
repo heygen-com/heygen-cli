@@ -79,6 +79,28 @@ var nameOverrides = map[string]string{
 	// "heygen brand kits list" and "heygen brand glossaries list".
 	"GET /v3/brand-kits":       "kits list",
 	"GET /v3/brand-glossaries": "glossaries list",
+	// POST /v3/templates/{template_id} generates a video FROM an existing
+	// template (EF handler: template_generate); it does not create a template.
+	// The default POST→"create" verb is misleading — there is no create-template
+	// endpoint in the API (templates are authored in the HeyGen app), so "create"
+	// would imply a capability that doesn't exist.
+	"POST /v3/templates/{template_id}": "generate",
+}
+
+// groupOverrides reassigns an endpoint to a different CLI group than its
+// OpenAPI tag would otherwise produce. Keyed by "METHOD /path".
+//
+// The batch/status endpoints live at /v3/videos/... and operate on video
+// creations, but the spec tags them "Batch", which lands them in a standalone
+// "batch" group and doubles the noun ("heygen batch batches create"). Group
+// them with their domain instead ("heygen video batches create"), matching the
+// path and the convention that resource-specific batches nest under their
+// resource. Drop these if the spec re-tags the endpoints; codegen then follows
+// the tag automatically.
+var groupOverrides = map[string]string{
+	"POST /v3/videos/batches":           "video",
+	"GET /v3/videos/batches/{batch_id}": "video",
+	"GET /v3/videos/statuses":           "video",
 }
 
 func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDescriptions, error) {
@@ -114,6 +136,9 @@ func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDe
 			}
 
 			groupName := deriveGroupName(tag)
+			if override, ok := groupOverrides[method+" "+path]; ok {
+				groupName = override
+			}
 			spec := buildSpec(path, method, op, pathItem, groupName, examples)
 			groups[groupName] = append(groups[groupName], spec)
 		}

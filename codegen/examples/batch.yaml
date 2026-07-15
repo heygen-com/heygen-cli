@@ -1,0 +1,13 @@
+"POST /v3/videos/batches":
+  - desc: "Submit a batch of avatar videos in one request (up to 100 items)"
+    cmd: "heygen video batches create --title 'Launch batch' -d '{\"videos\":[{\"type\":\"avatar\",\"avatar_id\":\"<avatar-id>\",\"script\":\"Hello world\",\"voice_id\":\"<voice-id>\"}]}'"
+  - desc: "See the full batch request shape (per-item video payloads)"
+    cmd: "heygen video batches create --request-schema"
+"GET /v3/videos/batches/{batch_id}":
+  - desc: "Check a batch's per-item video ids and statuses"
+    cmd: "heygen video batches get <batch-id>"
+"GET /v3/videos/statuses":
+  - desc: "Look up statuses for specific video ids"
+    cmd: "heygen video statuses list --video-ids <video-id-1>,<video-id-2>"
+  - desc: "Expand batches into their member video statuses"
+    cmd: "heygen video statuses list --batch-ids <batch-id-1>,<batch-id-2>"

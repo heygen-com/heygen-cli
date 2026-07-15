@@ -143,7 +143,7 @@ var AvatarLooksDelete = &command.Spec{
 	Group:          "avatar",
 	Name:           "looks delete",
 	Summary:        "Delete Avatar Look",
-	Description:    "Deletes an avatar look and its backing resource. Supported types: photo_avatar, digital_twin, and kit-based looks. Studio avatar (model_index) types cannot be deleted via the API. Deleting the last look in a group does not auto-delete the parent group.",
+	Description:    "Deletes an avatar look and its backing resource. Supported types: photo_avatar, digital_twin, and kit-based looks. Studio avatar (model_index) types cannot be deleted via the API. **Warning:** deleting the last look in a group also deletes the parent group. Subsequent requests referencing that group id (e.g. `POST /v3/avatars` with `avatar_group_id`) return 404 not found.",
 	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for DELETE /v3/avatars/looks/{look_id}.\",\n      \"properties\": {\n        \"id\": {\n          \"description\": \"ID of the deleted avatar look.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
 	Endpoint:       "/v3/avatars/looks/{look_id}",
 	Method:         "DELETE",

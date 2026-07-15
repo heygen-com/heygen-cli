@@ -54,14 +54,22 @@ var Groups = map[string][]*command.Spec{
 		LipsyncList,
 		LipsyncUpdate,
 	},
+	"template": {
+		TemplateGenerate,
+		TemplateGet,
+		TemplateList,
+	},
 	"user": {
 		UserMeGet,
 	},
 	"video": {
+		VideoBatchesCreate,
+		VideoBatchesGet,
 		VideoCreate,
 		VideoDelete,
 		VideoGet,
 		VideoList,
+		VideoStatusesList,
 	},
 	"video-agent": {
 		VideoAgentCreate,
@@ -113,6 +121,7 @@ var GroupDescriptions = map[string]string{
 	"avatar":          "List and manage avatars and looks",
 	"brand":           "Brand-related resources — brand kits (colors, fonts, logos) and brand glossaries (custom term translations)",
 	"lipsync":         "Dub or replace audio on existing videos",
+	"template":        "Generate videos from reusable templates by replacing their variables",
 	"user":            "Account information and billing",
 	"video":           "Create, list, retrieve, and delete videos",
 	"video-agent":     "Create videos from text prompts using AI",
