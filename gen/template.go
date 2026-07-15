@@ -4,9 +4,9 @@ package gen
 
 import "github.com/heygen-com/heygen-cli/internal/command"
 
-var TemplateCreate = &command.Spec{
+var TemplateGenerate = &command.Spec{
 	Group:          "template",
-	Name:           "create",
+	Name:           "generate",
 	Summary:        "Generate Video from Template",
 	Description:    "Generates a video from the template by replacing its variables (text, image, video, audio, character, voice). Use scene_ids to select, reorder, or repeat scenes — scenes must already exist in the template; the API cannot create new ones. Returns the created video object; poll GET /v3/videos/{video_id} or use webhooks for completion. Idempotent replays return the original creation-time snapshot (status and URLs as of the first request), not the video's current state.",
 	RequestSchema:  "{\n  \"description\": \"Request body for POST /v3/templates/{template_id}.\",\n  \"properties\": {\n    \"brand_voice_id\": {\n      \"description\": \"Brand voice ID controlling pronunciation\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_id\": {\n      \"description\": \"Opaque ID echoed back in webhook events for this video\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"callback_url\": {\n      \"description\": \"URL called with the video result in addition to registered webhook endpoints\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"caption\": {\n      \"default\": false,\n      \"description\": \"Whether to burn captions into the video\",\n      \"type\": \"boolean\"\n    },\n    \"dimension\": {\n      \"description\": \"Output resolution override. Must match the template's aspect ratio.\",\n      \"nullable\": true,\n      \"properties\": {\n        \"height\": {\n          \"description\": \"Output video height in pixels (even number, 128-4096)\",\n          \"type\": \"integer\"\n        },\n        \"width\": {\n          \"description\": \"Output video width in pixels (even number, 128-4096)\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\": [\n        \"width\",\n        \"height\"\n      ],\n      \"type\": \"object\"\n    },\n    \"enable_sharing\": {\n      \"default\": false,\n      \"description\": \"Whether the generated video's share page is publicly accessible\",\n      \"type\": \"boolean\"\n    },\n    \"folder_id\": {\n      \"description\": \"Folder to place the generated video in\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"fps\": {\n      \"default\": 25,\n      \"description\": \"Output frame rate. One of 25, 30, or 60.\",\n      \"type\": \"number\"\n    },\n    \"include_gif\": {\n      \"default\": false,\n      \"description\": \"Whether to include a GIF preview in the webhook payload\",\n      \"type\": \"boolean\"\n    },\n    \"keep_text_vertically_centered\": {\n      \"default\": false,\n      \"description\": \"When true, replaced text elements are vertically re-centered based on their rendered height\",\n      \"type\": \"boolean\"\n    },\n    \"reorder_music\": {\n      \"default\": true,\n      \"description\": \"When true (default), background audio tracks move with their scenes. When false, tracks stay pinned to layout positions.\",\n      \"type\": \"boolean\"\n    },\n    \"scene_ids\": {\n      \"description\": \"Scene IDs to render, in order (repeats allowed). Scenes must already exist in the template; the API can select, reorder, and repeat scenes but cannot create new ones. Omit to render all scenes in template order.\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"nullable\": true,\n      \"type\": \"array\"\n    },\n    \"subtitles\": {\n      \"description\": \"Subtitle style settings. Implies captions when provided.\",\n      \"nullable\": true,\n      \"properties\": {\n        \"alignment\": {\n          \"default\": 2,\n          \"description\": \"Subtitle alignment\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"disable_highlight\": {\n          \"default\": false,\n          \"description\": \"Override the preset's word-highlight style\",\n          \"nullable\": true,\n          \"type\": \"boolean\"\n        },\n        \"font_size\": {\n          \"description\": \"Font size override for the preset\",\n          \"nullable\": true,\n          \"type\": \"integer\"\n        },\n        \"position\": {\n          \"description\": \"Subtitle position override\",\n          \"nullable\": true,\n          \"properties\": {\n            \"x\": {\n              \"default\": 0,\n              \"description\": \"Horizontal subtitle position\",\n              \"type\": \"number\"\n            },\n            \"y\": {\n              \"default\": 0,\n              \"description\": \"Vertical subtitle position\",\n              \"type\": \"number\"\n            }\n          },\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"preset_name\": {\n          \"description\": \"Subtitle preset name, e.g. 'classic', 'bold', 'bright'\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"preset_name\"\n      ],\n      \"type\": \"object\"\n    },\n    \"title\": {\n      \"description\": \"Title for the generated video\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"variables\": {\n      \"description\": \"Template variable replacements, keyed by the variable name defined in the template\",\n      \"properties\": {},\n      \"required\": [],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [\n    \"variables\"\n  ],\n  \"type\": \"object\"\n}",
@@ -14,6 +14,11 @@ var TemplateCreate = &command.Spec{
 	Endpoint:       "/v3/templates/{template_id}",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Generate a video from a template (body = variable replacements; discover names via 'template get')\n  heygen template generate <template-id> -d @variables.json",
+		"# Render only specific scenes, in order\n  heygen template generate <template-id> --scene-ids <scene-id-1>,<scene-id-2> -d @variables.json",
+		"# See the request shape (variables are template-specific)\n  heygen template generate <template-id> --request-schema",
+	},
 	Args: []command.ArgSpec{
 		{Name: "template-id", Param: "template_id", Help: ""},
 	},
@@ -174,6 +179,9 @@ var TemplateGet = &command.Spec{
 	Endpoint:       "/v3/templates/{template_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Inspect a template's variables and scenes\n  heygen template get <template-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "template-id", Param: "template_id", Help: ""},
 	},
@@ -189,6 +197,9 @@ var TemplateList = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Paginated:      true,
+	Examples: []string{
+		"# List available templates\n  heygen template list --limit 10",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "limit",

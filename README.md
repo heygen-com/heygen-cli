@@ -147,7 +147,8 @@ Mirrors the [HeyGen v3 API](https://developers.heygen.com). Pattern: `heygen <no
 | Group | What it does |
 |-------|-------------|
 | `video-agent` | Create videos from text prompts using AI |
-| `video` | Create, list, get, delete, download videos |
+| `video` | Create, list, get, delete, download videos; batch-create and bulk status |
+| `template` | List templates and generate videos from them |
 | `avatar` | List and manage avatars and looks |
 | `voice` | List voices, design voices, generate speech |
 | `audio` | Search the background-music catalog |

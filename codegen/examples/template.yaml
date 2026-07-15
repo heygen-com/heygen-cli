@@ -1,0 +1,13 @@
+"GET /v3/templates":
+  - desc: "List available templates"
+    cmd: "heygen template list --limit 10"
+"GET /v3/templates/{template_id}":
+  - desc: "Inspect a template's variables and scenes"
+    cmd: "heygen template get <template-id>"
+"POST /v3/templates/{template_id}":
+  - desc: "Generate a video from a template (body = variable replacements; discover names via 'template get')"
+    cmd: "heygen template generate <template-id> -d @variables.json"
+  - desc: "Render only specific scenes, in order"
+    cmd: "heygen template generate <template-id> --scene-ids <scene-id-1>,<scene-id-2> -d @variables.json"
+  - desc: "See the request shape (variables are template-specific)"
+    cmd: "heygen template generate <template-id> --request-schema"
