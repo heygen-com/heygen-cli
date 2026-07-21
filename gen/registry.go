@@ -21,7 +21,14 @@ var Groups = map[string][]*command.Spec{
 		AssetDelete,
 		AssetDirectUploadsCreate,
 		AssetGet,
+		AssetList,
 		AssetSearch,
+	},
+	"asset-batch": {
+		AssetBatchBatchesGet,
+		AssetBatchCompleteBatchesCreate,
+		AssetBatchDirectUploadsBatchesCreate,
+		AssetBatchStatusesList,
 	},
 	"audio": {
 		AudioSoundsList,
@@ -53,6 +60,11 @@ var Groups = map[string][]*command.Spec{
 		LipsyncGet,
 		LipsyncList,
 		LipsyncUpdate,
+	},
+	"lipsync-batch": {
+		LipsyncBatchBatchesCreate,
+		LipsyncBatchBatchesGet,
+		LipsyncBatchStatusesList,
 	},
 	"template": {
 		TemplateGenerate,
@@ -94,6 +106,11 @@ var Groups = map[string][]*command.Spec{
 		VideoTranslateProofreadsSrtUpdate,
 		VideoTranslateUpdate,
 	},
+	"video-translation-batch": {
+		VideoTranslationBatchBatchesCreate,
+		VideoTranslationBatchBatchesGet,
+		VideoTranslationBatchStatusesList,
+	},
 	"voice": {
 		VoiceCloneCreate,
 		VoiceCreate,
@@ -115,17 +132,20 @@ var Groups = map[string][]*command.Spec{
 
 // GroupDescriptions maps group name → help text from OpenAPI tag descriptions.
 var GroupDescriptions = map[string]string{
-	"ai-clipping":     "Turn long-form videos into ready-to-share short clips with captions",
-	"asset":           "Upload files for use in video creation",
-	"audio":           "Search the background-music and sound-effects catalog",
-	"avatar":          "List and manage avatars and looks",
-	"brand":           "Brand-related resources — brand kits (colors, fonts, logos) and brand glossaries (custom term translations)",
-	"lipsync":         "Dub or replace audio on existing videos",
-	"template":        "Generate videos from reusable templates by replacing their variables",
-	"user":            "Account information and billing",
-	"video":           "Create, list, retrieve, and delete videos",
-	"video-agent":     "Create videos from text prompts using AI",
-	"video-translate": "Translate videos into other languages",
-	"voice":           "Create speech audio and manage voices",
-	"webhook":         "Create, list, and manage webhook endpoints and events",
+	"ai-clipping":             "Turn long-form videos into ready-to-share short clips with captions",
+	"asset":                   "Upload files for use in video creation",
+	"asset-batch":             "Create and track batches of direct-to-S3 asset uploads.",
+	"audio":                   "Search the background-music and sound-effects catalog",
+	"avatar":                  "List and manage avatars and looks",
+	"brand":                   "Brand-related resources — brand kits (colors, fonts, logos) and brand glossaries (custom term translations)",
+	"lipsync":                 "Dub or replace audio on existing videos",
+	"lipsync-batch":           "Create and track batches of lipsyncs.",
+	"template":                "Generate videos from reusable templates by replacing their variables",
+	"user":                    "Account information and billing",
+	"video":                   "Create, list, retrieve, and delete videos",
+	"video-agent":             "Create videos from text prompts using AI",
+	"video-translate":         "Translate videos into other languages",
+	"video-translation-batch": "Create and track batches of video translations.",
+	"voice":                   "Create speech audio and manage voices",
+	"webhook":                 "Create, list, and manage webhook endpoints and events",
 }
