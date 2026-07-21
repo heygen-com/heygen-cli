@@ -111,6 +111,12 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				}
 			}
 
+			// Per-operation HTTP timeout: uploads and create/enqueue calls run
+			// far longer than reads, so give each operation its own budget
+			// rather than one global value. Set once here (each invocation runs
+			// a single command); covers both the --wait and plain paths below.
+			ctx.client.SetTimeout(timeoutForSpec(spec))
+
 			// Poll config is looked up at call time, not attached to Spec.
 			// Spec is immutable (generated); poll configs are hand-written in cmd/.
 			pc := pollConfigs[spec.Group+"/"+spec.Name]

@@ -290,3 +290,23 @@ func TestClient_Do_ExtraHeadersCannotOverrideReserved(t *testing.T) {
 		t.Errorf("X-HeyGen-Source = %q, want %q", gotSource, "cli")
 	}
 }
+
+func TestNewWithCredential_DefaultTimeout(t *testing.T) {
+	c := New("key")
+	if c.httpClient.Timeout != DefaultTimeout {
+		t.Errorf("timeout = %v, want default %v", c.httpClient.Timeout, DefaultTimeout)
+	}
+}
+
+func TestSetTimeout(t *testing.T) {
+	c := New("key")
+	c.SetTimeout(2 * time.Minute)
+	if c.httpClient.Timeout != 2*time.Minute {
+		t.Errorf("timeout = %v, want 2m", c.httpClient.Timeout)
+	}
+	// Zero is an explicit "no timeout".
+	c.SetTimeout(0)
+	if c.httpClient.Timeout != 0 {
+		t.Errorf("timeout = %v, want 0 (disabled)", c.httpClient.Timeout)
+	}
+}
