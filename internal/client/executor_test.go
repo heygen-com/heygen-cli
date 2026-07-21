@@ -1026,3 +1026,33 @@ func TestExecute_ResponseBodyReadError_NetworkError(t *testing.T) {
 		t.Fatalf("err = %v, want a network_error CLIError", err)
 	}
 }
+
+func TestExecute_RequestTimeout_ClassifiedAsTimeout(t *testing.T) {
+	// Handler sleeps past the client timeout so the request deadline trips
+	// before any response arrives. The transport timeout must surface as a
+	// timeout CLIError (exit 4), not a generic network_error (exit 1).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+	c.SetTimeout(50 * time.Millisecond)
+
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "POST", BodyEncoding: "json"}
+	inv := &command.Invocation{PathParams: make(map[string]string), Body: map[string]any{"x": 1}}
+
+	_, err := c.Execute(spec, inv)
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("want *CLIError, got %v", err)
+	}
+	if cliErr.Code != "timeout" {
+		t.Errorf("code = %q, want %q", cliErr.Code, "timeout")
+	}
+	if cliErr.ExitCode != clierrors.ExitTimeout {
+		t.Errorf("exit code = %d, want %d (ExitTimeout)", cliErr.ExitCode, clierrors.ExitTimeout)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -205,6 +206,23 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 				Message:  "OAuth session expired or rejected",
 				Hint:     "Run: heygen auth login",
 				ExitCode: clierrors.ExitAuth,
+			}
+		}
+		// A transport-level timeout (the per-request HTTP deadline elapsed
+		// before the response arrived) is classified as timeout/exit 4 — the
+		// same code on both the plain and --wait paths, so a slow create or
+		// upload no longer masquerades as a generic network_error on one path
+		// and a timeout on the other. net.Error.Timeout() is the robust
+		// detector: http.Client.Timeout's wrapped error does not reliably
+		// satisfy errors.Is(context.DeadlineExceeded), which is why the old
+		// --wait path resorted to string-matching the error message.
+		var netErr net.Error
+		if (errors.As(err, &netErr) && netErr.Timeout()) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, &clierrors.CLIError{
+				Code:     "timeout",
+				Message:  fmt.Sprintf("request timed out: %v", err),
+				Hint:     "The request took too long and timed out. Retry; large uploads and long-running operations may need another attempt.",
+				ExitCode: clierrors.ExitTimeout,
 			}
 		}
 		// network_error is a grandfathered bare code (not cli_-prefixed): it is
@@ -455,10 +473,13 @@ func extractJSONPath(raw json.RawMessage, path string) (string, error) {
 	return value, nil
 }
 
-// translateCreateContextError converts timeout/cancel errors before a resource
-// ID is known into user-friendly CLIErrors. Deadline exceeded returns exit 4
-// (timeout) since the operation may have been created server-side. Cancel
-// returns exit 1 (general) since the user explicitly interrupted.
+// translateCreateContextError maps a canceled/expired poll context to a
+// user-friendly CLIError when the create request fails before a resource ID is
+// known. A tripped poll deadline returns exit 4 (timeout, the operation may
+// exist server-side); an explicit cancel returns exit 1. A transport-level
+// request timeout that fires while the poll context is still live is already
+// classified as timeout/exit 4 by executeWithContext, so it passes through the
+// final return unchanged — no message string-matching required.
 func translateCreateContextError(ctx context.Context, err error) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return newCreateContextError(ctxErr)
@@ -466,18 +487,6 @@ func translateCreateContextError(ctx context.Context, err error) error {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return newCreateContextError(err)
 	}
-
-	var cliErr *clierrors.CLIError
-	if errors.As(err, &cliErr) && cliErr.Code == "network_error" {
-		msg := strings.ToLower(cliErr.Message)
-		switch {
-		case strings.Contains(msg, "context deadline exceeded"):
-			return newCreateContextError(context.DeadlineExceeded)
-		case strings.Contains(msg, "context canceled"), strings.Contains(msg, "context cancelled"):
-			return newCreateContextError(context.Canceled)
-		}
-	}
-
 	return err
 }
 
