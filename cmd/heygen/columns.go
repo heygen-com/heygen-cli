@@ -6,14 +6,18 @@ import "github.com/heygen-com/heygen-cli/internal/command"
 // Keys use the full generated command path: "group/spec.Name".
 var DefaultColumns = map[string][]command.Column{
 	// The four bulk-status endpoints share one read model (VideoStatusEntry),
-	// so their curated columns are identical regardless of resource.
+	// so columns are the same shape. The id field is always the wire key
+	// "video_id", but its meaning differs by resource: for lipsync and
+	// video-translate it is the underlying produced video's id (correctly
+	// "Video ID"); for assets it holds the asset_id, so that table labels it
+	// "Asset ID" to avoid implying the value is a video id.
 	"video/statuses list": {
 		{Header: "Video ID", Field: "video_id"},
 		{Header: "Status", Field: "status"},
 		{Header: "Batch ID", Field: "batch_id"},
 	},
 	"asset/statuses list": {
-		{Header: "Video ID", Field: "video_id"},
+		{Header: "Asset ID", Field: "video_id"},
 		{Header: "Status", Field: "status"},
 		{Header: "Batch ID", Field: "batch_id"},
 	},
