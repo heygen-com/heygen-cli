@@ -4,6 +4,91 @@ package gen
 
 import "github.com/heygen-com/heygen-cli/internal/command"
 
+var VideoTranslateBatchesCreate = &command.Spec{
+	Group:         "video-translate",
+	Name:          "batches create",
+	Summary:       "Create Video Translation Batch",
+	Description:   "Submit up to 100 video-translation payloads (identical in shape to POST /v3/video-translations) as a single batch. A payload targeting multiple output_languages expands to one batch item per language, and each item is created and processed independently so one bad source does not fail the rest. Returns 202 with a batch_id; poll GET /v3/video-translations/batches/{batch_id} for progress. Pass an Idempotency-Key header to make retries safe — the same key returns the same batch.",
+	RequestSchema: "{\n  \"properties\": {\n    \"callback_url\": {\n      \"description\": \"Webhook URL invoked once when every item in the batch reaches a terminal state.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"title\": {\n      \"description\": \"Display name for the batch, shown in the HeyGen app.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"video_translations\": {\n      \"description\": \"Video-translation payloads, identical in shape to POST /v3/video-translations. A single entry targeting multiple output_languages expands to one batch item per language; the expanded item count is capped at 100.\",\n      \"items\": {\n        \"description\": \"Request body for POST /v3/video-translations.\",\n        \"properties\": {\n          \"audio\": {\n            \"description\": \"Custom audio for dubbing — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}\",\n            \"discriminator\": {\n              \"mapping\": {\n                \"asset_id\": \"#/components/schemas/AssetId\",\n                \"url\": \"#/components/schemas/AssetUrl\"\n              },\n              \"propertyName\": \"type\"\n            },\n            \"nullable\": true,\n            \"oneOf\": [\n              {\n                \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n                \"properties\": {\n                  \"type\": {\n                    \"description\": \"Input type discriminator\",\n                    \"type\": \"string\"\n                  },\n                  \"url\": {\n                    \"description\": \"Publicly accessible HTTPS URL for the asset\",\n                    \"type\": \"string\"\n                  }\n                },\n                \"required\": [\n                  \"type\",\n                  \"url\"\n                ],\n                \"type\": \"object\"\n              },\n              {\n                \"description\": \"Asset input via HeyGen asset ID from the asset upload endpoint.\",\n                \"properties\": {\n                  \"asset_id\": {\n                    \"description\": \"HeyGen asset ID from the asset upload endpoint\",\n                    \"type\": \"string\"\n                  },\n                  \"type\": {\n                    \"description\": \"Input type discriminator\",\n                    \"type\": \"string\"\n                  }\n                },\n                \"required\": [\n                  \"type\",\n                  \"asset_id\"\n                ],\n                \"type\": \"object\"\n              }\n            ]\n          },\n          \"brand_glossary_id\": {\n            \"description\": \"Brand glossary ID for custom term translations (e.g. translate 'Reformer' as the Pilates equipment, not 'political activist'). Alias for the legacy `brand_voice_id` field. Discover IDs via GET /v3/brand-glossaries.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"brand_voice_id\": {\n            \"description\": \"Brand glossary ID for custom term translations. Legacy field name for `brand_glossary_id` — both are accepted and resolve to the same workspace record. Discover IDs via GET /v3/brand-glossaries.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"callback_id\": {\n            \"description\": \"ID included in webhook payload\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"callback_url\": {\n            \"description\": \"Webhook URL for completion notifications\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"disable_music_track\": {\n            \"default\": false,\n            \"description\": \"Remove background music\",\n            \"type\": \"boolean\"\n          },\n          \"enable_caption\": {\n            \"default\": false,\n            \"description\": \"Generate captions for translated video\",\n            \"type\": \"boolean\"\n          },\n          \"enable_dynamic_duration\": {\n            \"default\": true,\n            \"description\": \"Allow dynamic duration adjustment\",\n            \"type\": \"boolean\"\n          },\n          \"enable_speech_enhancement\": {\n            \"default\": false,\n            \"description\": \"Enhance speech quality\",\n            \"type\": \"boolean\"\n          },\n          \"enable_watermark\": {\n            \"default\": false,\n            \"description\": \"Add watermark to output\",\n            \"type\": \"boolean\"\n          },\n          \"end_time\": {\n            \"description\": \"End time in seconds for partial translation\",\n            \"nullable\": true,\n            \"type\": \"number\"\n          },\n          \"folder_id\": {\n            \"description\": \"Project/folder ID to organize translation into\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"fps_mode\": {\n            \"description\": \"Frame rate mode for the output video. 'vfr' = variable frame rate, 'cfr' = constant frame rate, 'passthrough' = match the source. Only takes effect when a custom 'audio' track is provided.\",\n            \"enum\": [\n              \"vfr\",\n              \"cfr\",\n              \"passthrough\"\n            ],\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"input_language\": {\n            \"description\": \"Source language code (auto-detected if omitted)\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"keep_the_same_format\": {\n            \"description\": \"Preserve the source video's encoding specs (resolution, bitrate).\",\n            \"nullable\": true,\n            \"type\": \"boolean\"\n          },\n          \"mode\": {\n            \"default\": \"speed\",\n            \"description\": \"Translation quality mode: 'speed' (faster) or 'precision' (higher quality, uses avatar inference)\",\n            \"enum\": [\n              \"speed\",\n              \"precision\"\n            ],\n            \"type\": \"string\"\n          },\n          \"output_languages\": {\n            \"description\": \"Target language names (e.g. 'Chinese (Cantonese, Traditional)', 'Spanish (Spain)', 'English'). Use GET /v3/video-translations/languages for valid values. Use one for single translation, multiple for batch.\",\n            \"items\": {\n              \"type\": \"string\"\n            },\n            \"type\": \"array\"\n          },\n          \"speaker_num\": {\n            \"description\": \"Number of speakers (improves speaker separation)\",\n            \"nullable\": true,\n            \"type\": \"integer\"\n          },\n          \"srt\": {\n            \"description\": \"Custom subtitle file — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}.\",\n            \"discriminator\": {\n              \"mapping\": {\n                \"asset_id\": \"#/components/schemas/AssetId\",\n                \"url\": \"#/components/schemas/AssetUrl\"\n              },\n              \"propertyName\": \"type\"\n            },\n            \"nullable\": true,\n            \"oneOf\": [\n              {\n                \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n                \"properties\": {\n                  \"type\": {\n                    \"description\": \"Input type discriminator\",\n                    \"type\": \"string\"\n                  },\n                  \"url\": {\n                    \"description\": \"Publicly accessible HTTPS URL for the asset\",\n                    \"type\": \"string\"\n                  }\n                },\n                \"required\": [\n                  \"type\",\n                  \"url\"\n                ],\n                \"type\": \"object\"\n              },\n              {\n                \"description\": \"Asset input via HeyGen asset ID from the asset upload endpoint.\",\n                \"properties\": {\n                  \"asset_id\": {\n                    \"description\": \"HeyGen asset ID from the asset upload endpoint\",\n                    \"type\": \"string\"\n                  },\n                  \"type\": {\n                    \"description\": \"Input type discriminator\",\n                    \"type\": \"string\"\n                  }\n                },\n                \"required\": [\n                  \"type\",\n                  \"asset_id\"\n                ],\n                \"type\": \"object\"\n              }\n            ]\n          },\n          \"srt_role\": {\n            \"description\": \"Which video the subtitle applies to: 'input' (source) or 'output' (translated).\",\n            \"enum\": [\n              \"input\",\n              \"output\"\n            ],\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"start_time\": {\n            \"description\": \"Start time in seconds for partial translation\",\n            \"nullable\": true,\n            \"type\": \"number\"\n          },\n          \"stock_voice_config\": {\n            \"description\": \"Use a preset stock voice for the translation instead of recreating the original speaker's voice. By default, Video Translation clones the original speaker so the result sounds like them; with this enabled, the translation is spoken by a natural preset voice optimized for clear pronunciation and accent in the target language (the result will not sound like the original speaker). Enterprise feature, available for selected accounts and languages by request — contact your HeyGen account team.\",\n            \"nullable\": true,\n            \"properties\": {\n              \"preferred_stock_voice_ids\": {\n                \"description\": \"Optional. Pin specific stock voice IDs to draw from. If omitted, the target language's default stock-voice pool is used.\",\n                \"items\": {\n                  \"type\": \"string\"\n                },\n                \"type\": \"array\"\n              },\n              \"use_stock_voice\": {\n                \"default\": false,\n                \"description\": \"Set to true to use a preset stock voice instead of cloning the original speaker.\",\n                \"type\": \"boolean\"\n              }\n            },\n            \"required\": [],\n            \"type\": \"object\"\n          },\n          \"title\": {\n            \"description\": \"Title for the translation job\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"translate_audio_only\": {\n            \"default\": false,\n            \"description\": \"Only translate audio, keep original video\",\n            \"type\": \"boolean\"\n          },\n          \"video\": {\n            \"description\": \"Source video — provide as {type: 'url', url: '...'} or {type: 'asset_id', asset_id: '...'}\",\n            \"discriminator\": {\n              \"mapping\": {\n                \"asset_id\": \"#/components/schemas/AssetId\",\n                \"url\": \"#/components/schemas/AssetUrl\"\n              },\n              \"propertyName\": \"type\"\n            },\n            \"oneOf\": [\n              {\n                \"description\": \"Asset input via publicly accessible HTTPS URL.\",\n                \"properties\": {\n                  \"type\": {\n                    \"description\": \"Input type discriminator\",\n                    \"type\": \"string\"\n                  },\n                  \"url\": {\n                    \"description\": \"Publicly accessible HTTPS URL for the asset\",\n                    \"type\": \"string\"\n                  }\n                },\n                \"required\": [\n                  \"type\",\n                  \"url\"\n                ],\n                \"type\": \"object\"\n              },\n              {\n                \"description\": \"Asset input via HeyGen asset ID from the asset upload endpoint.\",\n                \"properties\": {\n                  \"asset_id\": {\n                    \"description\": \"HeyGen asset ID from the asset upload endpoint\",\n                    \"type\": \"string\"\n                  },\n                  \"type\": {\n                    \"description\": \"Input type discriminator\",\n                    \"type\": \"string\"\n                  }\n                },\n                \"required\": [\n                  \"type\",\n                  \"asset_id\"\n                ],\n                \"type\": \"object\"\n              }\n            ]\n          }\n        },\n        \"required\": [\n          \"video\",\n          \"output_languages\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    }\n  },\n  \"required\": [\n    \"video_translations\"\n  ],\n  \"type\": \"object\"\n}",
+	Endpoint:      "/v3/video-translations/batches",
+	Method:        "POST",
+	BodyEncoding:  "json",
+	Examples: []string{
+		"# Submit a batch of translations in one request (up to 100 items; multiple output languages fan out per item)\n  heygen video-translate batches create --title 'Localization batch' -d '{\"video_translations\":[{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/source.mp4\"},\"output_languages\":[\"Spanish (Spain)\",\"French (France)\"]}]}'",
+		"# See the full batch request shape (per-item translation payloads)\n  heygen video-translate batches create --request-schema",
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "callback-url",
+			Type:     "string",
+			Default:  "",
+			Help:     "Webhook URL invoked once when every item in the batch reaches a terminal state.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "callback_url",
+		},
+		{
+			Name:     "title",
+			Type:     "string",
+			Default:  "",
+			Help:     "Display name for the batch, shown in the HeyGen app.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "title",
+		},
+	},
+}
+
+var VideoTranslateBatchesGet = &command.Spec{
+	Group:          "video-translate",
+	Name:           "batches get",
+	Summary:        "Get Video Translation Batch",
+	Description:    "Returns batch aggregate status and one page of items with their ids and statuses. Item statuses are one of queued, processing, completed, or failed. The per-item id is returned as video_id (the batch read model is shared with the videos batch API).",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"properties\": {\n        \"batch_id\": {\n          \"description\": \"Batch identifier.\",\n          \"type\": \"string\"\n        },\n        \"counts_by_status\": {\n          \"description\": \"Item counts keyed by item status.\",\n          \"properties\": {},\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"created_at\": {\n          \"description\": \"Batch creation time as a unix timestamp.\",\n          \"type\": \"integer\"\n        },\n        \"has_more\": {\n          \"description\": \"Whether more items exist beyond this page.\",\n          \"type\": \"boolean\"\n        },\n        \"items\": {\n          \"description\": \"One page of batch items ordered by item_index.\",\n          \"items\": {\n            \"properties\": {\n              \"error\": {\n                \"description\": \"Failure details when status is failed.\",\n                \"nullable\": true,\n                \"properties\": {},\n                \"required\": [],\n                \"type\": \"object\"\n              },\n              \"item_index\": {\n                \"description\": \"Zero-based position of this item in the submitted videos array.\",\n                \"type\": \"integer\"\n              },\n              \"status\": {\n                \"description\": \"Item status: queued | processing | completed | failed.\",\n                \"enum\": [\n                  \"queued\",\n                  \"processing\",\n                  \"completed\",\n                  \"failed\"\n                ],\n                \"type\": \"string\"\n              },\n              \"video_id\": {\n                \"description\": \"Video id, present once the underlying video has been created.\",\n                \"nullable\": true,\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"item_index\",\n              \"status\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        },\n        \"next_token\": {\n          \"description\": \"Opaque cursor for the next page of items.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"description\": \"Aggregate batch status derived from item states.\",\n          \"enum\": [\n            \"processing\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"title\": {\n          \"description\": \"Batch display name.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"total_items\": {\n          \"description\": \"Number of items submitted in this batch.\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\": [\n        \"batch_id\",\n        \"status\",\n        \"total_items\",\n        \"counts_by_status\",\n        \"created_at\",\n        \"items\",\n        \"has_more\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/batches/{batch_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Paginated:      true,
+	Examples: []string{
+		"# Check a batch's per-item translation ids and statuses\n  heygen video-translate batches get <batch-id>",
+	},
+	Args: []command.ArgSpec{
+		{Name: "batch-id", Param: "batch_id", Help: ""},
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "limit",
+			Type:     "int",
+			Default:  "100",
+			Help:     "Items per page (1-100).",
+			Required: false,
+			Enum:     nil,
+			Min:      intPtr(1),
+			Max:      intPtr(100),
+			Source:   "query",
+			JSONName: "limit",
+		},
+		{
+			Name:     "token",
+			Type:     "string",
+			Default:  "",
+			Help:     "Opaque pagination cursor from a previous response.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "token",
+		},
+	},
+}
+
 var VideoTranslateCreate = &command.Spec{
 	Group:          "video-translate",
 	Name:           "create",
@@ -630,6 +715,47 @@ var VideoTranslateProofreadsSrtUpdate = &command.Spec{
 	},
 	Args: []command.ArgSpec{
 		{Name: "proofread-id", Param: "proofread_id", Help: ""},
+	},
+}
+
+var VideoTranslateStatusesList = &command.Spec{
+	Group:          "video-translate",
+	Name:           "statuses list",
+	Summary:        "Bulk Video Translation Statuses",
+	Description:    "Returns statuses for up to 100 video translations in one request, addressed by comma-separated video_translation_ids and/or batch_ids query params. Statuses are one of queued, processing, completed, or failed, plus not_found for unknown or unowned ids. Each returned entry carries its id as video_id (the status read model is shared with the videos batch API).",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"properties\": {\n          \"batch_id\": {\n            \"description\": \"Set for entries expanded from a batch_id.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"error\": {\n            \"description\": \"Failure details when status is failed.\",\n            \"nullable\": true,\n            \"properties\": {},\n            \"required\": [],\n            \"type\": \"object\"\n          },\n          \"item_index\": {\n            \"description\": \"Set for entries expanded from a batch_id, to correlate items without a video_id yet.\",\n            \"nullable\": true,\n            \"type\": \"integer\"\n          },\n          \"status\": {\n            \"description\": \"Video status (same values as GET /v1/video_status.get), or not_found for unknown/unowned ids.\",\n            \"type\": \"string\"\n          },\n          \"video_id\": {\n            \"description\": \"Video id. Null for batch items whose video has not been created yet.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"status\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/statuses",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Examples: []string{
+		"# Look up statuses for specific translation ids\n  heygen video-translate statuses list --video-translation-ids <id-1>,<id-2>",
+		"# Expand batches into their member translation statuses\n  heygen video-translate statuses list --batch-ids <batch-id-1>,<batch-id-2>",
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "video-translation-ids",
+			Type:     "string",
+			Default:  "",
+			Help:     "Comma-separated video translation ids to look up.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "video_translation_ids",
+		},
+		{
+			Name:     "batch-ids",
+			Type:     "string",
+			Default:  "",
+			Help:     "Comma-separated batch ids; each expands to its member video translations.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "batch_ids",
+		},
 	},
 }
 

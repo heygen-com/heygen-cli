@@ -4,6 +4,78 @@ package gen
 
 import "github.com/heygen-com/heygen-cli/internal/command"
 
+var AssetBatchesGet = &command.Spec{
+	Group:          "asset",
+	Name:           "batches get",
+	Summary:        "Get Asset Batch",
+	Description:    "Returns batch aggregate status and one page of items with their ids and statuses. Item statuses are one of queued, processing, completed, or failed. The per-item id is returned as video_id (the batch read model is shared with the videos batch API); for asset batches it holds the asset_id.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"properties\": {\n        \"batch_id\": {\n          \"description\": \"Batch identifier.\",\n          \"type\": \"string\"\n        },\n        \"counts_by_status\": {\n          \"description\": \"Item counts keyed by item status.\",\n          \"properties\": {},\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"created_at\": {\n          \"description\": \"Batch creation time as a unix timestamp.\",\n          \"type\": \"integer\"\n        },\n        \"has_more\": {\n          \"description\": \"Whether more items exist beyond this page.\",\n          \"type\": \"boolean\"\n        },\n        \"items\": {\n          \"description\": \"One page of batch items ordered by item_index.\",\n          \"items\": {\n            \"properties\": {\n              \"error\": {\n                \"description\": \"Failure details when status is failed.\",\n                \"nullable\": true,\n                \"properties\": {},\n                \"required\": [],\n                \"type\": \"object\"\n              },\n              \"item_index\": {\n                \"description\": \"Zero-based position of this item in the submitted videos array.\",\n                \"type\": \"integer\"\n              },\n              \"status\": {\n                \"description\": \"Item status: queued | processing | completed | failed.\",\n                \"enum\": [\n                  \"queued\",\n                  \"processing\",\n                  \"completed\",\n                  \"failed\"\n                ],\n                \"type\": \"string\"\n              },\n              \"video_id\": {\n                \"description\": \"Video id, present once the underlying video has been created.\",\n                \"nullable\": true,\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"item_index\",\n              \"status\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        },\n        \"next_token\": {\n          \"description\": \"Opaque cursor for the next page of items.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"description\": \"Aggregate batch status derived from item states.\",\n          \"enum\": [\n            \"processing\",\n            \"completed\",\n            \"failed\"\n          ],\n          \"type\": \"string\"\n        },\n        \"title\": {\n          \"description\": \"Batch display name.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"total_items\": {\n          \"description\": \"Number of items submitted in this batch.\",\n          \"type\": \"integer\"\n        }\n      },\n      \"required\": [\n        \"batch_id\",\n        \"status\",\n        \"total_items\",\n        \"counts_by_status\",\n        \"created_at\",\n        \"items\",\n        \"has_more\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/assets/batches/{batch_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Paginated:      true,
+	Examples: []string{
+		"# Check a batch's aggregate status and per-item asset ids and statuses\n  heygen asset batches get <batch-id>",
+	},
+	Args: []command.ArgSpec{
+		{Name: "batch-id", Param: "batch_id", Help: ""},
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "limit",
+			Type:     "int",
+			Default:  "100",
+			Help:     "Items per page (1-100).",
+			Required: false,
+			Enum:     nil,
+			Min:      intPtr(1),
+			Max:      intPtr(100),
+			Source:   "query",
+			JSONName: "limit",
+		},
+		{
+			Name:     "token",
+			Type:     "string",
+			Default:  "",
+			Help:     "Opaque pagination cursor from a previous response.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "token",
+		},
+	},
+}
+
+var AssetCompleteBatchesCreate = &command.Spec{
+	Group:         "asset",
+	Name:          "complete batches create",
+	Summary:       "Complete Asset Upload Batch",
+	Description:   "Finalize every uploaded file in a batch. Call after all upload PUTs return 200. Each file is validated and ingested asynchronously and independently, so one bad file does not fail the rest. Returns 202 with the batch_id; poll GET /v3/assets/batches/{batch_id} for per-item progress. Idempotent: a repeated call re-drives the same batch.",
+	RequestSchema: "{\n  \"description\": \"Finalize every uploaded file in a batch (POST /v3/assets/complete/batches).\",\n  \"properties\": {\n    \"batch_id\": {\n      \"description\": \"Identifier returned by POST /v3/assets/direct-uploads/batches.\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"batch_id\"\n  ],\n  \"type\": \"object\"\n}",
+	Endpoint:      "/v3/assets/complete/batches",
+	Method:        "POST",
+	BodyEncoding:  "json",
+	Examples: []string{
+		"# Finalize a whole upload batch after every file's PUT has succeeded\n  heygen asset complete batches create --batch-id <batch-id>",
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "batch-id",
+			Type:     "string",
+			Default:  "",
+			Help:     "Identifier returned by POST /v3/assets/direct-uploads/batches.",
+			Required: true,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "batch_id",
+		},
+	},
+}
+
 var AssetCompleteCreate = &command.Spec{
 	Group:          "asset",
 	Name:           "complete create",
@@ -84,6 +156,48 @@ var AssetDelete = &command.Spec{
 	},
 }
 
+var AssetDirectUploadsBatchesCreate = &command.Spec{
+	Group:          "asset",
+	Name:           "direct-uploads batches create",
+	Summary:        "Create Asset Upload Batch",
+	Description:    "Request up to 100 presigned direct-to-S3 upload URLs in a single call. Returns a batch_id and one upload slot per file (asset_id + presigned upload_url + required headers). PUT each file's bytes to its upload_url, then call POST /v3/assets/complete/batches to finalize the whole batch. This is synchronous — no bytes flow through the API. Pass an Idempotency-Key header to make retries safe (the same key returns the same batch).",
+	RequestSchema:  "{\n  \"properties\": {\n    \"callback_url\": {\n      \"description\": \"Reserved for parity with the other batch APIs; asset completion does not emit a webhook.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"files\": {\n      \"description\": \"Files to presign, same shape as POST /v3/assets/direct-uploads. Max 100 per batch.\",\n      \"items\": {\n        \"description\": \"One requested file in a create-upload-batch call. Mirrors the fields\\n``CreateAssetUploadRequest`` (POST /v3/assets/direct-uploads) validates.\",\n        \"properties\": {\n          \"checksum_sha256\": {\n            \"description\": \"Optional SHA256 of the file as hex. When provided, S3 enforces it on upload.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"content_type\": {\n            \"description\": \"Declared MIME type (e.g. 'video/mp4', 'image/png', 'audio/mpeg', 'application/pdf'). Verified against the stored bytes when the batch is completed.\",\n            \"type\": \"string\"\n          },\n          \"filename\": {\n            \"description\": \"Original filename for reference/metadata. The stored object's extension is derived from content_type.\",\n            \"type\": \"string\"\n          },\n          \"size_bytes\": {\n            \"description\": \"Exact byte size of the file. Signed into the upload URL so it cannot be exceeded.\",\n            \"type\": \"integer\"\n          }\n        },\n        \"required\": [\n          \"filename\",\n          \"content_type\",\n          \"size_bytes\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"title\": {\n      \"description\": \"Display name for the batch, shown in the HeyGen app.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"files\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"properties\": {\n        \"batch_id\": {\n          \"description\": \"Identifier of the created batch. Pass to POST /v3/assets/complete/batches once all files are uploaded.\",\n          \"type\": \"string\"\n        },\n        \"items\": {\n          \"description\": \"One presigned upload slot per requested file, in the submitted order.\",\n          \"items\": {\n            \"description\": \"One issued presigned upload slot in the create response. Mirrors the single-upload\\n``CreateAssetUploadResponse`` (POST /v3/assets/direct-uploads).\",\n            \"properties\": {\n              \"asset_id\": {\n                \"description\": \"Reusable asset identifier. Becomes usable after POST /v3/assets/complete/batches finalizes the batch.\",\n                \"type\": \"string\"\n              },\n              \"expires_in_seconds\": {\n                \"description\": \"Seconds until the upload URL expires.\",\n                \"type\": \"integer\"\n              },\n              \"max_bytes\": {\n                \"description\": \"Maximum allowed upload size in bytes.\",\n                \"type\": \"integer\"\n              },\n              \"status\": {\n                \"description\": \"Upload lifecycle status. Always 'pending_upload' here.\",\n                \"type\": \"string\"\n              },\n              \"upload_headers\": {\n                \"description\": \"Headers that must be sent verbatim on the PUT request.\",\n                \"properties\": {},\n                \"required\": [],\n                \"type\": \"object\"\n              },\n              \"upload_url\": {\n                \"description\": \"Presigned S3 URL. PUT the raw file bytes here.\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"asset_id\",\n              \"upload_url\",\n              \"upload_headers\",\n              \"expires_in_seconds\",\n              \"max_bytes\",\n              \"status\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        }\n      },\n      \"required\": [\n        \"batch_id\",\n        \"items\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/assets/direct-uploads/batches",
+	Method:         "POST",
+	BodyEncoding:   "json",
+	Examples: []string{
+		"# Request presigned upload URLs for up to 100 files in one call\n  heygen asset direct-uploads batches create --title 'Launch assets' -d '{\"files\":[{\"filename\":\"clip1.mp4\",\"content_type\":\"video/mp4\",\"size_bytes\":10485760},{\"filename\":\"logo.png\",\"content_type\":\"image/png\",\"size_bytes\":204800}]}'",
+		"# See the full upload-batch request shape (per-file fields)\n  heygen asset direct-uploads batches create --request-schema",
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "callback-url",
+			Type:     "string",
+			Default:  "",
+			Help:     "Reserved for parity with the other batch APIs; asset completion does not emit a webhook.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "callback_url",
+		},
+		{
+			Name:     "title",
+			Type:     "string",
+			Default:  "",
+			Help:     "Display name for the batch, shown in the HeyGen app.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "title",
+		},
+	},
+}
+
 var AssetDirectUploadsCreate = &command.Spec{
 	Group:          "asset",
 	Name:           "direct-uploads create",
@@ -155,7 +269,7 @@ var AssetGet = &command.Spec{
 	Name:           "get",
 	Summary:        "Get Asset",
 	Description:    "Returns metadata for an asset in the caller's workspace — including owner, upload timestamp, file type, and a publicly accessible URL.",
-	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response payload for GET /v3/assets/{asset_id}.\",\n      \"properties\": {\n        \"folder_id\": {\n          \"description\": \"Identifier of the folder the asset is stored in. Null if the asset is at the space root.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"id\": {\n          \"description\": \"Unique asset identifier.\",\n          \"type\": \"string\"\n        },\n        \"name\": {\n          \"description\": \"Display name of the asset.\",\n          \"type\": \"string\"\n        },\n        \"owner\": {\n          \"description\": \"Username of the asset owner.\",\n          \"type\": \"string\"\n        },\n        \"space_id\": {\n          \"description\": \"Identifier of the space the asset belongs to.\",\n          \"type\": \"string\"\n        },\n        \"type\": {\n          \"description\": \"Asset file type (e.g. 'image', 'video', 'audio', 'font').\",\n          \"type\": \"string\"\n        },\n        \"uploaded_at\": {\n          \"description\": \"Unix timestamp (seconds) of when the asset was uploaded.\",\n          \"type\": \"integer\"\n        },\n        \"url\": {\n          \"description\": \"Publicly accessible URL for the asset. Null if no URL can be generated.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\",\n        \"name\",\n        \"type\",\n        \"owner\",\n        \"space_id\",\n        \"uploaded_at\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response payload for GET /v3/assets/{asset_id} and items of GET /v3/assets.\",\n      \"properties\": {\n        \"folder_id\": {\n          \"description\": \"Identifier of the folder the asset is stored in. Null if the asset is at the space root.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        },\n        \"id\": {\n          \"description\": \"Unique asset identifier.\",\n          \"type\": \"string\"\n        },\n        \"name\": {\n          \"description\": \"Display name of the asset.\",\n          \"type\": \"string\"\n        },\n        \"owner\": {\n          \"description\": \"Username of the asset owner.\",\n          \"type\": \"string\"\n        },\n        \"space_id\": {\n          \"description\": \"Identifier of the space the asset belongs to.\",\n          \"type\": \"string\"\n        },\n        \"type\": {\n          \"description\": \"Asset file type (e.g. 'image', 'video', 'audio', 'font').\",\n          \"type\": \"string\"\n        },\n        \"uploaded_at\": {\n          \"description\": \"Unix timestamp (seconds) of when the asset was uploaded.\",\n          \"type\": \"integer\"\n        },\n        \"url\": {\n          \"description\": \"Publicly accessible URL for the asset. Null if no URL can be generated.\",\n          \"nullable\": true,\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\",\n        \"name\",\n        \"type\",\n        \"owner\",\n        \"space_id\",\n        \"uploaded_at\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
 	Endpoint:       "/v3/assets/{asset_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
@@ -164,6 +278,72 @@ var AssetGet = &command.Spec{
 	},
 	Args: []command.ArgSpec{
 		{Name: "asset-id", Param: "asset_id", Help: ""},
+	},
+}
+
+var AssetList = &command.Spec{
+	Group:          "asset",
+	Name:           "list",
+	Summary:        "List Assets",
+	Description:    "**Beta** — this endpoint may change with a few days' notice. Lists a workspace member's uploaded assets, newest first, with cursor-based pagination. Returns the same asset objects as GET /v3/assets/{asset_id}. The 'username' parameter (the 'owner' value on asset items) is required while the endpoint is in beta and will become an optional filter in a future release. Results are that member's non-deleted assets, across all folders, that the caller has access to — each item carries 'owner' and 'folder_id'. Pass the optional folder_id to narrow to one folder (empty folder_id = root-level assets); omit it for everything.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"description\": \"Response payload for GET /v3/assets/{asset_id} and items of GET /v3/assets.\",\n        \"properties\": {\n          \"folder_id\": {\n            \"description\": \"Identifier of the folder the asset is stored in. Null if the asset is at the space root.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"id\": {\n            \"description\": \"Unique asset identifier.\",\n            \"type\": \"string\"\n          },\n          \"name\": {\n            \"description\": \"Display name of the asset.\",\n            \"type\": \"string\"\n          },\n          \"owner\": {\n            \"description\": \"Username of the asset owner.\",\n            \"type\": \"string\"\n          },\n          \"space_id\": {\n            \"description\": \"Identifier of the space the asset belongs to.\",\n            \"type\": \"string\"\n          },\n          \"type\": {\n            \"description\": \"Asset file type (e.g. 'image', 'video', 'audio', 'font').\",\n            \"type\": \"string\"\n          },\n          \"uploaded_at\": {\n            \"description\": \"Unix timestamp (seconds) of when the asset was uploaded.\",\n            \"type\": \"integer\"\n          },\n          \"url\": {\n            \"description\": \"Publicly accessible URL for the asset. Null if no URL can be generated.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"name\",\n          \"type\",\n          \"owner\",\n          \"space_id\",\n          \"uploaded_at\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/assets",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Paginated:      true,
+	Examples: []string{
+		"# List a workspace member's uploaded assets, newest first\n  heygen asset list --username <workspace-member> --limit 20",
+		"# List only the assets filed under one folder\n  heygen asset list --username <workspace-member> --folder-id <folder-id>",
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "username",
+			Type:     "string",
+			Default:  "",
+			Help:     "Username of the workspace member whose assets to list — the same value as asset items' 'owner' field. Required while this endpoint is in beta; it will become an optional filter in a future release.",
+			Required: true,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "username",
+		},
+		{
+			Name:     "limit",
+			Type:     "int",
+			Default:  "20",
+			Help:     "Maximum number of assets to return per page (1-100).",
+			Required: false,
+			Enum:     nil,
+			Min:      intPtr(1),
+			Max:      intPtr(100),
+			Source:   "query",
+			JSONName: "limit",
+		},
+		{
+			Name:     "token",
+			Type:     "string",
+			Default:  "",
+			Help:     "Opaque cursor from a previous response's next_token. Omit for the first page.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "token",
+		},
+		{
+			Name:     "folder-id",
+			Type:     "string",
+			Default:  "",
+			Help:     "Optional folder filter. Omit to list ALL workspace assets across folders. Pass a folder id to list that folder only, or an empty value (folder_id=) for root-level assets (assets not filed into any folder).",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "folder_id",
+		},
 	},
 }
 
@@ -241,6 +421,47 @@ var AssetSearch = &command.Spec{
 			Max:      nil,
 			Source:   "query",
 			JSONName: "scope",
+		},
+	},
+}
+
+var AssetStatusesList = &command.Spec{
+	Group:          "asset",
+	Name:           "statuses list",
+	Summary:        "Bulk Asset Statuses",
+	Description:    "Returns statuses for up to 100 assets in one request, addressed by comma-separated asset_ids and/or batch_ids query params. Statuses are one of queued, processing, completed, or failed, plus not_found for unknown or unowned ids. Each returned entry carries its id as video_id (the status read model is shared with the videos batch API).",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"properties\": {\n          \"batch_id\": {\n            \"description\": \"Set for entries expanded from a batch_id.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"error\": {\n            \"description\": \"Failure details when status is failed.\",\n            \"nullable\": true,\n            \"properties\": {},\n            \"required\": [],\n            \"type\": \"object\"\n          },\n          \"item_index\": {\n            \"description\": \"Set for entries expanded from a batch_id, to correlate items without a video_id yet.\",\n            \"nullable\": true,\n            \"type\": \"integer\"\n          },\n          \"status\": {\n            \"description\": \"Video status (same values as GET /v1/video_status.get), or not_found for unknown/unowned ids.\",\n            \"type\": \"string\"\n          },\n          \"video_id\": {\n            \"description\": \"Video id. Null for batch items whose video has not been created yet.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"status\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/assets/statuses",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Examples: []string{
+		"# Look up statuses for specific asset ids\n  heygen asset statuses list --asset-ids <asset-id-1>,<asset-id-2>",
+		"# Expand batches into their member asset statuses\n  heygen asset statuses list --batch-ids <batch-id-1>,<batch-id-2>",
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "asset-ids",
+			Type:     "string",
+			Default:  "",
+			Help:     "Comma-separated asset ids to look up.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "asset_ids",
+		},
+		{
+			Name:     "batch-ids",
+			Type:     "string",
+			Default:  "",
+			Help:     "Comma-separated batch ids; each expands to its member assets.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "batch_ids",
 		},
 	},
 }

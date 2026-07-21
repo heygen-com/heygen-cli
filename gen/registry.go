@@ -16,12 +16,17 @@ var Groups = map[string][]*command.Spec{
 		AiClippingList,
 	},
 	"asset": {
+		AssetBatchesGet,
+		AssetCompleteBatchesCreate,
 		AssetCompleteCreate,
 		AssetCreate,
 		AssetDelete,
+		AssetDirectUploadsBatchesCreate,
 		AssetDirectUploadsCreate,
 		AssetGet,
+		AssetList,
 		AssetSearch,
+		AssetStatusesList,
 	},
 	"audio": {
 		AudioSoundsList,
@@ -48,10 +53,13 @@ var Groups = map[string][]*command.Spec{
 		BrandKitsList,
 	},
 	"lipsync": {
+		LipsyncBatchesCreate,
+		LipsyncBatchesGet,
 		LipsyncCreate,
 		LipsyncDelete,
 		LipsyncGet,
 		LipsyncList,
+		LipsyncStatusesList,
 		LipsyncUpdate,
 	},
 	"template": {
@@ -82,6 +90,8 @@ var Groups = map[string][]*command.Spec{
 		VideoAgentVideosList,
 	},
 	"video-translate": {
+		VideoTranslateBatchesCreate,
+		VideoTranslateBatchesGet,
 		VideoTranslateCreate,
 		VideoTranslateDelete,
 		VideoTranslateGet,
@@ -92,6 +102,7 @@ var Groups = map[string][]*command.Spec{
 		VideoTranslateProofreadsGet,
 		VideoTranslateProofreadsSrtGet,
 		VideoTranslateProofreadsSrtUpdate,
+		VideoTranslateStatusesList,
 		VideoTranslateUpdate,
 	},
 	"voice": {

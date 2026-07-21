@@ -90,17 +90,34 @@ var nameOverrides = map[string]string{
 // groupOverrides reassigns an endpoint to a different CLI group than its
 // OpenAPI tag would otherwise produce. Keyed by "METHOD /path".
 //
-// The batch/status endpoints live at /v3/videos/... and operate on video
-// creations, but the spec tags them "Batch", which lands them in a standalone
-// "batch" group and doubles the noun ("heygen batch batches create"). Group
-// them with their domain instead ("heygen video batches create"), matching the
-// path and the convention that resource-specific batches nest under their
-// resource. Drop these if the spec re-tags the endpoints; codegen then follows
+// Resource-specific batch/status endpoints get their own OpenAPI tag
+// ("Batches", "Asset Batches", "Lipsync Batches", "Video Translation Batches"),
+// which would land them in standalone groups that double the noun
+// ("heygen lipsync-batch batches create") and split them off from the
+// single-item commands they belong with. Fold each into its resource group
+// instead, so batches read as a sub-command of the resource
+// ("heygen video batches create", "heygen lipsync batches create") — matching
+// the path and the existing single-item naming in each group (e.g.
+// "heygen asset direct-uploads create" already sits next to its batch form).
+// The derived names need no nameOverride: the path segments after the resource
+// root produce the right sub-command names on their own. Drop an entry if the
+// spec re-tags that endpoint into the resource's own tag; codegen then follows
 // the tag automatically.
 var groupOverrides = map[string]string{
 	"POST /v3/videos/batches":           "video",
 	"GET /v3/videos/batches/{batch_id}": "video",
 	"GET /v3/videos/statuses":           "video",
+
+	"POST /v3/video-translations/batches":           "video-translate",
+	"GET /v3/video-translations/batches/{batch_id}": "video-translate",
+	"GET /v3/video-translations/statuses":           "video-translate",
+	"POST /v3/lipsyncs/batches":                     "lipsync",
+	"GET /v3/lipsyncs/batches/{batch_id}":           "lipsync",
+	"GET /v3/lipsyncs/statuses":                     "lipsync",
+	"POST /v3/assets/direct-uploads/batches":        "asset",
+	"POST /v3/assets/complete/batches":              "asset",
+	"GET /v3/assets/batches/{batch_id}":             "asset",
+	"GET /v3/assets/statuses":                       "asset",
 }
 
 func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDescriptions, error) {
@@ -396,19 +413,19 @@ func isCliAction(op *openapi3.Operation) bool {
 // schemaCliDefault returns the effective default value for a CLI flag.
 //
 // Some fields legitimately need a different default in the CLI than in the HTTP
-// API. ``aspect_ratio`` is the canonical example: the API defaults to ``16:9``
+// API. “aspect_ratio“ is the canonical example: the API defaults to “16:9“
 // for backwards compatibility, but agent-driven CLI/MCP flows are better off
-// defaulting to ``auto`` so the canvas tracks the source orientation. Authors
+// defaulting to “auto“ so the canvas tracks the source orientation. Authors
 // signal this from the EF Pydantic field via
-// ``json_schema_extra={"x-cli-default": "auto"}``; the value lands verbatim on
+// “json_schema_extra={"x-cli-default": "auto"}“; the value lands verbatim on
 // the schema property in the OpenAPI spec.
 //
-// Precedence: ``x-cli-default`` (if present) wins over ``default``. Returns
-// (value, ok, fromExtension). ``fromExtension`` is true only when the value
-// came from ``x-cli-default``; the codegen uses it to flip
-// ``FlagSpec.SendDefaultWhenOmitted`` so the CLI default is actually written
+// Precedence: “x-cli-default“ (if present) wins over “default“. Returns
+// (value, ok, fromExtension). “fromExtension“ is true only when the value
+// came from “x-cli-default“; the codegen uses it to flip
+// “FlagSpec.SendDefaultWhenOmitted“ so the CLI default is actually written
 // into the request body when the user omits the flag (non-destructively —
-// see the field doc). Ordinary OpenAPI ``default`` values keep the existing
+// see the field doc). Ordinary OpenAPI “default“ values keep the existing
 // omit-unless-changed behavior — the CLI shouldn't echo every server default
 // back to the server.
 func schemaCliDefault(s *openapi3.Schema) (value interface{}, ok bool, fromExtension bool) {
