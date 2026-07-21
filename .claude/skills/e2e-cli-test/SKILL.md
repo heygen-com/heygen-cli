@@ -66,6 +66,11 @@ Save the JSON output from each -- Phase 3 will extract IDs from these results.
 ./bin/heygen brand glossaries list --limit 1
 ```
 
+`asset list` requires `--username` (the workspace member whose assets to list,
+the `owner` value on asset items) while the endpoint is in beta. Run
+`./bin/heygen asset list --username <workspace-member> --limit 1` only if a
+username is known for the test account; otherwise mark it SKIPPED.
+
 ### Step 4: Phase 3 -- Read-only get/detail commands
 
 For each command below, extract the required ID from the corresponding Phase 2
@@ -86,11 +91,18 @@ sufficient data for meaningful get/detail coverage.
 ./bin/heygen voice get <voice-id>              # .data[0].voice_id from voice list
 ./bin/heygen template get <template-id>        # .data[0].id from template list
 ./bin/heygen video statuses list --video-ids <video-id>   # a video-id from video list (bulk status lookup)
+./bin/heygen lipsync statuses list --lipsync-ids <id>     # .data[0].id from lipsync list
+./bin/heygen video-translate statuses list --video-translation-ids <id>  # .data[0].id from video-translate list
 ```
 
-`video batches get <batch-id>` needs a batch id, which has no read-only list
-source (batches are created via the write path). Run it only if a batch id is
-available from a prior `video batches create`; otherwise skip.
+`asset statuses list --asset-ids <asset-id>` needs an asset id; the only read
+source is `asset list`, which requires `--username`. Run it only if an asset id
+is available; otherwise skip.
+
+`<resource> batches get <batch-id>` (video, lipsync, video-translate, asset)
+needs a batch id, which has no read-only list source (batches are created via
+the write path). Run each only if a batch id is available from a prior
+`<resource> batches create`; otherwise skip.
 
 For `video-agent resources get`: first run `./bin/heygen video-agent get <session-id>`,
 then look for a `resource_id` in `messages[*].resource_ids[*]`. Only run

@@ -1,6 +1,11 @@
 "POST /v3/assets":
   - desc: "Upload a file for use in video creation"
     cmd: "heygen asset create --file ./video.mp4"
+"GET /v3/assets":
+  - desc: "List a workspace member's uploaded assets, newest first"
+    cmd: "heygen asset list --username <workspace-member> --limit 20"
+  - desc: "List only the assets filed under one folder"
+    cmd: "heygen asset list --username <workspace-member> --folder-id <folder-id>"
 "GET /v3/assets/search":
   - desc: "Search the asset library by natural-language description"
     cmd: "heygen asset search --query 'pepperoni pizza on a wooden table'"
@@ -22,3 +27,19 @@
     cmd: "heygen asset complete create <asset-id>"
   - desc: "Finalize a direct upload and verify the stored checksum"
     cmd: "heygen asset complete create <asset-id> --checksum-sha-256 <base64-sha256>"
+"POST /v3/assets/direct-uploads/batches":
+  - desc: "Request presigned upload URLs for up to 100 files in one call"
+    cmd: "heygen asset direct-uploads batches create --title 'Launch assets' -d '{\"files\":[{\"filename\":\"clip1.mp4\",\"content_type\":\"video/mp4\",\"size_bytes\":10485760},{\"filename\":\"logo.png\",\"content_type\":\"image/png\",\"size_bytes\":204800}]}'"
+  - desc: "See the full upload-batch request shape (per-file fields)"
+    cmd: "heygen asset direct-uploads batches create --request-schema"
+"POST /v3/assets/complete/batches":
+  - desc: "Finalize a whole upload batch after every file's PUT has succeeded"
+    cmd: "heygen asset complete batches create --batch-id <batch-id>"
+"GET /v3/assets/batches/{batch_id}":
+  - desc: "Check a batch's aggregate status and per-item asset ids and statuses"
+    cmd: "heygen asset batches get <batch-id>"
+"GET /v3/assets/statuses":
+  - desc: "Look up statuses for specific asset ids"
+    cmd: "heygen asset statuses list --asset-ids <asset-id-1>,<asset-id-2>"
+  - desc: "Expand batches into their member asset statuses"
+    cmd: "heygen asset statuses list --batch-ids <batch-id-1>,<batch-id-2>"

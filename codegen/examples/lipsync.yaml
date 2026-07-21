@@ -13,3 +13,16 @@
 "DELETE /v3/lipsyncs/{lipsync_id}":
   - desc: "Delete a lipsync job"
     cmd: "heygen lipsync delete <lipsync-id>"
+"POST /v3/lipsyncs/batches":
+  - desc: "Submit a batch of lipsync jobs in one request (up to 100 items)"
+    cmd: "heygen lipsync batches create --title 'Dub batch' -d '{\"lipsyncs\":[{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/source.mp4\"},\"audio\":{\"type\":\"url\",\"url\":\"https://example.com/replacement.mp3\"}}]}'"
+  - desc: "See the full batch request shape (per-item lipsync payloads)"
+    cmd: "heygen lipsync batches create --request-schema"
+"GET /v3/lipsyncs/batches/{batch_id}":
+  - desc: "Check a batch's per-item lipsync ids and statuses"
+    cmd: "heygen lipsync batches get <batch-id>"
+"GET /v3/lipsyncs/statuses":
+  - desc: "Look up statuses for specific lipsync ids"
+    cmd: "heygen lipsync statuses list --lipsync-ids <lipsync-id-1>,<lipsync-id-2>"
+  - desc: "Expand batches into their member lipsync statuses"
+    cmd: "heygen lipsync statuses list --batch-ids <batch-id-1>,<batch-id-2>"

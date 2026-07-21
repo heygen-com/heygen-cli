@@ -5,10 +5,34 @@ import "github.com/heygen-com/heygen-cli/internal/command"
 // DefaultColumns defines curated table columns for --human mode.
 // Keys use the full generated command path: "group/spec.Name".
 var DefaultColumns = map[string][]command.Column{
+	// The four bulk-status endpoints share one read model (VideoStatusEntry),
+	// so their curated columns are identical regardless of resource.
 	"video/statuses list": {
 		{Header: "Video ID", Field: "video_id"},
 		{Header: "Status", Field: "status"},
 		{Header: "Batch ID", Field: "batch_id"},
+	},
+	"asset/statuses list": {
+		{Header: "Video ID", Field: "video_id"},
+		{Header: "Status", Field: "status"},
+		{Header: "Batch ID", Field: "batch_id"},
+	},
+	"lipsync/statuses list": {
+		{Header: "Video ID", Field: "video_id"},
+		{Header: "Status", Field: "status"},
+		{Header: "Batch ID", Field: "batch_id"},
+	},
+	"video-translate/statuses list": {
+		{Header: "Video ID", Field: "video_id"},
+		{Header: "Status", Field: "status"},
+		{Header: "Batch ID", Field: "batch_id"},
+	},
+	"asset/list": {
+		{Header: "ID", Field: "id"},
+		{Header: "Name", Field: "name"},
+		{Header: "Type", Field: "type"},
+		{Header: "Owner", Field: "owner"},
+		{Header: "Uploaded", Field: "uploaded_at"},
 	},
 	"template/list": {
 		{Header: "ID", Field: "id"},

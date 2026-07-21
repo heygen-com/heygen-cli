@@ -36,3 +36,16 @@
 "PUT /v3/video-translations/proofreads/{proofread_id}/srt":
   - desc: "Upload corrected SRT"
     cmd: "heygen video-translate proofreads srt update <proofread-id>"
+"POST /v3/video-translations/batches":
+  - desc: "Submit a batch of translations in one request (up to 100 items; multiple output languages fan out per item)"
+    cmd: "heygen video-translate batches create --title 'Localization batch' -d '{\"video_translations\":[{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/source.mp4\"},\"output_languages\":[\"Spanish (Spain)\",\"French (France)\"]}]}'"
+  - desc: "See the full batch request shape (per-item translation payloads)"
+    cmd: "heygen video-translate batches create --request-schema"
+"GET /v3/video-translations/batches/{batch_id}":
+  - desc: "Check a batch's per-item translation ids and statuses"
+    cmd: "heygen video-translate batches get <batch-id>"
+"GET /v3/video-translations/statuses":
+  - desc: "Look up statuses for specific translation ids"
+    cmd: "heygen video-translate statuses list --video-translation-ids <id-1>,<id-2>"
+  - desc: "Expand batches into their member translation statuses"
+    cmd: "heygen video-translate statuses list --batch-ids <batch-id-1>,<batch-id-2>"
