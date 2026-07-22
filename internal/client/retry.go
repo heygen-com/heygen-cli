@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -88,9 +89,18 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func shouldRetry(req *http.Request, resp *http.Response, err error) bool {
 	if err != nil {
+		// A tripped client timeout is not worth retrying: http.Client.Timeout is
+		// a total-Do budget, so the context is already spent. Match on
+		// net.Error.Timeout() as well as the context sentinels, because
+		// http.Client.Timeout's wrapped error does not reliably satisfy
+		// errors.Is(context.DeadlineExceeded) — the same reason the executor's
+		// classifier uses net.Error.Timeout(). Keeps both layers agreeing on
+		// what "timeout" means.
+		var netErr net.Error
 		if req.Context().Err() != nil ||
 			errors.Is(err, context.Canceled) ||
-			errors.Is(err, context.DeadlineExceeded) {
+			errors.Is(err, context.DeadlineExceeded) ||
+			(errors.As(err, &netErr) && netErr.Timeout()) {
 			return false
 		}
 		return isIdempotent(req.Method)

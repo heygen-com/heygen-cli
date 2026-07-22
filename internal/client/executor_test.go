@@ -1026,3 +1026,66 @@ func TestExecute_ResponseBodyReadError_NetworkError(t *testing.T) {
 		t.Fatalf("err = %v, want a network_error CLIError", err)
 	}
 }
+
+func TestExecute_RequestTimeout_ClassifiedAsTimeout(t *testing.T) {
+	// Handler sleeps past the client timeout so the request deadline trips
+	// before any response arrives. The transport timeout must surface as a
+	// timeout CLIError (exit 4), not a generic network_error (exit 1).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+	c.SetTimeout(50 * time.Millisecond)
+
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "POST", BodyEncoding: "json"}
+	inv := &command.Invocation{PathParams: make(map[string]string), Body: map[string]any{"x": 1}}
+
+	_, err := c.Execute(spec, inv)
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("want *CLIError, got %v", err)
+	}
+	if cliErr.Code != "timeout" {
+		t.Errorf("code = %q, want %q", cliErr.Code, "timeout")
+	}
+	if cliErr.ExitCode != clierrors.ExitTimeout {
+		t.Errorf("exit code = %d, want %d (ExitTimeout)", cliErr.ExitCode, clierrors.ExitTimeout)
+	}
+	// A write (POST) must not advise a blind retry — the create may have been
+	// committed and CLI writes have no idempotency key.
+	if !strings.Contains(cliErr.Hint, "before retrying") {
+		t.Errorf("POST timeout hint should steer to check-status-first, got: %q", cliErr.Hint)
+	}
+	// The applied per-operation budget is surfaced for triage.
+	if !strings.Contains(cliErr.Message, "50ms") {
+		t.Errorf("timeout message should name the applied budget, got: %q", cliErr.Message)
+	}
+}
+
+func TestExecute_GETRequestTimeout_SafeToRetryHint(t *testing.T) {
+	// A read (GET) that times out is safe to retry, so its hint should not carry
+	// the create-oriented "check before retrying" guidance.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithMaxRetries(0))
+	c.SetTimeout(50 * time.Millisecond)
+
+	_, err := c.Execute(&command.Spec{Endpoint: "/v3/videos", Method: "GET"},
+		&command.Invocation{PathParams: make(map[string]string), QueryParams: url.Values{}})
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) || cliErr.Code != "timeout" {
+		t.Fatalf("want timeout CLIError, got %v", err)
+	}
+	if strings.Contains(cliErr.Hint, "duplicate") {
+		t.Errorf("GET timeout hint should not carry create/duplicate guidance, got: %q", cliErr.Hint)
+	}
+}
