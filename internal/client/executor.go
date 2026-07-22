@@ -218,10 +218,25 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 		// --wait path resorted to string-matching the error message.
 		var netErr net.Error
 		if (errors.As(err, &netErr) && netErr.Timeout()) || errors.Is(err, context.DeadlineExceeded) {
+			// A GET is safe to retry. A non-GET (create/write) may have been
+			// committed server-side before the client deadline elapsed, and CLI
+			// writes carry no idempotency key, so a blind retry can produce a
+			// duplicate (e.g. a second video create + charge). Steer writes to
+			// "check status first", mirroring the poll-deadline guidance in
+			// newCreateContextError. Include the applied budget so support can
+			// see which per-operation timeout tripped.
+			hint := "The request took too long and timed out. Retry — a slow endpoint or a stalled network connection can cause this."
+			if spec.Method != http.MethodGet {
+				hint = "The request timed out, but the operation may have been submitted. Check with the corresponding get/list command before retrying, to avoid creating a duplicate."
+			}
+			msg := "request timed out"
+			if c.httpClient.Timeout > 0 {
+				msg = fmt.Sprintf("request timed out after %s", c.httpClient.Timeout)
+			}
 			return nil, &clierrors.CLIError{
 				Code:     "timeout",
-				Message:  fmt.Sprintf("request timed out: %v", err),
-				Hint:     "The request took too long and timed out. Retry; large uploads and long-running operations may need another attempt.",
+				Message:  fmt.Sprintf("%s: %v", msg, err),
+				Hint:     hint,
 				ExitCode: clierrors.ExitTimeout,
 			}
 		}
