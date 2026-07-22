@@ -522,6 +522,19 @@ func (c *Client) BaseURL() string {
 	return c.baseURL
 }
 
+// SetTimeout sets the per-request HTTP timeout applied to subsequent requests.
+// Zero disables the timeout. The CLI sets this once per invocation from the
+// operation class (see timeoutForSpec in cmd/heygen) so uploads and long-
+// running create calls get a larger budget than quick reads. net/http applies
+// the timeout per request, so setting it before issuing requests is safe.
+//
+// Generated commands set this in buildCobraCommand. A hand-written command that
+// issues a create or upload directly via Execute must call this itself — the
+// client otherwise keeps DefaultTimeout (30s), which only suits reads.
+func (c *Client) SetTimeout(d time.Duration) {
+	c.httpClient.Timeout = d
+}
+
 // defaultOAuthPersister writes refreshed tokens straight to the shared
 // credentials file. Tests override via WithOAuthPersister.
 type defaultOAuthPersister struct{}
