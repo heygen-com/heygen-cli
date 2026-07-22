@@ -86,7 +86,30 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
       - name: Run govulncheck
-        run: govulncheck ./...
+        # Allowlist GO-2026-5932 ONLY: golang.org/x/crypto/openpgp is unmaintained
+        # ("Fixed in: N/A") and pulled in transitively by go-selfupdate for a PGP
+        # validator the CLI does not use — the updater verifies SHA256 checksums
+        # (ChecksumValidator), not PGP, so openpgp is never reached with untrusted
+        # input. Any OTHER advisory still fails this job. Removal tracked in API-566.
+        run: |
+          out=$(govulncheck ./... 2>&1) && rc=0 || rc=$?
+          echo "$out"
+          if [ "$rc" -eq 0 ]; then
+            exit 0
+          fi
+          # govulncheck exits 3 when vulnerabilities are found; any other non-zero
+          # code is a tool/build failure and must not be swallowed by the allowlist.
+          if [ "$rc" -ne 3 ]; then
+            echo "::error::govulncheck failed to run (exit $rc)"
+            exit 1
+          fi
+          ids=$(printf '%s\n' "$out" | grep -oE 'GO-[0-9]{4}-[0-9]+' | sort -u)
+          others=$(printf '%s\n' "$ids" | grep -vx 'GO-2026-5932' || true)
+          if [ -z "$ids" ] || [ -n "$others" ]; then
+            echo "::error::Unallowlisted or unrecognized govulncheck result (ids: ${ids:-none})"
+            exit 1
+          fi
+          echo "Only the allowlisted advisory GO-2026-5932 is present; passing."
 
   goreleaser-check:
     runs-on: ubuntu-latest
