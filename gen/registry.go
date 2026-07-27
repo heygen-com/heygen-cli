@@ -52,6 +52,10 @@ var Groups = map[string][]*command.Spec{
 		BrandGlossariesList,
 		BrandKitsList,
 	},
+	"filler-word-removal": {
+		FillerWordRemovalCreate,
+		FillerWordRemovalGet,
+	},
 	"lipsync": {
 		LipsyncBatchesCreate,
 		LipsyncBatchesGet,
