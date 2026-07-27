@@ -450,6 +450,35 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) (err error) {
 	return nil
 }
 
+// oauthFailureReason maps a loopback error to its AUTH_LOGIN_FAILED
+// reason. Unmapped errors keep the historical "oauth_flow_error" bucket
+// so a future delivery site that forgets a sentinel stays visible in
+// telemetry rather than dropping out of the series.
+//
+// Keep the returned values a small fixed set: they are analytics
+// dimensions, so anything derived from IdP-supplied text would be
+// unbounded cardinality.
+func oauthFailureReason(err error) string {
+	switch {
+	case errors.Is(err, oauth.ErrLoopbackTimeout):
+		return "oauth_timeout"
+	case errors.Is(err, oauth.ErrLoopbackCanceled):
+		return "oauth_canceled"
+	case errors.Is(err, oauth.ErrAuthorizeDenied):
+		return "oauth_authorize_denied"
+	case errors.Is(err, oauth.ErrAuthorizeFailed):
+		return "oauth_authorize_failed"
+	case errors.Is(err, oauth.ErrStateMismatch):
+		return "oauth_state_mismatch"
+	case errors.Is(err, oauth.ErrMissingCode):
+		return "oauth_missing_code"
+	case errors.Is(err, oauth.ErrLoopbackServer):
+		return "oauth_loopback_failed"
+	default:
+		return "oauth_flow_error"
+	}
+}
+
 // runOAuthLogin drives the browser + PKCE + loopback dance and persists
 // the resulting tokens.
 func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) (err error) {
@@ -499,6 +528,11 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) (e
 
 	loopback, results, stopLoopback, err := oauth.StartLoopbackServer(cmdCtx, authLoginRedirectPath, state)
 	if err != nil {
+		// Classify here too: a bind failure never reaches the results
+		// channel, so without this it would fall through to the deferred
+		// net and be reported as a generic internal_error.
+		reported = true
+		loginAnalytics.AuthLoginFailed("oauth", oauthFailureReason(err))
 		return clierrors.New(fmt.Sprintf("oauth: loopback: %v", err))
 	}
 	defer stopLoopback()
@@ -531,17 +565,18 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) (e
 		fmt.Fprintf(cmd.ErrOrStderr(), "(could not open browser automatically: %v)\n", err)
 	}
 
-	var loopbackResult oauth.LoopbackResult
-	select {
-	case <-cmdCtx.Done():
-		reported = true
-		loginAnalytics.AuthLoginFailed("oauth", "oauth_timeout")
-		return clierrors.New(fmt.Sprintf("oauth: timed out waiting for browser callback: %v", cmdCtx.Err()))
-	case loopbackResult = <-results:
-	}
+	// Block on the loopback alone rather than racing it against cmdCtx.
+	// cmdCtx already governs the loopback (it was passed to
+	// StartLoopbackServer), which converts cancellation and its own
+	// timer into exactly one delivered result. Selecting on cmdCtx here
+	// too would make two observers of one deadline, and whichever won
+	// decided the analytics reason: with a parent deadline earlier than
+	// DefaultLoopbackTimeout+30s (Ctrl-C, an agent-imposed timeout, a
+	// test) both fire in the same instant, so the label was a coin flip.
+	loopbackResult := <-results
 	if loopbackResult.Err != nil {
 		reported = true
-		loginAnalytics.AuthLoginFailed("oauth", "oauth_flow_error")
+		loginAnalytics.AuthLoginFailed("oauth", oauthFailureReason(loopbackResult.Err))
 		return clierrors.New(loopbackResult.Err.Error())
 	}
 

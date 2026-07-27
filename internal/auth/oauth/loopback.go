@@ -19,6 +19,43 @@ import (
 // callers and pinable in tests.
 var ErrInvalidRedirectPath = errors.New("oauth: invalid redirect path")
 
+// Sentinels for every way a LoopbackResult can carry an error. Callers
+// classify with errors.Is rather than matching message text, so each
+// outcome gets its own analytics reason instead of collapsing into one
+// bucket. Every delivery site below must wrap exactly one of these.
+var (
+	// ErrLoopbackTimeout means the browser never hit the redirect URI
+	// within DefaultLoopbackTimeout. Overwhelmingly the user or agent
+	// walking away, not a fault.
+	ErrLoopbackTimeout = errors.New("oauth: timed out waiting for browser callback")
+
+	// ErrLoopbackCanceled means the caller's context was cancelled
+	// (Ctrl-C, parent shutdown) before the callback landed.
+	ErrLoopbackCanceled = errors.New("oauth: canceled waiting for browser callback")
+
+	// ErrAuthorizeDenied is the IdP reporting `error=access_denied`: the
+	// user actively declined. Split from ErrAuthorizeFailed because it is
+	// a normal outcome, whereas any other IdP error implies misconfiguration.
+	ErrAuthorizeDenied = errors.New("oauth: user denied authorization")
+
+	// ErrAuthorizeFailed is any non-access_denied `error=` from the IdP.
+	ErrAuthorizeFailed = errors.New("oauth: authorization server returned an error")
+
+	// ErrStateMismatch means the callback's state did not match the value
+	// generated alongside the PKCE pair. Possible CSRF.
+	ErrStateMismatch = errors.New("oauth: state mismatch")
+
+	// ErrMissingCode means the callback arrived without a `code` parameter.
+	ErrMissingCode = errors.New("oauth: redirect did not include code")
+
+	// ErrLoopbackServer means the local HTTP listener itself failed.
+	ErrLoopbackServer = errors.New("oauth: loopback server failed")
+)
+
+// accessDeniedCode is the RFC 6749 error code for a user-declined
+// authorization request.
+const accessDeniedCode = "access_denied"
+
 // DefaultLoopbackTimeout is how long StartLoopbackServer waits for the
 // browser to hit the redirect URI before giving up.
 const DefaultLoopbackTimeout = 5 * time.Minute
@@ -26,6 +63,8 @@ const DefaultLoopbackTimeout = 5 * time.Minute
 // LoopbackResult carries the OAuth callback parameters captured by the
 // loopback server. Either Code is populated (success) or Err is
 // populated (state mismatch, IdP error, timeout, etc.) — never both.
+// A non-nil Err always wraps one of the sentinels above, so callers can
+// classify it with errors.Is.
 type LoopbackResult struct {
 	Code        string
 	State       string
@@ -64,6 +103,16 @@ func StartLoopbackServer(
 	ctx context.Context,
 	redirectPath, expectedState string,
 ) (*LoopbackServer, <-chan LoopbackResult, func(), error) {
+	return startLoopbackServer(ctx, redirectPath, expectedState, DefaultLoopbackTimeout)
+}
+
+// startLoopbackServer takes the timeout explicitly so tests can drive the
+// timer path without a five-minute wait.
+func startLoopbackServer(
+	ctx context.Context,
+	redirectPath, expectedState string,
+	timeout time.Duration,
+) (*LoopbackServer, <-chan LoopbackResult, func(), error) {
 	if redirectPath == "" || redirectPath[0] != '/' {
 		return nil, nil, nil, fmt.Errorf("%w: must start with '/', got %q", ErrInvalidRedirectPath, redirectPath)
 	}
@@ -80,7 +129,7 @@ func StartLoopbackServer(
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("oauth: bind loopback listener: %w", err)
+		return nil, nil, nil, fmt.Errorf("%w: bind loopback listener: %w", ErrLoopbackServer, err)
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	redirectURI := fmt.Sprintf("http://127.0.0.1:%d%s", port, redirectPath)
@@ -110,7 +159,7 @@ func StartLoopbackServer(
 		// DefaultLoopbackTimeout window.
 		err := lb.server.Serve(listener)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			lb.deliver(LoopbackResult{Err: fmt.Errorf("oauth: loopback server: %w", err)})
+			lb.deliver(LoopbackResult{Err: fmt.Errorf("%w: %w", ErrLoopbackServer, err)})
 			lb.shutdown()
 		}
 	}()
@@ -118,15 +167,15 @@ func StartLoopbackServer(
 	// Wire up timeout + context cancellation. The driver-level timeout is
 	// belt-and-braces alongside the caller-supplied context, so the
 	// browser-side hang never wedges a CLI shell longer than ~5 min.
-	timer := time.NewTimer(DefaultLoopbackTimeout)
+	timer := time.NewTimer(timeout)
 	go func() {
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			lb.deliver(LoopbackResult{Err: fmt.Errorf("oauth: loopback cancelled: %w", ctx.Err())})
+			lb.deliver(LoopbackResult{Err: fmt.Errorf("%w: %w", ErrLoopbackCanceled, ctx.Err())})
 			lb.shutdown()
 		case <-timer.C:
-			lb.deliver(LoopbackResult{Err: fmt.Errorf("oauth: loopback timed out after %s", DefaultLoopbackTimeout)})
+			lb.deliver(LoopbackResult{Err: fmt.Errorf("%w after %s", ErrLoopbackTimeout, timeout)})
 			lb.shutdown()
 		case <-lb.done:
 			timer.Stop()
@@ -189,10 +238,29 @@ func (lb *LoopbackServer) handleCallback(w http.ResponseWriter, r *http.Request)
 	}
 
 	q := r.URL.Query()
+
+	// State is validated before `error`, not after. RFC 6749 §4.1.2.1
+	// requires the IdP to echo `state` on error responses too, so an
+	// unvalidated error branch would let anyone able to reach this
+	// ephemeral port abort a live login (and forge its telemetry) with a
+	// single unauthenticated GET. Order is load-bearing: do not move the
+	// `error` check above this.
+	state := q.Get("state")
+	if state == "" || subtle.ConstantTimeCompare([]byte(state), []byte(lb.ExpectedState)) != 1 {
+		writeErrorPage(w, http.StatusBadRequest, "invalid_state", "State parameter did not match.")
+		lb.deliver(LoopbackResult{Err: fmt.Errorf("%w — possible CSRF, aborting", ErrStateMismatch), RedirectURI: lb.RedirectURI})
+		go lb.shutdown()
+		return
+	}
+
 	if oauthErr := q.Get("error"); oauthErr != "" {
 		desc := q.Get("error_description")
 		writeErrorPage(w, http.StatusBadRequest, oauthErr, desc)
-		err := fmt.Errorf("oauth: authorize returned error: %s", oauthErr)
+		sentinel := ErrAuthorizeFailed
+		if oauthErr == accessDeniedCode {
+			sentinel = ErrAuthorizeDenied
+		}
+		err := fmt.Errorf("%w: %s", sentinel, oauthErr)
 		if desc != "" {
 			err = fmt.Errorf("%w — %s", err, desc)
 		}
@@ -201,18 +269,10 @@ func (lb *LoopbackServer) handleCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	state := q.Get("state")
-	if state == "" || subtle.ConstantTimeCompare([]byte(state), []byte(lb.ExpectedState)) != 1 {
-		writeErrorPage(w, http.StatusBadRequest, "invalid_state", "State parameter did not match.")
-		lb.deliver(LoopbackResult{Err: errors.New("oauth: state mismatch — possible CSRF, aborting"), RedirectURI: lb.RedirectURI})
-		go lb.shutdown()
-		return
-	}
-
 	code := q.Get("code")
 	if code == "" {
 		writeErrorPage(w, http.StatusBadRequest, "missing_code", "Authorization code is missing from the redirect.")
-		lb.deliver(LoopbackResult{Err: errors.New("oauth: redirect did not include `code`"), RedirectURI: lb.RedirectURI})
+		lb.deliver(LoopbackResult{Err: ErrMissingCode, RedirectURI: lb.RedirectURI})
 		go lb.shutdown()
 		return
 	}

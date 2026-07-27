@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -781,12 +782,13 @@ func TestRunAuthLogin_OAuthFormatterFailure_Telemetry(t *testing.T) {
 	}
 }
 
-// U4: the loopback timing out (no browser callback ever arrives) emits
-// failed(oauth, oauth_timeout). Uses a short-deadline parent context
-// instead of waiting out oauth.DefaultLoopbackTimeout (~5min) — runOAuthLogin
-// derives its own context from cmd.Context() via context.WithTimeout,
-// which honors the parent's earlier deadline.
-func TestRunOAuthLogin_LoopbackTimeout_Telemetry(t *testing.T) {
+// U4: the parent context expiring before any browser callback arrives
+// emits failed(oauth, oauth_canceled). A short-deadline parent stands in
+// for Ctrl-C or an agent-imposed timeout; runOAuthLogin derives cmdCtx
+// from cmd.Context(), which honors the parent's earlier deadline. The
+// pure DefaultLoopbackTimeout path (oauth_timeout) is covered by the
+// oauth package's own sentinel tests rather than a ~5min wait here.
+func TestRunOAuthLogin_ParentContextCanceled_Telemetry(t *testing.T) {
 	spy := withLoginAnalyticsSpy(t)
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
@@ -809,14 +811,14 @@ func TestRunOAuthLogin_LoopbackTimeout_Telemetry(t *testing.T) {
 
 	err := runOAuthLogin(cmd, ctx, cfg)
 	if err == nil {
-		t.Fatal("want timeout error, got nil")
+		t.Fatal("want cancellation error, got nil")
 	}
-	if !strings.Contains(err.Error(), "timed out") {
-		t.Fatalf("err = %q, want a timeout message", err.Error())
+	if !strings.Contains(err.Error(), "canceled waiting for browser callback") {
+		t.Fatalf("err = %q, want a cancellation message", err.Error())
 	}
 
-	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "oauth_timeout"}) {
-		t.Fatalf("failed = %v, want [{oauth oauth_timeout}]", got)
+	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "oauth_canceled"}) {
+		t.Fatalf("failed = %v, want [{oauth oauth_canceled}]", got)
 	}
 	if len(spy.completed) != 0 {
 		t.Fatalf("completed = %v, want none", spy.completed)
@@ -1068,5 +1070,56 @@ func TestRunAuthLogin_APIKeyFormatterFailure_Telemetry(t *testing.T) {
 	}
 	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"api_key", "internal_error"}) {
 		t.Fatalf("failed = %v, want [{api_key internal_error}]", got)
+	}
+}
+
+// Each loopback sentinel must map to its own analytics reason, and
+// anything unrecognized must fall back to the historical bucket rather
+// than dropping out of the series.
+func TestOAuthFailureReason(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"timeout", oauth.ErrLoopbackTimeout, "oauth_timeout"},
+		{"canceled", oauth.ErrLoopbackCanceled, "oauth_canceled"},
+		{"denied", oauth.ErrAuthorizeDenied, "oauth_authorize_denied"},
+		{"authorize failed", oauth.ErrAuthorizeFailed, "oauth_authorize_failed"},
+		{"state mismatch", oauth.ErrStateMismatch, "oauth_state_mismatch"},
+		{"missing code", oauth.ErrMissingCode, "oauth_missing_code"},
+		{"loopback server", oauth.ErrLoopbackServer, "oauth_loopback_failed"},
+		{"unmapped falls back", errors.New("something new"), "oauth_flow_error"},
+		{"wrapped sentinel still matches", fmt.Errorf("ctx: %w", oauth.ErrLoopbackTimeout), "oauth_timeout"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := oauthFailureReason(tt.err); got != tt.want {
+				t.Errorf("oauthFailureReason(%v) = %q, want %q", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// The reason set is an analytics dimension, so it must stay a small
+// fixed vocabulary. This pins it: adding a reason is fine, but it has to
+// be a deliberate edit here too.
+func TestOAuthFailureReason_BoundedVocabulary(t *testing.T) {
+	allowed := map[string]bool{
+		"oauth_timeout": true, "oauth_canceled": true,
+		"oauth_authorize_denied": true, "oauth_authorize_failed": true,
+		"oauth_state_mismatch": true, "oauth_missing_code": true,
+		"oauth_loopback_failed": true, "oauth_flow_error": true,
+	}
+	for _, err := range []error{
+		oauth.ErrLoopbackTimeout, oauth.ErrLoopbackCanceled,
+		oauth.ErrAuthorizeDenied, oauth.ErrAuthorizeFailed,
+		oauth.ErrStateMismatch, oauth.ErrMissingCode,
+		oauth.ErrLoopbackServer, errors.New("unmapped"),
+	} {
+		if got := oauthFailureReason(err); !allowed[got] {
+			t.Errorf("oauthFailureReason(%v) = %q, outside the allowed set", err, got)
+		}
 	}
 }
