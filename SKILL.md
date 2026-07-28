@@ -61,19 +61,26 @@ heygen video download <video-id>      # downloads file, stdout: JSON with path
 
 **Stop conditions — a poll loop MUST have all three:**
 
-1. **Stop on a terminal status.** `completed` and `failed` are both terminal. Only
-   `pending` / `processing` / `running` mean keep going.
-2. **Stop on a terminal error — do not retry it.** A non-zero exit is not
-   "not ready yet". `not_found` / `*_not_found` (exit 1) means the id is wrong or the
-   resource was deleted: it will never become ready, so stop. Same for `unauthorized`,
-   `forbidden` (exit 3) and `usage_error` (exit 2). Only `network_error` and a 5xx
-   `internal_error` are worth retrying, with backoff.
-3. **Cap the loop.** Bound it by attempts or wall-clock, and exit non-zero when the cap
-   is hit rather than looping forever.
+1. **Read the resource's real status vocabulary first**, from
+   `heygen <group> get --response-schema` (the `status` enum). Do not hardcode one:
+   they differ per resource. Across the current surface they include `pending`,
+   `processing`, `running`, `queued`, `thinking`, `reviewing`, `generating`,
+   `waiting_for_input`, `pending_consent`, `cancelled`, `failed`, `completed` — and
+   voice uses `complete`, not `completed`. Keep polling only on a status the schema
+   documents as in-progress. Treat anything else, **including a status you do not
+   recognize**, as terminal: stop and report it rather than spinning.
+2. **Stop on a terminal error — a non-zero exit is not "not ready yet".**
+   `not_found` / `*_not_found` (exit 1) means the id is wrong or the resource was
+   deleted; it will never become ready. Same for `unauthorized` / `forbidden`
+   (exit 3) and `usage_error` (exit 2). Retry only transient ones, with backoff:
+   `network_error`, `timeout` (exit 4), `rate_limit_exceeded`, `internal_error`,
+   `unclassified_server_error`.
+3. **Cap the loop.** Bound it by attempts or wall-clock and exit non-zero at the cap
+   rather than looping forever.
 
-Poll no faster than every 5-10s, and back off on repeated failures. An unbounded loop
-that treats a 404 as "still processing" will run until something kills it: one has been
-observed issuing ~450 requests an hour for three days after its session ended.
+Poll no faster than every 5-10s. An unbounded loop that treats a 404 as "still
+processing" runs until something kills it: one has been observed issuing ~450 requests
+an hour for three days after its session ended.
 
 ## Discovering API Fields
 
