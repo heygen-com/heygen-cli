@@ -49,8 +49,10 @@ heygen video-agent create --prompt "Demo video" --wait
 # exit 4 on timeout — stdout has partial resource, stderr has the get command to poll manually
 ```
 
-`--wait` exists only on some create commands. Check rather than assume: it appears in
-`heygen <group> create --help` only when supported. Anything else needs manual polling.
+`--wait` exists only on some create commands. Check rather than assume: append `--help`
+to the exact command you intend to run, including any nested segments (e.g.
+`heygen asset direct-uploads create --help`), and use `--wait` only if that output
+lists it. Anything else needs manual polling.
 
 **Manual polling:**
 ```bash
@@ -65,14 +67,17 @@ heygen video download <video-id>      # downloads file, stdout: JSON with path
    a create response may belong to another group, so that group's own `get` is not
    always the status command — a template render is polled with `video get`, not
    `template get`. Take the id from the create response, find the `get` that reads
-   that resource, and run it with `--response-schema` to see the `status` field's
-   documented values.
+   that resource, and run that exact command with `--response-schema` to see the
+   `status` field's possible values.
 
-   Do not assume the vocabulary. State names differ between resources, spellings
-   differ (some use `complete`, others `completed`), and a few document status in
-   prose rather than an enum. Keep polling only on a value the schema documents as
-   in-progress; treat anything else, **including a value you do not recognize**, as
-   terminal — stop and report rather than spin.
+   Do not assume the vocabulary. State names differ between resources and so do
+   spellings (some use `complete`, others `completed`). Note also that the schema
+   lists the values but usually does not say which ones mean "still working": a state
+   that is really waiting on user action is enumerated exactly like an in-progress
+   one. So continue polling only on a value you can positively confirm means
+   in-progress, and treat everything else as terminal — **including values you do not
+   recognize and values whose meaning is ambiguous**. Stop and report rather than
+   spin.
 2. **Stop on a terminal error — a non-zero exit is not "not ready yet".**
    `not_found` / `*_not_found` (exit 1) means the id is wrong or the resource was
    deleted; it will never become ready. Same for `unauthorized` / `forbidden`

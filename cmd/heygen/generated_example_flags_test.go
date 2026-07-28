@@ -248,7 +248,14 @@ func TestSkillDocumentsUnrecognizedStatusIsTerminal(t *testing.T) {
 	if idx := strings.Index(section, "\n## "); idx != -1 {
 		section = section[:idx]
 	}
-	for _, concept := range []string{"do not recognize", "terminal", "cap"} {
+	// Collapse whitespace before matching. Without this the pin breaks whenever
+	// a phrase happens to straddle a line wrap, which is a legitimate edit and
+	// not a dropped rule.
+	section = strings.Join(strings.Fields(section), " ")
+	// "--response-schema" pins the discovery step: the guidance deliberately
+	// enumerates no status vocabulary, so if that pointer is dropped the section
+	// tells an agent nothing about which states to trust.
+	for _, concept := range []string{"--response-schema", "do not recognize", "terminal", "cap"} {
 		if !strings.Contains(section, concept) {
 			t.Errorf("stop-conditions section no longer conveys %q; an unrecognized status must "+
 				"terminate polling and loops must be capped", concept)
