@@ -13,6 +13,12 @@ var FillerWordRemovalCreate = &command.Spec{
 	Endpoint:      "/v3/filler-word-removals",
 	Method:        "POST",
 	BodyEncoding:  "json",
+	Examples: []string{
+		"# Submit a video to strip filler words and overlong silences\n  heygen filler-word-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/talk.mp4\"}}'",
+		"# Submit a previously uploaded asset instead of a URL\n  heygen filler-word-removal create -d '{\"video\":{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}}'",
+		"# Set a title and get a webhook when the job finishes\n  heygen filler-word-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/talk.mp4\"},\"title\":\"Q3 all-hands\",\"callback_url\":\"https://example.com/hooks/heygen\",\"callback_id\":\"all-hands-q3\"}'",
+		"# See all available request fields\n  heygen filler-word-removal create --request-schema",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "callback-id",
@@ -62,6 +68,11 @@ var FillerWordRemovalGet = &command.Spec{
 	Endpoint:       "/v3/filler-word-removals/{filler_word_removal_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Poll job status — create returns immediately, this endpoint is the source of truth\n  heygen filler-word-removal get <filler-word-removal-id>",
+		"# Read status and removal stats as a table once the job completes\n  heygen filler-word-removal get <filler-word-removal-id> --human",
+		"# See every field the job resource returns\n  heygen filler-word-removal get --response-schema",
+	},
 	Args: []command.ArgSpec{
 		{Name: "filler-word-removal-id", Param: "filler_word_removal_id", Help: ""},
 	},
