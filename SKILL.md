@@ -49,8 +49,8 @@ heygen video-agent create --prompt "Demo video" --wait
 # exit 4 on timeout — stdout has partial resource, stderr has the get command to poll manually
 ```
 
-`--wait` only exists on `video create`, `video-agent create`, `video-translate create`,
-and `lipsync create`. Every other async command needs manual polling.
+`--wait` exists only on some create commands. Check rather than assume: it appears in
+`heygen <group> create --help` only when supported. Anything else needs manual polling.
 
 **Manual polling:**
 ```bash
@@ -61,27 +61,18 @@ heygen video download <video-id>      # downloads file, stdout: JSON with path
 
 **Stop conditions — a poll loop MUST have all three:**
 
-1. **Find the right status command, then read its schema.** The job is not always
-   polled through its own group's `get`. Take the id the create response actually
-   returns, find the command that reads *that* resource, and inspect its
-   `--response-schema` for the `status` field's documented values. Two shipped cases
-   where the obvious guess is wrong:
+1. **Poll the resource the create actually returned, and read its schema.** The id in
+   a create response may belong to another group, so that group's own `get` is not
+   always the status command — a template render is polled with `video get`, not
+   `template get`. Take the id from the create response, find the `get` that reads
+   that resource, and run it with `--response-schema` to see the `status` field's
+   documented values.
 
-   - `template generate` returns a video under `data.id` (there is no `video_id`
-     field). Poll it with `heygen video get <data.id>`; `template get` returns
-     template metadata and has no job status.
-   - `video-agent create` always returns `session_id`, and `video_id` only once a
-     render exists. Poll `heygen video-agent get <session-id>` for session status
-     (which includes `waiting_for_input`); switch to `heygen video get <video-id>`
-     for the render only when `video_id` is non-null.
-
-   Do not hardcode a vocabulary: they differ per resource. The surface currently
-   includes `pending`, `processing`, `running`, `queued`, `thinking`, `reviewing`,
-   `generating`, `waiting_for_input`, `pending_consent`, `cancelled`, `failed`,
-   `completed` — and voice uses `complete`, not `completed`. Some resources document
-   status in prose rather than a formal enum. Keep polling only on a value documented
-   as in-progress; treat everything else, **including a value you do not recognize**,
-   as terminal — stop and report rather than spin.
+   Do not assume the vocabulary. State names differ between resources, spellings
+   differ (some use `complete`, others `completed`), and a few document status in
+   prose rather than an enum. Keep polling only on a value the schema documents as
+   in-progress; treat anything else, **including a value you do not recognize**, as
+   terminal — stop and report rather than spin.
 2. **Stop on a terminal error — a non-zero exit is not "not ready yet".**
    `not_found` / `*_not_found` (exit 1) means the id is wrong or the resource was
    deleted; it will never become ready. Same for `unauthorized` / `forbidden`
@@ -91,9 +82,7 @@ heygen video download <video-id>      # downloads file, stdout: JSON with path
 3. **Cap the loop.** Bound it by attempts or wall-clock and exit non-zero at the cap
    rather than looping forever.
 
-Poll no faster than every 5-10s. An unbounded loop that treats a 404 as "still
-processing" runs until something kills it: one has been observed issuing ~450 requests
-an hour for three days after its session ended.
+Poll no faster than every 5-10s.
 
 ## Discovering API Fields
 
