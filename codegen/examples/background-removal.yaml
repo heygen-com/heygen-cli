@@ -1,8 +1,8 @@
 "POST /v3/background-removals":
-  - desc: "Submit a video for background removal"
-    cmd: "heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"}}' --wait"
+  - desc: "Submit a video for background removal (returns a job id; poll with get)"
+    cmd: "heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"}}'"
   - desc: "Submit with explicit layer set"
-    cmd: "heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"},\"layers\":[\"foreground\",\"mask\",\"background\"]}' --wait"
+    cmd: "heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"},\"layers\":[\"foreground\",\"mask\",\"background\"]}'"
   - desc: "See all available request fields"
     cmd: "heygen background-removal create --request-schema"
 "GET /v3/background-removals":

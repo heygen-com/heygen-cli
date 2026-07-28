@@ -15,8 +15,8 @@ var TemplateGenerate = &command.Spec{
 	Method:         "POST",
 	BodyEncoding:   "json",
 	Examples: []string{
-		"# Generate a video from a template (body = variable replacements; discover names via 'template get')\n  heygen template generate <template-id> -d @variables.json",
-		"# Render only specific scenes, in order\n  heygen template generate <template-id> --scene-ids <scene-id-1>,<scene-id-2> -d @variables.json",
+		"# Generate a video from a template (body = variable replacements; discover names via 'template get')\n  heygen template generate <template-id> -d variables.json",
+		"# Render only specific scenes, in order\n  heygen template generate <template-id> --scene-ids <scene-id-1>,<scene-id-2> -d variables.json",
 		"# See the request shape (variables are template-specific)\n  heygen template generate <template-id> --request-schema",
 	},
 	Args: []command.ArgSpec{
