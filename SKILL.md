@@ -62,11 +62,18 @@ heygen video download <video-id>      # downloads file, stdout: JSON with path
 **Stop conditions — a poll loop MUST have all three:**
 
 1. **Find the right status command, then read its schema.** The job is not always
-   polled through its own group's `get` — `template generate` returns a `video_id`
-   and is polled with `heygen video get`, as is `video-agent create`. Take the id
-   field the create response actually returns, find the command that reads it, and
-   inspect that command's `--response-schema` for the `status` field's documented
-   values.
+   polled through its own group's `get`. Take the id the create response actually
+   returns, find the command that reads *that* resource, and inspect its
+   `--response-schema` for the `status` field's documented values. Two shipped cases
+   where the obvious guess is wrong:
+
+   - `template generate` returns a video under `data.id` (there is no `video_id`
+     field). Poll it with `heygen video get <data.id>`; `template get` returns
+     template metadata and has no job status.
+   - `video-agent create` always returns `session_id`, and `video_id` only once a
+     render exists. Poll `heygen video-agent get <session-id>` for session status
+     (which includes `waiting_for_input`); switch to `heygen video get <video-id>`
+     for the render only when `video_id` is non-null.
 
    Do not hardcode a vocabulary: they differ per resource. The surface currently
    includes `pending`, `processing`, `running`, `queued`, `thinking`, `reviewing`,
@@ -106,7 +113,8 @@ heygen video get --response-schema
 
 ## Notes
 
-- The CLI retries transient errors (429, 5xx) automatically.
+- The CLI automatically retries 429 and selected transient 5xx (500/502/503/504) on
+  retry-eligible requests.
 - Use `heygen update` to check for and install a newer CLI release.
 - Video download writes to `{video-id}.mp4` by default. Override with `--output-path`. Errors if the file already exists; use `--force` to overwrite.
 - For the full API reference (concepts, limits, pricing), see https://developers.heygen.com
