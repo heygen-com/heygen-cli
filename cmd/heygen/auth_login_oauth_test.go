@@ -1184,6 +1184,14 @@ var allowedLoginFailureReasons = map[string]map[string]bool{
 	"api_key": {
 		"internal_error": true, "api_key_aborted": true, "api_key_invalid_input": true,
 	},
+	"device": {
+		"internal_error": true, "unattended_environment": true,
+		"authorization_request_failed": true, "identity_verification_failed": true,
+		"credential_persistence_failed": true, "token_poll_failed": true,
+		"device_access_denied": true, "device_code_expired": true,
+		"device_invalid_client": true, "device_invalid_grant": true,
+		"device_oauth_error": true,
+	},
 	"device_code": {"device_code_unsupported": true},
 }
 
@@ -1230,6 +1238,33 @@ func TestOAuthFailureReasonOutputsAreInAllowedVocabulary(t *testing.T) {
 		if got := oauthFailureReason(err); !allowedLoginFailureReasons["oauth"][got] {
 			t.Errorf("oauthFailureReason(%v) = %q, outside the allowed oauth vocabulary", err, got)
 		}
+	}
+}
+
+func TestDeviceFailureReasonOutputsAreInAllowedVocabulary(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"access denied", &oauth.DeviceAuthorizationError{Code: "access_denied"}, "device_access_denied"},
+		{"expired", &oauth.DeviceAuthorizationError{Code: "expired_token"}, "device_code_expired"},
+		{"invalid client", &oauth.DeviceAuthorizationError{Code: "invalid_client"}, "device_invalid_client"},
+		{"invalid grant", &oauth.DeviceAuthorizationError{Code: "invalid_grant"}, "device_invalid_grant"},
+		{"unknown server code", &oauth.DeviceAuthorizationError{Code: "attacker-controlled"}, "device_oauth_error"},
+		{"non-oauth error", errors.New("network down"), "token_poll_failed"},
+		{"wrapped code", fmt.Errorf("poll: %w", &oauth.DeviceAuthorizationError{Code: "access_denied"}), "device_access_denied"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := deviceFailureReason(tt.err)
+			if got != tt.want {
+				t.Fatalf("deviceFailureReason(%v) = %q, want %q", tt.err, got, tt.want)
+			}
+			if !allowedLoginFailureReasons["device"][got] {
+				t.Fatalf("deviceFailureReason(%v) = %q, outside the allowed device vocabulary", tt.err, got)
+			}
+		})
 	}
 }
 

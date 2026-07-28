@@ -630,12 +630,7 @@ func runDeviceLogin(cmd *cobra.Command, ctx *cmdContext, cfg deviceLoginConfig) 
 	)
 	if err != nil {
 		reported = true
-		reason := "token_poll_failed"
-		var deviceErr *oauth.DeviceAuthorizationError
-		if errors.As(err, &deviceErr) {
-			reason = deviceErr.Code
-		}
-		loginAnalytics.AuthLoginFailed("device", reason)
+		loginAnalytics.AuthLoginFailed("device", deviceFailureReason(err))
 		return clierrors.New(fmt.Sprintf("device login failed: %v", err))
 	}
 
@@ -710,6 +705,29 @@ func runDeviceLogin(cmd *cobra.Command, ctx *cmdContext, cfg deviceLoginConfig) 
 	reported = true
 	loginAnalytics.AuthLoginCompleted("device")
 	return nil
+}
+
+// deviceFailureReason maps server-provided RFC 8628 error codes into a fixed
+// analytics vocabulary. Never emit DeviceAuthorizationError.Code directly:
+// an OAuth server may return arbitrary text, which would create unbounded
+// PostHog dimensions and could copy attacker-controlled data into telemetry.
+func deviceFailureReason(err error) string {
+	var deviceErr *oauth.DeviceAuthorizationError
+	if !errors.As(err, &deviceErr) {
+		return "token_poll_failed"
+	}
+	switch deviceErr.Code {
+	case "access_denied":
+		return "device_access_denied"
+	case "expired_token":
+		return "device_code_expired"
+	case "invalid_client":
+		return "device_invalid_client"
+	case "invalid_grant":
+		return "device_invalid_grant"
+	default:
+		return "device_oauth_error"
+	}
 }
 
 func revokeMintedDeviceTokens(ctx context.Context, client *oauth.Client, tok *oauth.TokenResponse) {
