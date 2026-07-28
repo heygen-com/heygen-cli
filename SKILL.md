@@ -61,20 +61,26 @@ heygen video download <video-id>      # downloads file, stdout: JSON with path
 
 **Stop conditions — a poll loop MUST have all three:**
 
-1. **Read the resource's real status vocabulary first**, from
-   `heygen <group> get --response-schema` (the `status` enum). Do not hardcode one:
-   they differ per resource. Across the current surface they include `pending`,
-   `processing`, `running`, `queued`, `thinking`, `reviewing`, `generating`,
-   `waiting_for_input`, `pending_consent`, `cancelled`, `failed`, `completed` — and
-   voice uses `complete`, not `completed`. Keep polling only on a status the schema
-   documents as in-progress. Treat anything else, **including a status you do not
-   recognize**, as terminal: stop and report it rather than spinning.
+1. **Find the right status command, then read its schema.** The job is not always
+   polled through its own group's `get` — `template generate` returns a `video_id`
+   and is polled with `heygen video get`, as is `video-agent create`. Take the id
+   field the create response actually returns, find the command that reads it, and
+   inspect that command's `--response-schema` for the `status` field's documented
+   values.
+
+   Do not hardcode a vocabulary: they differ per resource. The surface currently
+   includes `pending`, `processing`, `running`, `queued`, `thinking`, `reviewing`,
+   `generating`, `waiting_for_input`, `pending_consent`, `cancelled`, `failed`,
+   `completed` — and voice uses `complete`, not `completed`. Some resources document
+   status in prose rather than a formal enum. Keep polling only on a value documented
+   as in-progress; treat everything else, **including a value you do not recognize**,
+   as terminal — stop and report rather than spin.
 2. **Stop on a terminal error — a non-zero exit is not "not ready yet".**
    `not_found` / `*_not_found` (exit 1) means the id is wrong or the resource was
    deleted; it will never become ready. Same for `unauthorized` / `forbidden`
    (exit 3) and `usage_error` (exit 2). Retry only transient ones, with backoff:
-   `network_error`, `timeout` (exit 4), `rate_limit_exceeded`, `internal_error`,
-   `unclassified_server_error`.
+   `network_error`, `timeout` (exit 4), `rate_limit_exceeded`, `quota_exceeded`,
+   `internal_error`, `unclassified_server_error`.
 3. **Cap the loop.** Bound it by attempts or wall-clock and exit non-zero at the cap
    rather than looping forever.
 
