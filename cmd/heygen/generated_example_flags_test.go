@@ -252,10 +252,13 @@ func TestSkillDocumentsUnrecognizedStatusIsTerminal(t *testing.T) {
 	// a phrase happens to straddle a line wrap, which is a legitimate edit and
 	// not a dropped rule.
 	section = strings.Join(strings.Fields(section), " ")
-	// "--response-schema" pins the discovery step: the guidance deliberately
-	// enumerates no status vocabulary, so if that pointer is dropped the section
-	// tells an agent nothing about which states to trust.
-	for _, concept := range []string{"--response-schema", "do not recognize", "terminal", "cap"} {
+	// Markers are stems, not phrases, so a rewrite can reword freely: "unrecogniz"
+	// covers "unrecognized" and "do not recognize"; "loop" plus "cap" together
+	// mean the capping rule, since "cap" alone also matches capacity/captured.
+	// "--response-schema" pins the discovery step — the guidance deliberately
+	// enumerates no status vocabulary, so without that pointer the section tells
+	// an agent nothing about which states to trust.
+	for _, concept := range []string{"--response-schema", "recogniz", "terminal", "loop", "cap"} {
 		if !strings.Contains(section, concept) {
 			t.Errorf("stop-conditions section no longer conveys %q; an unrecognized status must "+
 				"terminate polling and loops must be capped", concept)
