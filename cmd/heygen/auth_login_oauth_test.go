@@ -826,8 +826,8 @@ func TestRunOAuthLogin_ParentContextCanceled_Telemetry(t *testing.T) {
 	}
 }
 
-// U4: the IdP rejecting the token exchange emits
-// failed(oauth, token_exchange_failed), no completed.
+// U4: the IdP rejecting the authorization code emits
+// failed(oauth, token_rejected), no completed.
 func TestRunOAuthLogin_TokenExchangeFailed_Telemetry(t *testing.T) {
 	spy := withLoginAnalyticsSpy(t)
 	configDir := t.TempDir()
@@ -853,11 +853,43 @@ func TestRunOAuthLogin_TokenExchangeFailed_Telemetry(t *testing.T) {
 		t.Fatalf("expected non-zero exit, got 0\nstderr: %s\nstdout: %s", res.Stderr, res.Stdout)
 	}
 
-	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "token_exchange_failed"}) {
-		t.Fatalf("failed = %v, want [{oauth token_exchange_failed}]", got)
+	// A 400 from the token endpoint is a rejected code, which needs a fresh
+	// login — not the generic bucket, and not a retryable failure.
+	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "token_rejected"}) {
+		t.Fatalf("failed = %v, want [{oauth token_rejected}]", got)
 	}
 	if len(spy.completed) != 0 {
 		t.Fatalf("completed = %v, want none", spy.completed)
+	}
+}
+
+// The end-to-end counterpart to the 400 case above: a 5xx must report as a
+// retryable server error rather than collapsing into the rejected reason.
+func TestRunOAuthLogin_TokenEndpoint5xx_Telemetry(t *testing.T) {
+	spy := withLoginAnalyticsSpy(t)
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	t.Setenv("HEYGEN_API_KEY", "")
+
+	idp := newFakeIdP(t)
+	idp.tokenStatus = http.StatusInternalServerError
+	idp.tokenResponse = `upstream exploded`
+
+	cfg := oauthLoginConfig{
+		TokenURL: idp.server.URL + "/v1/oauth/token",
+		OpenBrowser: func(authURL string) error {
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				hitBrowserCallback(t, idp.expectedCode, authURL)
+			}()
+			return nil
+		},
+	}
+	res := runOAuthLoginForTest(t, cfg)
+	if res.ExitCode == 0 {
+		t.Fatalf("expected non-zero exit, got 0\nstderr: %s", res.Stderr)
+	}
+	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "token_server_error"}) {
+		t.Fatalf("failed = %v, want [{oauth token_server_error}]", got)
 	}
 }
 
@@ -1135,8 +1167,15 @@ var allowedLoginFailureReasons = map[string]map[string]bool{
 		"oauth_authorize_denied": true, "oauth_authorize_failed": true,
 		"oauth_state_mismatch": true, "oauth_missing_code": true,
 		"oauth_loopback_failed": true, "oauth_flow_error": true,
+		// Routed through tokenFailureReason.
+		"token_rejected": true, "token_canceled": true, "token_network_error": true,
+		"token_server_error": true, "token_http_error": true,
+		"token_rate_limited": true, "token_client_error": true,
+		"token_rejected_unclassified": true,
+		"token_response_invalid":      true, "token_request_failed": true,
+		"token_exchange_failed": true,
 		// Emitted as literals at their own call sites.
-		"internal_error": true, "headless_shell": true, "token_exchange_failed": true,
+		"internal_error": true, "headless_shell": true,
 	},
 	"api_key": {
 		"internal_error": true, "api_key_aborted": true, "api_key_invalid_input": true,
@@ -1154,7 +1193,8 @@ func TestAuthLoginFailedLiteralsAreInAllowedVocabulary(t *testing.T) {
 		t.Fatalf("read auth_login.go: %v", err)
 	}
 	// Matches only literal/literal calls; the classifier-routed sites pass a
-	// function call and are covered by TestOAuthFailureReason.
+	// function call and are covered by TestOAuthFailureReason and
+	// TestTokenFailureReason.
 	re := regexp.MustCompile(`AuthLoginFailed\("([a-z_]+)",\s*"([a-z_]+)"\)`)
 	matches := re.FindAllStringSubmatch(string(src), -1)
 	if len(matches) == 0 {
@@ -1185,6 +1225,66 @@ func TestOAuthFailureReasonOutputsAreInAllowedVocabulary(t *testing.T) {
 	} {
 		if got := oauthFailureReason(err); !allowedLoginFailureReasons["oauth"][got] {
 			t.Errorf("oauthFailureReason(%v) = %q, outside the allowed oauth vocabulary", err, got)
+		}
+	}
+}
+
+func TestTokenFailureReason(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"rejected code", oauth.ErrRejected, "token_rejected"},
+		{"canceled", oauth.ErrTokenCanceled, "token_canceled"},
+		{"network", oauth.ErrTokenNetwork, "token_network_error"},
+		{"5xx", oauth.ErrTokenServerError, "token_server_error"},
+		{"429", oauth.ErrTokenRateLimited, "token_rate_limited"},
+		{"client misconfigured", oauth.ErrTokenClientConfig, "token_client_error"},
+		{"rejection we inferred", fmt.Errorf("%w: %w", oauth.ErrRejected, oauth.ErrRejectionUnclassified), "token_rejected_unclassified"},
+		{"other non-2xx", oauth.ErrTokenUnexpectedStatus, "token_http_error"},
+		{"bad body", oauth.ErrTokenResponseInvalid, "token_response_invalid"},
+		{"build failure", oauth.ErrTokenRequestFailed, "token_request_failed"},
+		{"unmapped falls back", errors.New("something new"), "token_exchange_failed"},
+		{"wrapped still matches", fmt.Errorf("ctx: %w", oauth.ErrTokenNetwork), "token_network_error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tokenFailureReason(tt.err); got != tt.want {
+				t.Errorf("tokenFailureReason(%v) = %q, want %q", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTokenFailureReasonOutputsAreInAllowedVocabulary(t *testing.T) {
+	for _, err := range []error{
+		oauth.ErrRejected, oauth.ErrTokenCanceled, oauth.ErrTokenNetwork,
+		oauth.ErrTokenServerError, oauth.ErrTokenUnexpectedStatus,
+		oauth.ErrTokenResponseInvalid, oauth.ErrTokenRequestFailed,
+		oauth.ErrTokenRateLimited, oauth.ErrTokenClientConfig,
+		fmt.Errorf("%w: %w", oauth.ErrRejected, oauth.ErrRejectionUnclassified),
+		errors.New("unmapped"),
+	} {
+		if got := tokenFailureReason(err); !allowedLoginFailureReasons["oauth"][got] {
+			t.Errorf("tokenFailureReason(%v) = %q, outside the allowed oauth vocabulary", err, got)
+		}
+	}
+}
+
+// A rejected code and a 5xx must not collapse into the same reason: one needs a
+// fresh login, the other is worth retrying. This is the whole point of the split.
+func TestTokenFailureReason_SeparatesRetryableFromTerminal(t *testing.T) {
+	terminal := tokenFailureReason(oauth.ErrRejected)
+	retryable := []string{
+		tokenFailureReason(oauth.ErrTokenNetwork),
+		tokenFailureReason(oauth.ErrTokenServerError),
+		tokenFailureReason(oauth.ErrTokenRateLimited),
+		tokenFailureReason(oauth.ErrTokenCanceled),
+	}
+	for _, r := range retryable {
+		if r == terminal {
+			t.Errorf("retryable reason %q collapses into the terminal reason %q", r, terminal)
 		}
 	}
 }

@@ -479,6 +479,48 @@ func oauthFailureReason(err error) string {
 	}
 }
 
+// tokenFailureReason maps a token-endpoint error to its AUTH_LOGIN_FAILED
+// reason. Same contract as oauthFailureReason: bounded vocabulary, never
+// interpolates IdP-supplied text, and unmapped errors keep the historical
+// "token_exchange_failed" bucket so a new unwrapped path stays visible.
+//
+// The distinction that matters downstream is retryability: network, canceled,
+// and server errors are transient, whereas a rejected code needs a fresh login
+// and an invalid response means the IdP is misbehaving.
+func tokenFailureReason(err error) string {
+	switch {
+	// Order matters: all three arrive as a 400/401 TokenError, and
+	// ErrRejectionUnclassified also matches ErrRejected, so it must be tested
+	// first. ErrTokenClientConfig is a separate class, not fixable by logging in
+	// again;
+	// ErrRejectionUnclassified is a rejection we inferred from the status rather
+	// than one the IdP stated, and reporting it as a verified invalid_grant would
+	// overclaim.
+	case errors.Is(err, oauth.ErrTokenClientConfig):
+		return "token_client_error"
+	case errors.Is(err, oauth.ErrRejectionUnclassified):
+		return "token_rejected_unclassified"
+	case errors.Is(err, oauth.ErrRejected):
+		return "token_rejected"
+	case errors.Is(err, oauth.ErrTokenCanceled):
+		return "token_canceled"
+	case errors.Is(err, oauth.ErrTokenNetwork):
+		return "token_network_error"
+	case errors.Is(err, oauth.ErrTokenServerError):
+		return "token_server_error"
+	case errors.Is(err, oauth.ErrTokenRateLimited):
+		return "token_rate_limited"
+	case errors.Is(err, oauth.ErrTokenUnexpectedStatus):
+		return "token_http_error"
+	case errors.Is(err, oauth.ErrTokenResponseInvalid):
+		return "token_response_invalid"
+	case errors.Is(err, oauth.ErrTokenRequestFailed):
+		return "token_request_failed"
+	default:
+		return "token_exchange_failed"
+	}
+}
+
 // runOAuthLogin drives the browser + PKCE + loopback dance and persists
 // the resulting tokens.
 func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) (err error) {
@@ -583,12 +625,15 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) (e
 	tok, err := oc.ExchangeAuthorizationCode(cmdCtx, loopbackResult.Code, verifier, loopbackResult.RedirectURI)
 	if err != nil {
 		reported = true
-		loginAnalytics.AuthLoginFailed("oauth", "token_exchange_failed")
+		loginAnalytics.AuthLoginFailed("oauth", tokenFailureReason(err))
 		return clierrors.New(fmt.Sprintf("oauth: token exchange failed: %v", err))
 	}
 	if tok.AccessToken == "" {
+		// Defensive: parseTokenResponse already rejects an empty access_token, so
+		// reaching here means a future code path bypassed it. Classify it the same
+		// as any other malformed response rather than inventing a reason.
 		reported = true
-		loginAnalytics.AuthLoginFailed("oauth", "token_exchange_failed")
+		loginAnalytics.AuthLoginFailed("oauth", "token_response_invalid")
 		return clierrors.New("oauth: token endpoint returned no access_token")
 	}
 

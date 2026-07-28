@@ -282,7 +282,8 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		refreshed, refreshErr := c.refreshIfTokenUnchanged(ctx, credSnap.AccessToken)
 		if refreshErr != nil {
 			// Discriminate between "IdP said no" (rejected) and any other
-			// transient failure (network, 5xx, ctx cancel). Only the
+			// non-rejection failure — transient (network, 5xx, ctx cancel) or
+			// terminal for us (a malformed request / bad client registration). Only the
 			// rejected branch tells the user re-login is needed; the
 			// transient branch surfaces the underlying error as-is so
 			// the executor renders something accurate. (W1)
@@ -417,8 +418,9 @@ func (c *Client) ensureFreshOAuthToken(ctx context.Context) (bool, error) {
 
 	if _, err := c.forceRefresh(ctx); err != nil {
 		// Same W1 discrimination as the post-401 path: only an IdP
-		// rejection signals re-login is needed; transient failures
-		// surface as-is so the executor can render a useful error.
+		// rejection signals re-login is needed. Everything else — transient
+		// or terminal-for-us — surfaces as-is so the executor renders
+		// something accurate.
 		if errors.Is(err, oauth.ErrRejected) {
 			return false, fmt.Errorf("%w: %v", ErrReLoginNeeded, err)
 		}
@@ -453,7 +455,9 @@ func (c *Client) needsRefresh() bool {
 // in-memory credential + persists the new tokens. Returns true when a
 // new access token was minted. Callers handle the err side: a real
 // network/IdP failure stays a refresh error; an IdP 400/401 (token
-// rejected) bubbles up wrapped in oauth.ErrRejected so callers can
+// rejected) bubbles up wrapped in oauth.ErrRejected — including the case where
+// the IdP stated no reason, which also carries oauth.ErrRejectionUnclassified —
+// so callers can
 // errors.Is-discriminate the re-login case.
 func (c *Client) forceRefresh(ctx context.Context) (bool, error) {
 	if c.oauthClient == nil {

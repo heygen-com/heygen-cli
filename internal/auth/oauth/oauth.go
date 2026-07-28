@@ -232,7 +232,7 @@ func (c *Client) postTokenForm(
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.TokenURL,
 		strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, fmt.Errorf("oauth: build %s request: %w", grant, err)
+		return nil, fmt.Errorf("%w (%s): %w", ErrTokenRequestFailed, grant, err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
@@ -247,39 +247,52 @@ func (c *Client) postTokenForm(
 	requestSent := c.Now()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("oauth: %s request: %w", grant, err)
+		return nil, classifyTransportErr(ctx, err, grant)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, fmt.Errorf("oauth: read %s response: %w", grant, err)
+		// A truncated body is the same family as Do failing, and can equally be
+		// caused by the caller cancelling, so it goes through the same classifier.
+		return nil, classifyTransportErr(ctx, err, "read "+grant+" response")
 	}
 
 	if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized {
-		// 400/401 here is the "the code/refresh was rejected" path. The
-		// PR-2 CLI surface will map this to a "log in again" UX; for now
-		// we surface a typed error with the server detail attached.
+		// 400/401 is the "rejected" family, but it covers two situations that
+		// need opposite responses: the supplied code/refresh token is unusable
+		// (re-login fixes it) versus our own client registration or request shape
+		// is wrong (re-login cannot). RFC 6749 §5.2 distinguishes them via the
+		// `error` field, so read it rather than inferring from the status alone.
 		return nil, &TokenError{
 			Status:  resp.StatusCode,
 			Grant:   grant,
 			Body:    truncate(string(body), 500),
-			Wrapped: errRejected,
+			Wrapped: sentinelForOAuthErrorCode(body),
 		}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("oauth: %s endpoint returned HTTP %d: %s",
-			grant, resp.StatusCode, truncate(string(body), 500))
+		// Three classes, three actions: retry a 5xx, back off on a 429, and treat
+		// anything else (403, a redirect) as neither.
+		sentinel := ErrTokenUnexpectedStatus
+		switch {
+		case resp.StatusCode >= 500:
+			sentinel = ErrTokenServerError
+		case resp.StatusCode == http.StatusTooManyRequests:
+			sentinel = ErrTokenRateLimited
+		}
+		return nil, fmt.Errorf("%w: %s endpoint returned HTTP %d: %s",
+			sentinel, grant, resp.StatusCode, truncate(string(body), 500))
 	}
 
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("oauth: decode %s response: %w (body: %s)",
-			grant, err, truncate(string(body), 500))
+		return nil, fmt.Errorf("%w: decode %s response: %w (body: %s)",
+			ErrTokenResponseInvalid, grant, err, truncate(string(body), 500))
 	}
 	tok, err := parseTokenResponse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("oauth: %s response invalid: %w", grant, err)
+		return nil, fmt.Errorf("%w: %s response: %w", ErrTokenResponseInvalid, grant, err)
 	}
 	tok.IssuedAt = requestSent
 	return tok, nil
@@ -291,8 +304,11 @@ func (c *Client) postTokenForm(
 var errRejected = errors.New("oauth: credential rejected by token endpoint")
 
 // TokenError is returned by ExchangeAuthorizationCode / RefreshAccessToken
-// when the IdP returns 400 or 401. Callers can use errors.Is(err, ErrRejected)
-// to drive a re-login UX.
+// when the IdP returns 400 or 401. Wrapped carries the classification: either
+// ErrTokenClientConfig (our request or registration is wrong, re-login will not
+// help) or ErrRejected, optionally alongside ErrRejectionUnclassified when the
+// body stated no reason. errors.Is(err, ErrRejected) remains the signal for a
+// re-login UX.
 type TokenError struct {
 	Status  int
 	Grant   string
@@ -306,8 +322,122 @@ func (e *TokenError) Error() string {
 
 func (e *TokenError) Unwrap() error { return e.Wrapped }
 
-// ErrRejected is the sentinel for a 400/401 from the token endpoint.
+// ErrRejected is the sentinel for a 400/401 from the token endpoint whose error
+// code blames the supplied credential (or that carries no usable code).
 var ErrRejected = errRejected
+
+// clientConfigErrorCodes are the RFC 6749 §5.2 codes that indicate the request
+// or the client itself is at fault, not the credential being presented.
+// invalid_grant is deliberately absent: that one IS the credential.
+var clientConfigErrorCodes = map[string]bool{
+	"invalid_request":        true,
+	"invalid_client":         true,
+	"unauthorized_client":    true,
+	"unsupported_grant_type": true,
+	"invalid_scope":          true,
+}
+
+// ErrRejectionUnclassified marks a 400/401 that could not be attributed to a
+// specific RFC 6749 §5.2 code — an unparseable body, a missing `error` field, or
+// a well-formed code outside the six core ones — so "the credential was
+// refused" is inferred from the status rather than stated by the IdP.
+//
+// It is wrapped ALONGSIDE ErrRejected, not instead of it. internal/client keys
+// its re-login prompt off ErrRejected, and a 400/401 from a token endpoint
+// overwhelmingly does mean a refused credential — gateway and infrastructure
+// failures arrive as 5xx, which is classified separately. Demoting this case
+// out of ErrRejected would leave a user holding a dead refresh token with no
+// prompt to re-authenticate, which is a worse failure than occasionally
+// suggesting a re-login that turns out to be unnecessary. The marker exists so
+// telemetry can separate a verified invalid_grant from an inferred rejection
+// without changing that behavior.
+var ErrRejectionUnclassified = errRejectionUnclassified
+
+var errRejectionUnclassified = errors.New("oauth: rejection reason not stated by the IdP")
+
+// sentinelForOAuthErrorCode picks the 400/401 sentinel from the response body's
+// RFC 6749 §5.2 `error` field.
+func sentinelForOAuthErrorCode(body []byte) error {
+	var parsed struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil || parsed.Error == "" {
+		return fmt.Errorf("%w: %w", errRejected, errRejectionUnclassified)
+	}
+	if clientConfigErrorCodes[parsed.Error] {
+		return ErrTokenClientConfig
+	}
+	if parsed.Error == "invalid_grant" {
+		return errRejected
+	}
+	// A well-formed but unrecognized code: still a rejection for behavior
+	// purposes, still not one we can attribute.
+	return fmt.Errorf("%w: %w", errRejected, errRejectionUnclassified)
+}
+
+// classifyTransportErr distinguishes the caller giving up from the transport
+// failing. It reads ctx.Err() rather than inspecting err, because an
+// http.Client.Timeout error also satisfies errors.Is(err,
+// context.DeadlineExceeded) while the caller's context is still live — matching
+// on the chain would report a slow IdP as a user cancellation.
+func classifyTransportErr(ctx context.Context, err error, what string) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("%w (%s): %w", ErrTokenCanceled, what, err)
+	}
+	return fmt.Errorf("%w (%s): %w", ErrTokenNetwork, what, err)
+}
+
+// Sentinels for the token-endpoint failures that are NOT a credential
+// rejection. ErrRejected already covers 400/401; these cover the rest, so a
+// caller can tell "retry this" from "log in again" from "the IdP is broken"
+// instead of collapsing all of them into one bucket.
+//
+// Three mutually exclusive behavioral classes: transient (network, canceled,
+// server error, rate limited), terminal-for-the-client (client config, response
+// invalid, request failed), and credential-rejected (ErrRejected). Every
+// non-nil error out of postTokenForm wraps exactly one of them — with one
+// deliberate overlap: an unattributable rejection wraps ErrRejected AND
+// ErrRejectionUnclassified, so behavior stays put while telemetry can tell them
+// apart. See ErrRejectionUnclassified.
+var (
+	// ErrTokenRequestFailed means the request could not even be built
+	// (malformed token URL). Programmer error, not a runtime condition.
+	ErrTokenRequestFailed = errors.New("oauth: could not build token request")
+
+	// ErrTokenNetwork means the request never completed: DNS, TLS, connection
+	// reset, or a truncated response body. Retryable.
+	ErrTokenNetwork = errors.New("oauth: token request did not complete")
+
+	// ErrTokenCanceled means the CALLER's context ended mid-exchange (Ctrl-C or
+	// an agent-imposed deadline). Nothing is wrong upstream, which is why it is
+	// separate from ErrTokenNetwork. Determined from ctx.Err(), never from the
+	// returned error: an http.Client.Timeout error also satisfies
+	// errors.Is(err, context.DeadlineExceeded) even when the caller's context is
+	// perfectly healthy, so matching on the chain would mislabel it.
+	ErrTokenCanceled = errors.New("oauth: token request canceled by caller")
+
+	// ErrTokenServerError is a 5xx from the token endpoint. Retryable.
+	ErrTokenServerError = errors.New("oauth: token endpoint server error")
+
+	// ErrTokenRateLimited is a 429. Retryable, but only with backoff — which is
+	// why it is not folded into ErrTokenUnexpectedStatus.
+	ErrTokenRateLimited = errors.New("oauth: token endpoint rate limited")
+
+	// ErrTokenUnexpectedStatus is any other non-2xx that is not 400/401, 429, or
+	// 5xx — e.g. 403 or a redirect.
+	ErrTokenUnexpectedStatus = errors.New("oauth: token endpoint returned an unexpected status")
+
+	// ErrTokenClientConfig is a 400/401 whose RFC 6749 §5.2 error code blames the
+	// client or the request rather than the supplied credential (invalid_client,
+	// unauthorized_client, invalid_request, unsupported_grant_type,
+	// invalid_scope). Split from ErrRejected because re-authenticating cannot fix
+	// it — the CLI's own registration or request shape is wrong.
+	ErrTokenClientConfig = errors.New("oauth: token request rejected as malformed or unauthorized client")
+
+	// ErrTokenResponseInvalid means a 2xx body that could not be decoded or was
+	// missing required fields. The IdP is misbehaving; retrying will not help.
+	ErrTokenResponseInvalid = errors.New("oauth: token response invalid")
+)
 
 func parseTokenResponse(obj map[string]any) (*TokenResponse, error) {
 	accessToken, ok := stringField(obj, "access_token")
