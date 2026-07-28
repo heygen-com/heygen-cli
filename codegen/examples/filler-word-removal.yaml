@@ -1,0 +1,16 @@
+"POST /v3/filler-word-removals":
+  - desc: "Submit a video to strip filler words and overlong silences"
+    cmd: "heygen filler-word-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/talk.mp4\"}}'"
+  - desc: "Submit a previously uploaded asset instead of a URL"
+    cmd: "heygen filler-word-removal create -d '{\"video\":{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}}'"
+  - desc: "Set a title and get a webhook when the job finishes"
+    cmd: "heygen filler-word-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/talk.mp4\"},\"title\":\"Q3 all-hands\",\"callback_url\":\"https://example.com/hooks/heygen\",\"callback_id\":\"all-hands-q3\"}'"
+  - desc: "See all available request fields"
+    cmd: "heygen filler-word-removal create --request-schema"
+"GET /v3/filler-word-removals/{filler_word_removal_id}":
+  - desc: "Poll job status — create returns immediately, this endpoint is the source of truth"
+    cmd: "heygen filler-word-removal get <filler-word-removal-id>"
+  - desc: "Read status and removal stats as a table once the job completes"
+    cmd: "heygen filler-word-removal get <filler-word-removal-id> --human"
+  - desc: "See every field the job resource returns"
+    cmd: "heygen filler-word-removal get --response-schema"
