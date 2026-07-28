@@ -354,3 +354,304 @@ func TestExchangeAuthorizationCode_ContextCancellation(t *testing.T) {
 		t.Fatal("expected timeout error")
 	}
 }
+
+// Every token-endpoint failure must wrap a distinct sentinel. The CLI maps them
+// to separate analytics reasons with errors.Is, so an unwrapped error collapses
+// back into the catch-all bucket this split exists to eliminate.
+func TestPostTokenForm_ErrorsWrapSentinels(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler func(w http.ResponseWriter, r *http.Request)
+		want    error
+		notWant error
+	}{
+		{
+			name: "400 rejected code",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"error":"invalid_grant"}`, http.StatusBadRequest)
+			},
+			want:    ErrRejected,
+			notWant: ErrTokenServerError,
+		},
+		{
+			name: "401 invalid_client blames our config, not the credential",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"error":"invalid_client"}`, http.StatusUnauthorized)
+			},
+			want:    ErrTokenClientConfig,
+			notWant: ErrRejected,
+		},
+		{
+			name: "400 unsupported_grant_type is also a client error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"error":"unsupported_grant_type"}`, http.StatusBadRequest)
+			},
+			want:    ErrTokenClientConfig,
+			notWant: ErrRejected,
+		},
+		{
+			name: "400 invalid_grant is a verified rejection",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"error":"invalid_grant"}`, http.StatusBadRequest)
+			},
+			want:    ErrRejected,
+			notWant: ErrRejectionUnclassified,
+		},
+		{
+			name: "400 invalid_request is a client error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"error":"invalid_request"}`, http.StatusBadRequest)
+			},
+			want:    ErrTokenClientConfig,
+			notWant: ErrRejected,
+		},
+		{
+			name: "401 unauthorized_client is a client error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"error":"unauthorized_client"}`, http.StatusUnauthorized)
+			},
+			want:    ErrTokenClientConfig,
+			notWant: ErrRejected,
+		},
+		{
+			name: "400 invalid_scope is a client error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"error":"invalid_scope"}`, http.StatusBadRequest)
+			},
+			want:    ErrTokenClientConfig,
+			notWant: ErrRejected,
+		},
+		{
+			name: "400 with an unparseable body is an unclassified rejection",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `<html>gateway</html>`, http.StatusBadRequest)
+			},
+			want:    ErrRejectionUnclassified,
+			notWant: ErrTokenClientConfig,
+		},
+		{
+			name: "400 with no error field is an unclassified rejection",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"detail":"nope"}`, http.StatusBadRequest)
+			},
+			want:    ErrRejectionUnclassified,
+			notWant: ErrTokenClientConfig,
+		},
+		{
+			name: "400 with an unrecognized code is an unclassified rejection",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"error":"some_future_code"}`, http.StatusBadRequest)
+			},
+			want:    ErrRejectionUnclassified,
+			notWant: ErrTokenClientConfig,
+		},
+		{
+			name:    "500 is a server error, not a rejection",
+			handler: func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "boom", http.StatusInternalServerError) },
+			want:    ErrTokenServerError,
+			notWant: ErrRejected,
+		},
+		{
+			name: "503 is a server error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			},
+			want:    ErrTokenServerError,
+			notWant: ErrRejected,
+		},
+		{
+			name:    "403 is neither rejection nor server error",
+			handler: func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "nope", http.StatusForbidden) },
+			want:    ErrTokenUnexpectedStatus,
+			notWant: ErrRejected,
+		},
+		{
+			name:    "429 needs backoff, so it is its own class",
+			handler: func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "slow down", http.StatusTooManyRequests) },
+			want:    ErrTokenRateLimited,
+			notWant: ErrTokenUnexpectedStatus,
+		},
+		{
+			name: "unparseable body",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `not json at all`)
+			},
+			want:    ErrTokenResponseInvalid,
+			notWant: ErrRejected,
+		},
+		{
+			name: "200 without access_token",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"token_type":"Bearer","expires_in":3600}`)
+			},
+			want:    ErrTokenResponseInvalid,
+			notWant: ErrTokenNetwork,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			idp := newFakeIdP(t)
+			idp.tokenHandler = tt.handler
+			c := idp.client(t)
+
+			_, err := c.ExchangeAuthorizationCode(context.Background(), "the-code", "the-verifier", "http://127.0.0.1:8080/cb")
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if !errors.Is(err, tt.want) {
+				t.Errorf("err = %v, want wrapping %v", err, tt.want)
+			}
+			if errors.Is(err, tt.notWant) {
+				t.Errorf("err = %v must NOT match %v — the two reasons drive different actions", err, tt.notWant)
+			}
+		})
+	}
+}
+
+// A cancelled context is not an upstream fault and must not report as a network
+// failure; the CLI reports them as different reasons.
+func TestPostTokenForm_CanceledContextIsNotNetworkError(t *testing.T) {
+	idp := newFakeIdP(t)
+	idp.tokenHandler = func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(2 * time.Second)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_token":"AT"}`)
+	}
+	c := idp.client(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := c.ExchangeAuthorizationCode(ctx, "the-code", "the-verifier", "http://127.0.0.1:8080/cb")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !errors.Is(err, ErrTokenCanceled) {
+		t.Errorf("err = %v, want wrapping ErrTokenCanceled", err)
+	}
+	if errors.Is(err, ErrTokenNetwork) {
+		t.Errorf("err = %v must not also match ErrTokenNetwork", err)
+	}
+}
+
+// An unreachable endpoint is a transport failure, distinct from every
+// server-response case above.
+func TestPostTokenForm_UnreachableEndpointIsNetworkError(t *testing.T) {
+	c := NewClient(WithTokenURL("http://127.0.0.1:1/v1/oauth/token"))
+
+	_, err := c.ExchangeAuthorizationCode(context.Background(), "the-code", "the-verifier", "http://127.0.0.1:8080/cb")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !errors.Is(err, ErrTokenNetwork) {
+		t.Errorf("err = %v, want wrapping ErrTokenNetwork", err)
+	}
+	if errors.Is(err, ErrRejected) || errors.Is(err, ErrTokenServerError) {
+		t.Errorf("err = %v must not match a server-response sentinel", err)
+	}
+}
+
+// An http.Client.Timeout error satisfies errors.Is(err,
+// context.DeadlineExceeded) even when the caller's context is untouched, so a
+// classifier that inspected the error chain would report a slow IdP as a user
+// cancellation. ctx.Err() is the only signal that actually means "the caller
+// gave up".
+func TestPostTokenForm_ClientTimeoutIsNetworkNotCanceled(t *testing.T) {
+	idp := newFakeIdP(t)
+	idp.tokenHandler = func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(2 * time.Second)
+	}
+	c := idp.client(t)
+	c.HTTPClient = &http.Client{Timeout: 50 * time.Millisecond}
+
+	// Background context: never cancelled, so only Client.Timeout fires.
+	_, err := c.ExchangeAuthorizationCode(context.Background(), "the-code", "the-verifier", "http://127.0.0.1:8080/cb")
+	if err == nil {
+		t.Fatal("expected a timeout error")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("precondition failed: Client.Timeout error should match context.DeadlineExceeded, got %v", err)
+	}
+	if !errors.Is(err, ErrTokenNetwork) {
+		t.Errorf("err = %v, want wrapping ErrTokenNetwork", err)
+	}
+	if errors.Is(err, ErrTokenCanceled) {
+		t.Errorf("err = %v must NOT be ErrTokenCanceled — the caller never cancelled", err)
+	}
+}
+
+// A URL the request builder cannot parse is a programmer error, and the only
+// path that produces ErrTokenRequestFailed.
+func TestPostTokenForm_UnbuildableRequest(t *testing.T) {
+	c := NewClient(WithTokenURL("http://\x7f invalid/v1/oauth/token"))
+
+	_, err := c.ExchangeAuthorizationCode(context.Background(), "the-code", "the-verifier", "http://127.0.0.1:8080/cb")
+	if err == nil {
+		t.Fatal("expected a request-build error")
+	}
+	if !errors.Is(err, ErrTokenRequestFailed) {
+		t.Errorf("err = %v, want wrapping ErrTokenRequestFailed", err)
+	}
+	if errors.Is(err, ErrTokenNetwork) {
+		t.Errorf("err = %v must not look like a transport failure — nothing was sent", err)
+	}
+}
+
+// internal/client keys its re-login prompt off ErrRejected, so an unclassified
+// rejection MUST keep matching it. Demoting that case would leave a user with a
+// dead refresh token and no prompt to re-authenticate — a worse outcome than
+// occasionally suggesting an unnecessary re-login.
+func TestUnclassifiedRejectionStillMatchesErrRejected(t *testing.T) {
+	for _, body := range []string{`<html>gateway</html>`, `{"detail":"nope"}`, `{"error":"some_future_code"}`} {
+		t.Run(body, func(t *testing.T) {
+			idp := newFakeIdP(t)
+			idp.tokenHandler = func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, body, http.StatusBadRequest)
+			}
+			c := idp.client(t)
+
+			_, err := c.ExchangeAuthorizationCode(context.Background(), "the-code", "the-verifier", "http://127.0.0.1:8080/cb")
+			if !errors.Is(err, ErrRejected) {
+				t.Errorf("err = %v must still match ErrRejected — internal/client drives re-login off it", err)
+			}
+			if !errors.Is(err, ErrRejectionUnclassified) {
+				t.Errorf("err = %v should also carry ErrRejectionUnclassified for telemetry", err)
+			}
+		})
+	}
+}
+
+// The body-read path goes through the same classifier as Do, so cancelling
+// mid-read must report as cancellation rather than a transport fault. Serves a
+// Content-Length larger than the bytes actually written so ReadAll blocks.
+func TestPostTokenForm_CanceledDuringBodyRead(t *testing.T) {
+	idp := newFakeIdP(t)
+	idp.tokenHandler = func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", "4096")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			_, _ = io.WriteString(w, `{"access_token":"AT"`)
+			f.Flush()
+		}
+		time.Sleep(2 * time.Second)
+	}
+	c := idp.client(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	_, err := c.ExchangeAuthorizationCode(ctx, "the-code", "the-verifier", "http://127.0.0.1:8080/cb")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !errors.Is(err, ErrTokenCanceled) {
+		t.Errorf("err = %v, want wrapping ErrTokenCanceled", err)
+	}
+	if errors.Is(err, ErrTokenNetwork) {
+		t.Errorf("err = %v must not also match ErrTokenNetwork", err)
+	}
+}

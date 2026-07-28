@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -781,12 +783,13 @@ func TestRunAuthLogin_OAuthFormatterFailure_Telemetry(t *testing.T) {
 	}
 }
 
-// U4: the loopback timing out (no browser callback ever arrives) emits
-// failed(oauth, oauth_timeout). Uses a short-deadline parent context
-// instead of waiting out oauth.DefaultLoopbackTimeout (~5min) — runOAuthLogin
-// derives its own context from cmd.Context() via context.WithTimeout,
-// which honors the parent's earlier deadline.
-func TestRunOAuthLogin_LoopbackTimeout_Telemetry(t *testing.T) {
+// U4: the parent context expiring before any browser callback arrives
+// emits failed(oauth, oauth_canceled). A short-deadline parent stands in
+// for Ctrl-C or an agent-imposed timeout; runOAuthLogin derives cmdCtx
+// from cmd.Context(), which honors the parent's earlier deadline. The
+// pure DefaultLoopbackTimeout path (oauth_timeout) is covered by the
+// oauth package's own sentinel tests rather than a ~5min wait here.
+func TestRunOAuthLogin_ParentContextCanceled_Telemetry(t *testing.T) {
 	spy := withLoginAnalyticsSpy(t)
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
@@ -809,22 +812,22 @@ func TestRunOAuthLogin_LoopbackTimeout_Telemetry(t *testing.T) {
 
 	err := runOAuthLogin(cmd, ctx, cfg)
 	if err == nil {
-		t.Fatal("want timeout error, got nil")
+		t.Fatal("want cancellation error, got nil")
 	}
-	if !strings.Contains(err.Error(), "timed out") {
-		t.Fatalf("err = %q, want a timeout message", err.Error())
+	if !strings.Contains(err.Error(), "canceled waiting for browser callback") {
+		t.Fatalf("err = %q, want a cancellation message", err.Error())
 	}
 
-	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "oauth_timeout"}) {
-		t.Fatalf("failed = %v, want [{oauth oauth_timeout}]", got)
+	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "oauth_canceled"}) {
+		t.Fatalf("failed = %v, want [{oauth oauth_canceled}]", got)
 	}
 	if len(spy.completed) != 0 {
 		t.Fatalf("completed = %v, want none", spy.completed)
 	}
 }
 
-// U4: the IdP rejecting the token exchange emits
-// failed(oauth, token_exchange_failed), no completed.
+// U4: the IdP rejecting the authorization code emits
+// failed(oauth, token_rejected), no completed.
 func TestRunOAuthLogin_TokenExchangeFailed_Telemetry(t *testing.T) {
 	spy := withLoginAnalyticsSpy(t)
 	configDir := t.TempDir()
@@ -850,11 +853,43 @@ func TestRunOAuthLogin_TokenExchangeFailed_Telemetry(t *testing.T) {
 		t.Fatalf("expected non-zero exit, got 0\nstderr: %s\nstdout: %s", res.Stderr, res.Stdout)
 	}
 
-	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "token_exchange_failed"}) {
-		t.Fatalf("failed = %v, want [{oauth token_exchange_failed}]", got)
+	// A 400 from the token endpoint is a rejected code, which needs a fresh
+	// login — not the generic bucket, and not a retryable failure.
+	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "token_rejected"}) {
+		t.Fatalf("failed = %v, want [{oauth token_rejected}]", got)
 	}
 	if len(spy.completed) != 0 {
 		t.Fatalf("completed = %v, want none", spy.completed)
+	}
+}
+
+// The end-to-end counterpart to the 400 case above: a 5xx must report as a
+// retryable server error rather than collapsing into the rejected reason.
+func TestRunOAuthLogin_TokenEndpoint5xx_Telemetry(t *testing.T) {
+	spy := withLoginAnalyticsSpy(t)
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	t.Setenv("HEYGEN_API_KEY", "")
+
+	idp := newFakeIdP(t)
+	idp.tokenStatus = http.StatusInternalServerError
+	idp.tokenResponse = `upstream exploded`
+
+	cfg := oauthLoginConfig{
+		TokenURL: idp.server.URL + "/v1/oauth/token",
+		OpenBrowser: func(authURL string) error {
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				hitBrowserCallback(t, idp.expectedCode, authURL)
+			}()
+			return nil
+		},
+	}
+	res := runOAuthLoginForTest(t, cfg)
+	if res.ExitCode == 0 {
+		t.Fatalf("expected non-zero exit, got 0\nstderr: %s", res.Stderr)
+	}
+	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"oauth", "token_server_error"}) {
+		t.Fatalf("failed = %v, want [{oauth token_server_error}]", got)
 	}
 }
 
@@ -1068,5 +1103,188 @@ func TestRunAuthLogin_APIKeyFormatterFailure_Telemetry(t *testing.T) {
 	}
 	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"api_key", "internal_error"}) {
 		t.Fatalf("failed = %v, want [{api_key internal_error}]", got)
+	}
+}
+
+// Each loopback sentinel must map to its own analytics reason, and
+// anything unrecognized must fall back to the historical bucket rather
+// than dropping out of the series.
+func TestOAuthFailureReason(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"timeout", oauth.ErrLoopbackTimeout, "oauth_timeout"},
+		{"canceled", oauth.ErrLoopbackCanceled, "oauth_canceled"},
+		{"denied", oauth.ErrAuthorizeDenied, "oauth_authorize_denied"},
+		{"authorize failed", oauth.ErrAuthorizeFailed, "oauth_authorize_failed"},
+		{"state mismatch", oauth.ErrStateMismatch, "oauth_state_mismatch"},
+		{"missing code", oauth.ErrMissingCode, "oauth_missing_code"},
+		{"loopback server", oauth.ErrLoopbackServer, "oauth_loopback_failed"},
+		{"unmapped falls back", errors.New("something new"), "oauth_flow_error"},
+		{"wrapped sentinel still matches", fmt.Errorf("ctx: %w", oauth.ErrLoopbackTimeout), "oauth_timeout"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := oauthFailureReason(tt.err); got != tt.want {
+				t.Errorf("oauthFailureReason(%v) = %q, want %q", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// The reason set is an analytics dimension, so it must stay a small
+// fixed vocabulary. This pins it: adding a reason is fine, but it has to
+// be a deliberate edit here too.
+func TestOAuthFailureReason_BoundedVocabulary(t *testing.T) {
+	allowed := map[string]bool{
+		"oauth_timeout": true, "oauth_canceled": true,
+		"oauth_authorize_denied": true, "oauth_authorize_failed": true,
+		"oauth_state_mismatch": true, "oauth_missing_code": true,
+		"oauth_loopback_failed": true, "oauth_flow_error": true,
+	}
+	for _, err := range []error{
+		oauth.ErrLoopbackTimeout, oauth.ErrLoopbackCanceled,
+		oauth.ErrAuthorizeDenied, oauth.ErrAuthorizeFailed,
+		oauth.ErrStateMismatch, oauth.ErrMissingCode,
+		oauth.ErrLoopbackServer, errors.New("unmapped"),
+	} {
+		if got := oauthFailureReason(err); !allowed[got] {
+			t.Errorf("oauthFailureReason(%v) = %q, outside the allowed set", err, got)
+		}
+	}
+}
+
+// allowedLoginFailureReasons is the full AUTH_LOGIN_FAILED vocabulary, per
+// method. These are PostHog analytics dimensions, so the set must stay small
+// and fixed; adding one has to be a deliberate edit here too.
+var allowedLoginFailureReasons = map[string]map[string]bool{
+	"oauth": {
+		// Routed through oauthFailureReason.
+		"oauth_timeout": true, "oauth_canceled": true,
+		"oauth_authorize_denied": true, "oauth_authorize_failed": true,
+		"oauth_state_mismatch": true, "oauth_missing_code": true,
+		"oauth_loopback_failed": true, "oauth_flow_error": true,
+		// Routed through tokenFailureReason.
+		"token_rejected": true, "token_canceled": true, "token_network_error": true,
+		"token_server_error": true, "token_http_error": true,
+		"token_rate_limited": true, "token_client_error": true,
+		"token_rejected_unclassified": true,
+		"token_response_invalid":      true, "token_request_failed": true,
+		"token_exchange_failed": true,
+		// Emitted as literals at their own call sites.
+		"internal_error": true, "headless_shell": true,
+	},
+	"api_key": {
+		"internal_error": true, "api_key_aborted": true, "api_key_invalid_input": true,
+	},
+	"device_code": {"device_code_unsupported": true},
+}
+
+// TestOAuthFailureReason_BoundedVocabulary pins only what the classifier
+// returns. Several reasons are emitted as bare literals at their own call
+// sites and would bypass it entirely, so scan the source too: a new literal
+// added without updating allowedLoginFailureReasons fails here.
+func TestAuthLoginFailedLiteralsAreInAllowedVocabulary(t *testing.T) {
+	src, err := os.ReadFile("auth_login.go")
+	if err != nil {
+		t.Fatalf("read auth_login.go: %v", err)
+	}
+	// Matches only literal/literal calls; the classifier-routed sites pass a
+	// function call and are covered by TestOAuthFailureReason and
+	// TestTokenFailureReason.
+	re := regexp.MustCompile(`AuthLoginFailed\("([a-z_]+)",\s*"([a-z_]+)"\)`)
+	matches := re.FindAllStringSubmatch(string(src), -1)
+	if len(matches) == 0 {
+		t.Fatal("no literal AuthLoginFailed call sites found — the scan would pass vacuously")
+	}
+	for _, m := range matches {
+		method, reason := m[1], m[2]
+		allowed, ok := allowedLoginFailureReasons[method]
+		if !ok {
+			t.Errorf("AuthLoginFailed uses unknown method %q; add it to allowedLoginFailureReasons", method)
+			continue
+		}
+		if !allowed[reason] {
+			t.Errorf("AuthLoginFailed(%q, %q) is not in the allowed vocabulary; these are analytics "+
+				"dimensions, so add it deliberately to allowedLoginFailureReasons", method, reason)
+		}
+	}
+}
+
+// The classifier's outputs must also live in the shared allowed set, so the
+// two pins cannot drift apart.
+func TestOAuthFailureReasonOutputsAreInAllowedVocabulary(t *testing.T) {
+	for _, err := range []error{
+		oauth.ErrLoopbackTimeout, oauth.ErrLoopbackCanceled,
+		oauth.ErrAuthorizeDenied, oauth.ErrAuthorizeFailed,
+		oauth.ErrStateMismatch, oauth.ErrMissingCode,
+		oauth.ErrLoopbackServer, errors.New("unmapped"),
+	} {
+		if got := oauthFailureReason(err); !allowedLoginFailureReasons["oauth"][got] {
+			t.Errorf("oauthFailureReason(%v) = %q, outside the allowed oauth vocabulary", err, got)
+		}
+	}
+}
+
+func TestTokenFailureReason(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"rejected code", oauth.ErrRejected, "token_rejected"},
+		{"canceled", oauth.ErrTokenCanceled, "token_canceled"},
+		{"network", oauth.ErrTokenNetwork, "token_network_error"},
+		{"5xx", oauth.ErrTokenServerError, "token_server_error"},
+		{"429", oauth.ErrTokenRateLimited, "token_rate_limited"},
+		{"client misconfigured", oauth.ErrTokenClientConfig, "token_client_error"},
+		{"rejection we inferred", fmt.Errorf("%w: %w", oauth.ErrRejected, oauth.ErrRejectionUnclassified), "token_rejected_unclassified"},
+		{"other non-2xx", oauth.ErrTokenUnexpectedStatus, "token_http_error"},
+		{"bad body", oauth.ErrTokenResponseInvalid, "token_response_invalid"},
+		{"build failure", oauth.ErrTokenRequestFailed, "token_request_failed"},
+		{"unmapped falls back", errors.New("something new"), "token_exchange_failed"},
+		{"wrapped still matches", fmt.Errorf("ctx: %w", oauth.ErrTokenNetwork), "token_network_error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tokenFailureReason(tt.err); got != tt.want {
+				t.Errorf("tokenFailureReason(%v) = %q, want %q", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTokenFailureReasonOutputsAreInAllowedVocabulary(t *testing.T) {
+	for _, err := range []error{
+		oauth.ErrRejected, oauth.ErrTokenCanceled, oauth.ErrTokenNetwork,
+		oauth.ErrTokenServerError, oauth.ErrTokenUnexpectedStatus,
+		oauth.ErrTokenResponseInvalid, oauth.ErrTokenRequestFailed,
+		oauth.ErrTokenRateLimited, oauth.ErrTokenClientConfig,
+		fmt.Errorf("%w: %w", oauth.ErrRejected, oauth.ErrRejectionUnclassified),
+		errors.New("unmapped"),
+	} {
+		if got := tokenFailureReason(err); !allowedLoginFailureReasons["oauth"][got] {
+			t.Errorf("tokenFailureReason(%v) = %q, outside the allowed oauth vocabulary", err, got)
+		}
+	}
+}
+
+// A rejected code and a 5xx must not collapse into the same reason: one needs a
+// fresh login, the other is worth retrying. This is the whole point of the split.
+func TestTokenFailureReason_SeparatesRetryableFromTerminal(t *testing.T) {
+	terminal := tokenFailureReason(oauth.ErrRejected)
+	retryable := []string{
+		tokenFailureReason(oauth.ErrTokenNetwork),
+		tokenFailureReason(oauth.ErrTokenServerError),
+		tokenFailureReason(oauth.ErrTokenRateLimited),
+		tokenFailureReason(oauth.ErrTokenCanceled),
+	}
+	for _, r := range retryable {
+		if r == terminal {
+			t.Errorf("retryable reason %q collapses into the terminal reason %q", r, terminal)
+		}
 	}
 }
