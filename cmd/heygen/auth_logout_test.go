@@ -57,6 +57,20 @@ func TestAuthLogout_ClearsOAuthBlock(t *testing.T) {
 	}
 }
 
+func TestAuthLogoutConfigFromEnvironmentUsesRevokeOverride(t *testing.T) {
+	t.Setenv("HEYGEN_OAUTH_REVOKE_URL", "http://127.0.0.1:18080/v1/oauth/revoke")
+	t.Setenv("HEYGEN_OAUTH_CLIENT_ID", "local-device-client")
+
+	got := authLogoutConfigFromEnvironment()
+
+	if got.RevokeURL != "http://127.0.0.1:18080/v1/oauth/revoke" {
+		t.Fatalf("RevokeURL = %q, want environment override", got.RevokeURL)
+	}
+	if got.ClientID != "local-device-client" {
+		t.Fatalf("ClientID = %q, want environment override", got.ClientID)
+	}
+}
+
 // TestAuthLogout_ClearsBothBlocks: with the single-credential
 // normalization invariant a fresh post-this-change file holds only one
 // of api_key / oauth, but logout still has to be safe against

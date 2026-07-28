@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/heygen-com/heygen-cli/internal/auth"
@@ -17,10 +19,24 @@ import (
 // best-effort revoke without spawning network requests.
 type authLogoutConfig struct {
 	RevokeURL string
+	ClientID  string
 }
 
 var defaultAuthLogoutConfig = authLogoutConfig{
 	RevokeURL: oauth.DefaultRevokeURL,
+	ClientID:  oauth.DefaultClientID,
+}
+
+func authLogoutConfigFromEnvironment() authLogoutConfig {
+	revokeURL := strings.TrimSpace(os.Getenv("HEYGEN_OAUTH_REVOKE_URL"))
+	if revokeURL == "" {
+		revokeURL = defaultAuthLogoutConfig.RevokeURL
+	}
+	clientID := strings.TrimSpace(os.Getenv("HEYGEN_OAUTH_CLIENT_ID"))
+	if clientID == "" {
+		clientID = defaultAuthLogoutConfig.ClientID
+	}
+	return authLogoutConfig{RevokeURL: revokeURL, ClientID: clientID}
 }
 
 func newAuthLogoutCmd(ctx *cmdContext) *cobra.Command {
@@ -42,7 +58,7 @@ clear is authoritative.
 If only HEYGEN_API_KEY is configured (no stored credentials), there is
 nothing to log out of and the command is a no-op.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAuthLogout(cmd, ctx, defaultAuthLogoutConfig)
+			return runAuthLogout(cmd, ctx, authLogoutConfigFromEnvironment())
 		},
 	}
 	return cmd
@@ -64,7 +80,10 @@ func runAuthLogout(cmd *cobra.Command, ctx *cmdContext, cfg authLogoutConfig) er
 	}
 
 	if hadOAuthSession && tok.RefreshToken != "" {
-		oc := oauth.NewClient(oauth.WithRevokeURL(cfg.RevokeURL))
+		oc := oauth.NewClient(
+			oauth.WithRevokeURL(cfg.RevokeURL),
+			oauth.WithClientID(cfg.ClientID),
+		)
 		// Best-effort revoke; RevokeToken swallows network failures
 		// internally (logout must not hang on a 5xx IdP).
 		revokeCtx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
