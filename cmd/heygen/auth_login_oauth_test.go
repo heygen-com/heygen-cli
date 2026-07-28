@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -1120,6 +1121,70 @@ func TestOAuthFailureReason_BoundedVocabulary(t *testing.T) {
 	} {
 		if got := oauthFailureReason(err); !allowed[got] {
 			t.Errorf("oauthFailureReason(%v) = %q, outside the allowed set", err, got)
+		}
+	}
+}
+
+// allowedLoginFailureReasons is the full AUTH_LOGIN_FAILED vocabulary, per
+// method. These are PostHog analytics dimensions, so the set must stay small
+// and fixed; adding one has to be a deliberate edit here too.
+var allowedLoginFailureReasons = map[string]map[string]bool{
+	"oauth": {
+		// Routed through oauthFailureReason.
+		"oauth_timeout": true, "oauth_canceled": true,
+		"oauth_authorize_denied": true, "oauth_authorize_failed": true,
+		"oauth_state_mismatch": true, "oauth_missing_code": true,
+		"oauth_loopback_failed": true, "oauth_flow_error": true,
+		// Emitted as literals at their own call sites.
+		"internal_error": true, "headless_shell": true, "token_exchange_failed": true,
+	},
+	"api_key": {
+		"internal_error": true, "api_key_aborted": true, "api_key_invalid_input": true,
+	},
+	"device_code": {"device_code_unsupported": true},
+}
+
+// TestOAuthFailureReason_BoundedVocabulary pins only what the classifier
+// returns. Several reasons are emitted as bare literals at their own call
+// sites and would bypass it entirely, so scan the source too: a new literal
+// added without updating allowedLoginFailureReasons fails here.
+func TestAuthLoginFailedLiteralsAreInAllowedVocabulary(t *testing.T) {
+	src, err := os.ReadFile("auth_login.go")
+	if err != nil {
+		t.Fatalf("read auth_login.go: %v", err)
+	}
+	// Matches only literal/literal calls; the classifier-routed sites pass a
+	// function call and are covered by TestOAuthFailureReason.
+	re := regexp.MustCompile(`AuthLoginFailed\("([a-z_]+)",\s*"([a-z_]+)"\)`)
+	matches := re.FindAllStringSubmatch(string(src), -1)
+	if len(matches) == 0 {
+		t.Fatal("no literal AuthLoginFailed call sites found — the scan would pass vacuously")
+	}
+	for _, m := range matches {
+		method, reason := m[1], m[2]
+		allowed, ok := allowedLoginFailureReasons[method]
+		if !ok {
+			t.Errorf("AuthLoginFailed uses unknown method %q; add it to allowedLoginFailureReasons", method)
+			continue
+		}
+		if !allowed[reason] {
+			t.Errorf("AuthLoginFailed(%q, %q) is not in the allowed vocabulary; these are analytics "+
+				"dimensions, so add it deliberately to allowedLoginFailureReasons", method, reason)
+		}
+	}
+}
+
+// The classifier's outputs must also live in the shared allowed set, so the
+// two pins cannot drift apart.
+func TestOAuthFailureReasonOutputsAreInAllowedVocabulary(t *testing.T) {
+	for _, err := range []error{
+		oauth.ErrLoopbackTimeout, oauth.ErrLoopbackCanceled,
+		oauth.ErrAuthorizeDenied, oauth.ErrAuthorizeFailed,
+		oauth.ErrStateMismatch, oauth.ErrMissingCode,
+		oauth.ErrLoopbackServer, errors.New("unmapped"),
+	} {
+		if got := oauthFailureReason(err); !allowedLoginFailureReasons["oauth"][got] {
+			t.Errorf("oauthFailureReason(%v) = %q, outside the allowed oauth vocabulary", err, got)
 		}
 	}
 }
