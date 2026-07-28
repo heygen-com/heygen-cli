@@ -49,12 +49,31 @@ heygen video-agent create --prompt "Demo video" --wait
 # exit 4 on timeout — stdout has partial resource, stderr has the get command to poll manually
 ```
 
+`--wait` only exists on `video create`, `video-agent create`, `video-translate create`,
+and `lipsync create`. Every other async command needs manual polling.
+
 **Manual polling:**
 ```bash
 heygen video create -d '{"...}'       # stdout: JSON with video_id
 heygen video get <video-id>           # stdout: JSON with status field
 heygen video download <video-id>      # downloads file, stdout: JSON with path
 ```
+
+**Stop conditions — a poll loop MUST have all three:**
+
+1. **Stop on a terminal status.** `completed` and `failed` are both terminal. Only
+   `pending` / `processing` / `running` mean keep going.
+2. **Stop on a terminal error — do not retry it.** A non-zero exit is not
+   "not ready yet". `not_found` / `*_not_found` (exit 1) means the id is wrong or the
+   resource was deleted: it will never become ready, so stop. Same for `unauthorized`,
+   `forbidden` (exit 3) and `usage_error` (exit 2). Only `network_error` and a 5xx
+   `internal_error` are worth retrying, with backoff.
+3. **Cap the loop.** Bound it by attempts or wall-clock, and exit non-zero when the cap
+   is hit rather than looping forever.
+
+Poll no faster than every 5-10s, and back off on repeated failures. An unbounded loop
+that treats a 404 as "still processing" will run until something kills it: one has been
+observed issuing ~450 requests an hour for three days after its session ended.
 
 ## Discovering API Fields
 

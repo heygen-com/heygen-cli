@@ -15,8 +15,8 @@ var BackgroundRemovalCreate = &command.Spec{
 	Method:         "POST",
 	BodyEncoding:   "json",
 	Examples: []string{
-		"# Submit a video for background removal\n  heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"}}' --wait",
-		"# Submit with explicit layer set\n  heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"},\"layers\":[\"foreground\",\"mask\",\"background\"]}' --wait",
+		"# Submit a video for background removal (returns a job id; poll with get)\n  heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"}}'",
+		"# Submit with explicit layer set\n  heygen background-removal create -d '{\"video\":{\"type\":\"url\",\"url\":\"https://example.com/clip.mp4\"},\"layers\":[\"foreground\",\"mask\",\"background\"]}'",
 		"# See all available request fields\n  heygen background-removal create --request-schema",
 	},
 	Flags: []command.FlagSpec{
