@@ -66,6 +66,19 @@ type oauthLoginConfig struct {
 	Now            func() time.Time
 }
 
+type deviceLoginConfig struct {
+	ClientID               string
+	DeviceAuthorizationURL string
+	TokenURL               string
+	RevokeURL              string
+	UsersMeBaseURL         string
+	Resource               string
+	Scopes                 string
+	Now                    func() time.Time
+	Sleep                  func(context.Context, time.Duration) error
+	Attended               func() bool
+}
+
 var defaultOAuthLoginConfig = oauthLoginConfig{
 	AuthorizeURL: oauth.DefaultAuthorizeURL,
 	TokenURL:     oauth.DefaultTokenURL,
@@ -133,6 +146,7 @@ func isHeadlessOAuthShell() bool {
 func newAuthLoginCmd(ctx *cmdContext) *cobra.Command {
 	var apiKeyMode bool
 	var oauthMode bool
+	var deviceMode bool
 	var deviceCodeMode bool
 
 	cmd := &cobra.Command{
@@ -154,6 +168,7 @@ so unattended agents and scripts keep working unchanged.
 Flags skip the picker:
   --api-key   Read an API key from stdin (interactive prompt or pipe)
   --oauth     Start the browser OAuth flow directly
+  --device    Start an attended device-code flow for remote terminals
 
 The OAuth flow opens your default browser to
 https://app.heygen.com/oauth/authorize and waits for the redirect on a
@@ -175,14 +190,17 @@ time. heygen auth status reports which is active.`,
 			return runAuthLogin(cmd, ctx, authLoginFlags{
 				apiKeyMode:     apiKeyMode,
 				oauthMode:      oauthMode,
+				deviceMode:     deviceMode,
 				deviceCodeMode: deviceCodeMode,
 			})
 		},
 	}
 	cmd.Flags().BoolVar(&apiKeyMode, "api-key", false, "Skip the picker and use API-key login (read key from stdin)")
 	cmd.Flags().BoolVar(&oauthMode, "oauth", false, "Skip the picker and start the browser OAuth flow")
-	cmd.Flags().BoolVar(&deviceCodeMode, "device-code", false, "Use device-code OAuth flow (not yet supported)")
-	cmd.MarkFlagsMutuallyExclusive("api-key", "oauth")
+	cmd.Flags().BoolVar(&deviceMode, "device", false, "Start attended device-code login (remote/headless terminals)")
+	cmd.Flags().BoolVar(&deviceCodeMode, "device-code", false, "Alias for --device")
+	_ = cmd.Flags().MarkHidden("device-code")
+	cmd.MarkFlagsMutuallyExclusive("api-key", "oauth", "device", "device-code")
 	return cmd
 }
 
@@ -192,6 +210,7 @@ time. heygen auth status reports which is active.`,
 type authLoginFlags struct {
 	apiKeyMode     bool
 	oauthMode      bool
+	deviceMode     bool
 	deviceCodeMode bool
 }
 
@@ -206,6 +225,7 @@ type runAuthLoginDeps struct {
 	nonInteractive   func() bool
 	runPicker        func(ctx context.Context, stdin io.Reader, stderr io.Writer) (loginChoice, error)
 	runOAuth         func(cmd *cobra.Command, ctx *cmdContext) error
+	runDevice        func(cmd *cobra.Command, ctx *cmdContext) error
 	runAPIKey        func(cmd *cobra.Command, ctx *cmdContext) error
 }
 
@@ -219,14 +239,6 @@ var runAuthLoginTestDeps *runAuthLoginDeps
 // picker if both stdin and stdout are TTYs AND no non-interactive
 // override is in effect, else we default to the API-key flow.
 func runAuthLogin(cmd *cobra.Command, ctx *cmdContext, flags authLoginFlags) error {
-	if flags.deviceCodeMode {
-		loginAnalytics.AuthLoginStarted("device_code")
-		loginAnalytics.AuthLoginFailed("device_code", "device_code_unsupported")
-		return clierrors.NewUsage(
-			"--device-code is not yet supported; use the default browser flow or --api-key",
-		)
-	}
-
 	deps := runAuthLoginDeps{}
 	if runAuthLoginTestDeps != nil {
 		deps = *runAuthLoginTestDeps
@@ -248,11 +260,19 @@ func runAuthLogin(cmd *cobra.Command, ctx *cmdContext, flags authLoginFlags) err
 			return runOAuthLogin(c, x, defaultOAuthLoginConfig)
 		}
 	}
+	if deps.runDevice == nil {
+		deps.runDevice = func(c *cobra.Command, x *cmdContext) error {
+			return runDeviceLogin(c, x, deviceLoginConfigFromEnvironment(x))
+		}
+	}
 	if deps.runAPIKey == nil {
 		deps.runAPIKey = runAPIKeyLogin
 	}
 
 	switch {
+	case flags.deviceMode || flags.deviceCodeMode:
+		loginAnalytics.AuthLoginStarted("device")
+		return deps.runDevice(cmd, ctx)
 	case flags.oauthMode:
 		loginAnalytics.AuthLoginStarted("oauth")
 		return deps.runOAuth(cmd, ctx)
@@ -521,6 +541,191 @@ func tokenFailureReason(err error) string {
 	}
 }
 
+func deviceLoginConfigFromEnvironment(ctx *cmdContext) deviceLoginConfig {
+	resource := strings.TrimSpace(os.Getenv("HEYGEN_OAUTH_RESOURCE"))
+	if resource == "" && ctx.configProvider != nil {
+		resource = ctx.configProvider.BaseURL()
+	}
+	return deviceLoginConfig{
+		ClientID:               strings.TrimSpace(os.Getenv("HEYGEN_OAUTH_CLIENT_ID")),
+		DeviceAuthorizationURL: strings.TrimSpace(os.Getenv("HEYGEN_OAUTH_DEVICE_URL")),
+		TokenURL:               strings.TrimSpace(os.Getenv("HEYGEN_OAUTH_TOKEN_URL")),
+		RevokeURL:              strings.TrimSpace(os.Getenv("HEYGEN_OAUTH_REVOKE_URL")),
+		Resource:               resource,
+		Scopes:                 oauth.DefaultScopes,
+		Attended: func() bool {
+			return stdinIsTerminalFunc() && stdoutIsTerminalFunc() && !nonInteractiveEnvFunc()
+		},
+	}
+}
+
+// runDeviceLogin drives an explicitly attended RFC 8628 flow. Unlike the
+// legacy browser flow, it treats /v3/users/me as part of authentication:
+// tokens are not written until identity verification succeeds, and any minted
+// tokens are revoked if verification or the atomic credential write fails.
+func runDeviceLogin(cmd *cobra.Command, ctx *cmdContext, cfg deviceLoginConfig) (err error) {
+	reported := false
+	defer func() {
+		if err != nil && !reported {
+			loginAnalytics.AuthLoginFailed("device", "internal_error")
+		}
+	}()
+
+	attended := cfg.Attended
+	if attended == nil {
+		attended = func() bool {
+			return stdinIsTerminalFunc() && stdoutIsTerminalFunc() && !nonInteractiveEnvFunc()
+		}
+	}
+	if !attended() {
+		reported = true
+		loginAnalytics.AuthLoginFailed("device", "unattended_environment")
+		return clierrors.NewUsage(
+			"device login requires an attended terminal (TTY stdin/stdout) and is disabled in CI or HEYGEN_NONINTERACTIVE mode",
+		)
+	}
+
+	opts := make([]oauth.Option, 0, 7)
+	if cfg.ClientID != "" {
+		opts = append(opts, oauth.WithClientID(cfg.ClientID))
+	}
+	if cfg.DeviceAuthorizationURL != "" {
+		opts = append(opts, oauth.WithDeviceAuthorizationURL(cfg.DeviceAuthorizationURL))
+	}
+	if cfg.TokenURL != "" {
+		opts = append(opts, oauth.WithTokenURL(cfg.TokenURL))
+	}
+	if cfg.RevokeURL != "" {
+		opts = append(opts, oauth.WithRevokeURL(cfg.RevokeURL))
+	}
+	if cfg.Now != nil {
+		opts = append(opts, oauth.WithNow(cfg.Now))
+	}
+	if cfg.Sleep != nil {
+		opts = append(opts, oauth.WithSleep(cfg.Sleep))
+	}
+	oc := oauth.NewClient(opts...)
+
+	resource := strings.TrimRight(cfg.Resource, "/")
+	authorization, err := oc.RequestDeviceAuthorization(
+		cmd.Context(),
+		cfg.Scopes,
+		resource,
+	)
+	if err != nil {
+		reported = true
+		loginAnalytics.AuthLoginFailed("device", "authorization_request_failed")
+		return clierrors.New(fmt.Sprintf("device login could not start: %v", err))
+	}
+
+	fmt.Fprintf(cmd.ErrOrStderr(), "Open %s\n", authorization.VerificationURI)
+	fmt.Fprintf(cmd.ErrOrStderr(), "Enter code: %s\n", authorization.UserCode)
+	fmt.Fprintln(cmd.ErrOrStderr(), "Waiting for approval…")
+
+	tok, err := oc.PollDeviceToken(
+		cmd.Context(),
+		authorization.DeviceCode,
+		authorization.Interval,
+		authorization.ExpiresIn,
+	)
+	if err != nil {
+		reported = true
+		reason := "token_poll_failed"
+		var deviceErr *oauth.DeviceAuthorizationError
+		if errors.As(err, &deviceErr) {
+			reason = deviceErr.Code
+		}
+		loginAnalytics.AuthLoginFailed("device", reason)
+		return clierrors.New(fmt.Sprintf("device login failed: %v", err))
+	}
+
+	probeBase := cfg.UsersMeBaseURL
+	if probeBase == "" && ctx.configProvider != nil {
+		probeBase = ctx.configProvider.BaseURL()
+	}
+	userInfo, err := verifyCurrentUser(cmd.Context(), tok.AccessToken, probeBase)
+	if err != nil {
+		revokeMintedDeviceTokens(cmd.Context(), oc, tok)
+		reported = true
+		loginAnalytics.AuthLoginFailed("device", "identity_verification_failed")
+		return clierrors.NewAuth(
+			"device login minted a token, but /v3/users/me identity verification failed; nothing was saved",
+			"Retry `heygen auth login --device`; if this persists, verify the OAuth client resource and scopes.",
+		)
+	}
+
+	expiresAt := time.Time{}
+	if tok.ExpiresIn > 0 {
+		expiresAt = tok.IssuedAt.Add(time.Duration(tok.ExpiresIn) * time.Second)
+	}
+	clearedAPIKey, err := auth.SaveVerifiedOAuthSession(auth.OAuthTokens{
+		AccessToken:  tok.AccessToken,
+		RefreshToken: tok.RefreshToken,
+		ExpiresAt:    expiresAt,
+		Scope:        tok.Scope,
+		TokenType:    tok.TokenType,
+	}, userInfo)
+	if err != nil {
+		revokeMintedDeviceTokens(cmd.Context(), oc, tok)
+		reported = true
+		loginAnalytics.AuthLoginFailed("device", "credential_persistence_failed")
+		return clierrors.New(fmt.Sprintf("device login could not save credentials; minted tokens were revoked: %v", err))
+	}
+
+	if id := identityKey(userInfo); id != "" {
+		loginAnalytics.IdentifyAccount(id)
+	}
+	credPath := filepath.Join(paths.ConfigDir(), "credentials")
+	message := "Signed in via device authorization; credentials saved to " + credPath
+	if clearedAPIKey {
+		message += " (cleared previously-stored API key)"
+	}
+	payload := map[string]any{
+		"message":         message,
+		"scope":           tok.Scope,
+		"expires_at":      "",
+		"cleared_api_key": clearedAPIKey,
+	}
+	if !expiresAt.IsZero() {
+		payload["expires_at"] = expiresAt.UTC().Format(time.RFC3339)
+	}
+	if userInfo.Username != "" {
+		payload["username"] = userInfo.Username
+	}
+	if userInfo.Email != "" {
+		payload["email"] = userInfo.Email
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return clierrors.New(fmt.Sprintf("failed to encode response: %v", err))
+	}
+	if display := userInfo.DisplayName(); display != "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Logged in as %s\n", display)
+	} else {
+		fmt.Fprintln(cmd.ErrOrStderr(), "Logged in.")
+	}
+	if err = ctx.formatter.Data(data, "", nil); err != nil {
+		return err
+	}
+	reported = true
+	loginAnalytics.AuthLoginCompleted("device")
+	return nil
+}
+
+func revokeMintedDeviceTokens(ctx context.Context, client *oauth.Client, tok *oauth.TokenResponse) {
+	seen := make(map[string]struct{}, 2)
+	for _, token := range []string{tok.AccessToken, tok.RefreshToken} {
+		if token == "" {
+			continue
+		}
+		if _, ok := seen[token]; ok {
+			continue
+		}
+		seen[token] = struct{}{}
+		_ = client.RevokeToken(ctx, token)
+	}
+}
+
 // runOAuthLogin drives the browser + PKCE + loopback dance and persists
 // the resulting tokens.
 func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) (err error) {
@@ -551,7 +756,8 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) (e
 		return clierrors.NewUsage(
 			"cannot complete browser OAuth flow in a headless shell " +
 				"(no TTY and BROWSER=none / HEYGEN_NO_BROWSER=1).\n" +
-				"Use `heygen auth login --api-key` instead, or unset " +
+				"Use `heygen auth login --device` for an attended remote login, " +
+				"use `heygen auth login --api-key`, or unset " +
 				"HEYGEN_NO_BROWSER and re-run from an interactive shell.",
 		)
 	}
@@ -760,6 +966,55 @@ func lookupCurrentUser(ctx context.Context, accessToken, baseURL string) auth.Us
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("User-Agent", "heygen-cli/oauth-login")
 	return runUsersMeRequest(req)
+}
+
+func verifyCurrentUser(ctx context.Context, accessToken, baseURL string) (auth.UserInfo, error) {
+	if accessToken == "" {
+		return auth.UserInfo{}, errors.New("empty access token")
+	}
+	req, err := buildUsersMeRequest(ctx, baseURL)
+	if err != nil {
+		return auth.UserInfo{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("User-Agent", "heygen-cli/device-login")
+	hc := &http.Client{Timeout: 10 * time.Second}
+	resp, err := hc.Do(req) //nolint:gosec // G704: configured HeyGen API or explicit test endpoint
+	if err != nil {
+		return auth.UserInfo{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		return auth.UserInfo{}, fmt.Errorf("users/me returned HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return auth.UserInfo{}, err
+	}
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil ||
+		len(envelope.Data) == 0 ||
+		string(envelope.Data) == "null" {
+		return auth.UserInfo{}, errors.New("users/me returned an invalid response")
+	}
+	var data struct {
+		Username  string `json:"username"`
+		Email     string `json:"email"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+	if err := json.Unmarshal(envelope.Data, &data); err != nil {
+		return auth.UserInfo{}, errors.New("users/me returned an invalid data object")
+	}
+	return auth.UserInfo{
+		Username:  data.Username,
+		Email:     data.Email,
+		FirstName: data.FirstName,
+		LastName:  data.LastName,
+	}, nil
 }
 
 // lookupCurrentUserAPIKey is the api_key equivalent of

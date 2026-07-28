@@ -16,6 +16,49 @@ type OAuthTokens struct {
 	TokenType    string
 }
 
+// SaveVerifiedOAuthSession atomically installs a newly verified OAuth session,
+// its friendly user metadata, and removes any API key it replaces. Device
+// authorization uses this single write so a persistence failure cannot leave a
+// partially-installed credential.
+func SaveVerifiedOAuthSession(tok OAuthTokens, user UserInfo) (clearedAPIKey bool, err error) {
+	if tok.AccessToken == "" {
+		return false, fmt.Errorf("auth: verified OAuth session has no access token")
+	}
+	path := credentialFilePath()
+	existing, format, err := loadCredentialsFile(path)
+	if err != nil {
+		if format != formatAbsent {
+			return false, fmt.Errorf("%w; delete the file and re-run `heygen auth login`", err)
+		}
+		existing = jsonCredentials{}
+	}
+	clearedAPIKey = existing.APIKey != ""
+	existing.APIKey = ""
+	existing.OAuth = &jsonOAuthTokens{
+		AccessToken:  tok.AccessToken,
+		RefreshToken: tok.RefreshToken,
+		Scope:        tok.Scope,
+		TokenType:    tok.TokenType,
+	}
+	if !tok.ExpiresAt.IsZero() {
+		existing.OAuth.ExpiresAt = tok.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	if user.IsZero() {
+		existing.User = nil
+	} else {
+		existing.User = &jsonUserInfo{
+			Email:     user.Email,
+			FirstName: user.FirstName,
+			LastName:  user.LastName,
+			Username:  user.Username,
+		}
+	}
+	if err := writeCredentialsFile(path, existing); err != nil {
+		return false, err
+	}
+	return clearedAPIKey, nil
+}
+
 // SaveOAuthTokens writes the OAuth block to the shared credentials file,
 // preserving any co-located api_key. The file is created with 0600 in a
 // 0700 parent directory.

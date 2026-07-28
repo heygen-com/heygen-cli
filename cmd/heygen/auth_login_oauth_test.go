@@ -460,17 +460,21 @@ func TestAuthLogin_CredentialConflict_SelfHeals(t *testing.T) {
 	}
 }
 
-// TestAuthLogin_DeviceCode_NotYetSupported guards the placeholder flag.
-func TestAuthLogin_DeviceCode_NotYetSupported(t *testing.T) {
+// TestAuthLogin_DeviceCodeCompatibilityAlias keeps the pre-release
+// --device-code spelling working while the public help uses --device.
+func TestAuthLogin_DeviceCodeCompatibilityAlias(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	spy := &dispatchSpy{}
+	runAuthLoginTestDeps = spy.deps()
+	t.Cleanup(func() { runAuthLoginTestDeps = nil })
 
 	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader(""),
 		"auth", "login", "--device-code")
-	if res.ExitCode != 2 {
-		t.Fatalf("ExitCode = %d, want 2", res.ExitCode)
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "not yet supported") {
-		t.Fatalf("stderr = %q, want 'not yet supported'", res.Stderr)
+	if spy.deviceCalls != 1 {
+		t.Fatalf("deviceCalls = %d, want 1", spy.deviceCalls)
 	}
 }
 
