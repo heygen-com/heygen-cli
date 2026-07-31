@@ -4,3 +4,6 @@
 "GET /v3/brand-glossaries":
   - desc: "List brand glossaries"
     cmd: "heygen brand glossaries list"
+"GET /v3/brand-glossaries/{brand_glossary_id}":
+  - desc: "Inspect a glossary's term mappings"
+    cmd: "heygen brand glossaries get <brand-glossary-id>"
