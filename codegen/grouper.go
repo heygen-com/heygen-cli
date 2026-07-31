@@ -74,11 +74,15 @@ var nameOverrides = map[string]string{
 	// single resource. The default heuristic sees {session_id} and uses "get".
 	"GET /v3/video-agents/{session_id}/videos": "list",
 	// Brand kits and brand glossaries share the "Brand" tag, so both land in the
-	// "brand" group and both default to the terminal verb "list", a conflict.
-	// Nest each under a resource sub-group so they read as distinct list commands:
-	// "heygen brand kits list" and "heygen brand glossaries list".
-	"GET /v3/brand-kits":       "kits list",
-	"GET /v3/brand-glossaries": "glossaries list",
+	// "brand" group, but the path root that tells them apart (brand-kits vs
+	// brand-glossaries) is dropped as the group root, leaving only the terminal
+	// verb. The two list endpoints then collide on "list"; the glossary detail
+	// endpoint collapses to a bare "get" that names neither resource (and would
+	// collide once brand-kits grows a detail endpoint). Nest each under a
+	// resource sub-group so they read as distinct commands.
+	"GET /v3/brand-kits":                           "kits list",
+	"GET /v3/brand-glossaries":                     "glossaries list",
+	"GET /v3/brand-glossaries/{brand_glossary_id}": "glossaries get",
 	// POST /v3/templates/{template_id} generates a video FROM an existing
 	// template (EF handler: template_generate); it does not create a template.
 	// The default POST→"create" verb is misleading — there is no create-template

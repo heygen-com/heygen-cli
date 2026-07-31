@@ -49,7 +49,7 @@ var Groups = map[string][]*command.Spec{
 		BackgroundRemovalList,
 	},
 	"brand": {
-		BrandGet,
+		BrandGlossariesGet,
 		BrandGlossariesList,
 		BrandKitsList,
 	},

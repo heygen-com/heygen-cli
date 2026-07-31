@@ -4,15 +4,18 @@ package gen
 
 import "github.com/heygen-com/heygen-cli/internal/command"
 
-var BrandGet = &command.Spec{
+var BrandGlossariesGet = &command.Spec{
 	Group:          "brand",
-	Name:           "get",
+	Name:           "glossaries get",
 	Summary:        "Get Brand Glossary",
 	Description:    "Returns one brand glossary with its full term list, so you can see exactly which terms are remapped and how. Use this to verify a glossary's contents when a generated video pronounces a term unexpectedly.\n\nPronunciations affect generated audio only: a term keeps its original spelling in captions and subtitles while being spoken as its `pronunciation`. Glossaries are created and edited in the HeyGen web app under Brand Kit; this endpoint is read-only.",
 	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"A single brand glossary with its full term list (GET /v3/brand-glossaries/{id}).\",\n      \"properties\": {\n        \"brand_glossary_id\": {\n          \"description\": \"Unique brand glossary ID. Pass it as `brand_glossary_id` when creating a video or translation to apply this glossary.\",\n          \"type\": \"string\"\n        },\n        \"created_at\": {\n          \"description\": \"Creation timestamp (UTC).\",\n          \"type\": \"string\"\n        },\n        \"name\": {\n          \"description\": \"Display name of the brand glossary.\",\n          \"type\": \"string\"\n        },\n        \"terms\": {\n          \"description\": \"Every term mapping in this glossary. Empty when the glossary has no terms yet, in which case applying it has no effect.\",\n          \"items\": {\n            \"description\": \"One glossary entry: a written term and how it should be spoken.\",\n            \"properties\": {\n              \"pronunciation\": {\n                \"description\": \"Respelling handed to the speech synthesizer in place of `term` (for example 'hey-jen' for 'HeyGen'). Affects generated audio only — captions and subtitles keep the original `term` spelling.\",\n                \"type\": \"string\"\n              },\n              \"term\": {\n                \"description\": \"The term as written in a script, matched case-insensitively.\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"term\",\n              \"pronunciation\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        },\n        \"updated_at\": {\n          \"description\": \"Last update timestamp (UTC).\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"brand_glossary_id\",\n        \"name\",\n        \"created_at\",\n        \"updated_at\",\n        \"terms\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
 	Endpoint:       "/v3/brand-glossaries/{brand_glossary_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Inspect a glossary's term mappings\n  heygen brand glossaries get <brand-glossary-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "brand-glossary-id", Param: "brand_glossary_id", Help: ""},
 	},
