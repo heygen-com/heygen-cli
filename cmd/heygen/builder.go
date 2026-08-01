@@ -369,9 +369,30 @@ func restoreRequiredFlagAnnotations(cmd *cobra.Command) {
 	})
 }
 
+// stripBackticks removes backticks from flag help text.
+//
+// pflag's UnquoteUsage treats the first backticked word in a usage string as the
+// flag's value-type placeholder: it prints that word where "string" would go and
+// strips the quotes from the text. Help comes verbatim from OpenAPI descriptions,
+// where backticks are ordinary Markdown, so `next_token` in a sentence renders as
+// "--token next_token" and misreports the flag's type. Drop them at registration
+// rather than policing prose in the spec.
+func stripBackticks(s string) string {
+	return strings.ReplaceAll(s, "`", "")
+}
+
 // registerFlag adds a typed flag to the Cobra command based on the FlagSpec.
 func registerFlag(cmd *cobra.Command, flag command.FlagSpec) {
-	helpText := flag.Help
+	// Only the description is sanitized. Descriptions are Markdown prose, where a
+	// backtick is formatting; enum members are wire values compared verbatim by
+	// validateFlag, so this never rewrites one.
+	//
+	// The distinction is about what we're willing to alter, not about rendered
+	// output: pflag strips the first backtick pair while rendering regardless, so
+	// a (hypothetical) backticked enum member displays without its backticks
+	// either way. No enum in the spec carries one, and none plausibly would —
+	// they are identifiers the client sends, not documentation.
+	helpText := stripBackticks(flag.Help)
 	if flag.Required {
 		helpText += " (required)"
 	}

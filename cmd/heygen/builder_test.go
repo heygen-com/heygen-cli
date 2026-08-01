@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/heygen-com/heygen-cli/internal/analytics"
 	"github.com/heygen-com/heygen-cli/internal/command"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
@@ -365,6 +367,73 @@ func TestGenBuilder_HelpShowsRequiredAnnotation(t *testing.T) {
 	}
 	if strings.Contains(res.Stdout, "Video orientation (required)") {
 		t.Fatalf("stdout = %s, optional flag should not be marked required", res.Stdout)
+	}
+}
+
+// Backticks are ordinary Markdown in OpenAPI descriptions, but pflag reads the
+// first backticked word as the flag's value-type placeholder. Untreated, the
+// shipped help reads "--token next_token" instead of "--token string".
+func TestGenBuilder_HelpStripsBackticksFromSpecDescriptions(t *testing.T) {
+	spec := &command.Spec{
+		Group:    "brand",
+		Name:     "glossaries list",
+		Summary:  "List Brand Glossaries",
+		Endpoint: "/v3/brand-glossaries",
+		Method:   "GET",
+		Flags: []command.FlagSpec{
+			{Name: "token", Type: "string", Source: "query", JSONName: "token",
+				Help: "Opaque pagination cursor from a previous response's `next_token`. Omit for the first page."},
+		},
+		Examples: []string{"heygen brand glossaries list"},
+	}
+
+	res := runGenCommand(t, "http://example.test", "test-key", spec, "glossaries", "list", "--help")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "--token string") {
+		t.Errorf("stdout should show the flag's real type:\n%s", res.Stdout)
+	}
+	if strings.Contains(res.Stdout, "--token next_token") {
+		t.Errorf("backticked word leaked into the type placeholder:\n%s", res.Stdout)
+	}
+	// The word itself must survive in the prose, just without the backticks.
+	if !strings.Contains(res.Stdout, "previous response's next_token") {
+		t.Errorf("help text should keep the word, minus backticks:\n%s", res.Stdout)
+	}
+	if strings.Contains(res.Stdout, "`") {
+		t.Errorf("no backticks should reach the rendered help:\n%s", res.Stdout)
+	}
+}
+
+// Sanitizing must reach the description and stop there. Enum members are compared
+// verbatim when the flag is validated, so an "allowed:" list that differs from
+// what is accepted is worse than a mangled type placeholder: it documents a value
+// the command rejects.
+//
+// Asserts on the registered usage string rather than on --help output, because
+// pflag rewrites backticks as it renders. Only the stored string distinguishes
+// "we left the enum alone" from "pflag hid the difference".
+func TestRegisterFlag_SanitizesProseButNotEnumValues(t *testing.T) {
+	cmd := &cobra.Command{Use: "create"}
+	registerFlag(cmd, command.FlagSpec{
+		Name:     "mode",
+		Type:     "string",
+		Source:   "body",
+		JSONName: "mode",
+		Help:     "Rendering mode for `output`",
+		// A backticked enum member is a spec bug; the CLI must still report the
+		// value it will actually accept.
+		Enum: []string{"`fast`", "quality"},
+	})
+
+	usage := cmd.Flags().Lookup("mode").Usage
+	if strings.Contains(usage, "`output`") {
+		t.Errorf("description backticks should be stripped, got: %q", usage)
+	}
+	if !strings.Contains(usage, "(allowed: `fast`, quality)") {
+		t.Errorf("enum members must survive verbatim, got: %q", usage)
 	}
 }
 
