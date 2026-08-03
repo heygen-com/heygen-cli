@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -159,15 +160,15 @@ func TestGroupEndpoints_BodyFlagsSkipHiddenFields(t *testing.T) {
 }
 
 // TestGroupEndpoints_BodyFlagsRespectXCliDefault locks in the per-surface default
-// override. Background: ``aspect_ratio`` defaults to ``16:9`` over the HTTP API
+// override. Background: “aspect_ratio“ defaults to “16:9“ over the HTTP API
 // (existing callers rely on it), but agent-driven CLI/MCP flows are better off
-// defaulting to ``auto`` so the output canvas tracks the source orientation.
-// EF authors signal this via ``json_schema_extra={"x-cli-default": "auto"}``,
-// which lands in the spec next to the API ``default``. Codegen must surface the
+// defaulting to “auto“ so the output canvas tracks the source orientation.
+// EF authors signal this via “json_schema_extra={"x-cli-default": "auto"}“,
+// which lands in the spec next to the API “default“. Codegen must surface the
 // override, not the API value.
 //
-// The test spec mirrors that shape on the ``aspect_ratio`` field plus a control
-// field (``fps``) that has only ``default`` so we don't accidentally break the
+// The test spec mirrors that shape on the “aspect_ratio“ field plus a control
+// field (“fps“) that has only “default“ so we don't accidentally break the
 // fallback path.
 func TestGroupEndpoints_BodyFlagsRespectXCliDefault(t *testing.T) {
 	doc := loadGroupTestSpec(t)
@@ -419,6 +420,217 @@ func TestGroupEndpoints_SubGroupNaming(t *testing.T) {
 		}
 	}
 	t.Error("video 'caption get' not found")
+}
+
+func commandNames(specs []*command.Spec) []string {
+	names := make([]string, 0, len(specs))
+	for _, s := range specs {
+		names = append(names, s.Name)
+	}
+	return names
+}
+
+// A group's primary root just restates the group name, so it is dropped:
+// "/v3/videos/{video_id}" in group "video" is "get", not "videos get".
+func TestGroupEndpoints_PrimaryRootDropped(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	groups, _, err := GroupEndpoints(doc, loadTestExamples(t))
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	for _, name := range commandNames(groups["video"]) {
+		if strings.HasPrefix(name, "videos ") {
+			t.Errorf("command %q kept the shared path root; want it dropped", name)
+		}
+	}
+}
+
+// When one tag spans several resources the root is the only thing telling them
+// apart, so it survives as a sub-group — minus the group prefix, so the noun
+// doesn't double ("brand brand-kits get").
+func TestGroupEndpoints_MultiResourceGroupKeepsPathRoot(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	groups, _, err := GroupEndpoints(doc, loadTestExamples(t))
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	got := commandNames(groups["brand"])
+	slices.Sort(got)
+	want := []string{"glossaries get", "glossaries list", "kits get", "kits list"}
+	if !slices.Equal(got, want) {
+		t.Errorf("brand commands = %v, want %v", got, want)
+	}
+}
+
+// A root that normalizes to the group name is redundant on its own terms, so one
+// foreign-rooted endpoint joining a group must not rename the commands already
+// in it. Guards a silent mass-rename of a shipped public interface.
+func TestGroupEndpoints_ForeignRootDoesNotRenameGroup(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	groups, _, err := GroupEndpoints(doc, loadTestExamples(t))
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	got := commandNames(groups["asset"])
+	slices.Sort(got)
+	// "create" from /v3/assets keeps its name despite /v3/uploads sharing the tag.
+	want := []string{"create", "uploads list"}
+	if !slices.Equal(got, want) {
+		t.Errorf("asset commands = %v, want %v", got, want)
+	}
+}
+
+// Same protection as above, for a group whose primary root is pinned rather than
+// derived. Normalization can't recognize "video-translations" as belonging to
+// "video-translate", so this is the case that regressed when the primary root was
+// inferred from whether a group's endpoints agreed.
+func TestGroupEndpoints_ForeignRootDoesNotRenamePinnedGroup(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	groups, _, err := GroupEndpoints(doc, loadTestExamples(t))
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	got := commandNames(groups["video-translate"])
+	slices.Sort(got)
+	want := []string{"create", "dubs list"}
+	if !slices.Equal(got, want) {
+		t.Errorf("video-translate commands = %v, want %v", got, want)
+	}
+}
+
+// groupEndpointsFromYAML runs the real pipeline over an inline spec, so the
+// guards below are pinned through GroupEndpoints rather than by calling a
+// validator directly — removing the call site must fail these tests.
+func groupEndpointsFromYAML(t *testing.T, spec string) error {
+	t.Helper()
+	doc, err := openapi3.NewLoader().LoadFromData([]byte(spec))
+	if err != nil {
+		t.Fatalf("loading inline spec: %v", err)
+	}
+	_, _, err = GroupEndpoints(doc, Examples{})
+	return err
+}
+
+const ambiguousRootsSpec = `
+openapi: 3.0.0
+info: {title: t, version: "1"}
+paths:
+  /v3/assets:
+    post: {tags: [Assets], summary: Create an asset, responses: {"201": {description: Created}}}
+  /v3/asset:
+    get: {tags: [Assets], summary: List assets, responses: {"200": {description: OK}}}
+`
+
+// Both roots normalize to "asset" so both look primary, and the differing verbs
+// mean the generated names never collide. Codegen must reject the mapping.
+func TestGroupEndpoints_RejectsTwoPrimaryRoots(t *testing.T) {
+	err := groupEndpointsFromYAML(t, ambiguousRootsSpec)
+	if err == nil {
+		t.Fatal("expected an error for two primary roots in one group")
+	}
+	for _, want := range []string{`"asset"`, `"assets"`, "groupPrimaryRoots"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should mention %s", err, want)
+		}
+	}
+}
+
+const collidingSubGroupSpec = `
+openapi: 3.0.0
+info: {title: t, version: "1"}
+paths:
+  /v3/brand-glossaries:
+    get: {tags: [Brand], summary: List glossaries, responses: {"200": {description: OK}}}
+  /v3/brand-kits:
+    get: {tags: [Brand], summary: List kits, responses: {"200": {description: OK}}}
+  /v3/kits:
+    post: {tags: [Brand], summary: Create a kit, responses: {"201": {description: Created}}}
+`
+
+// Prefix trimming is many-to-one too: "brand-kits" trims to "kits", and a
+// sibling root literally named "kits" keeps it. Different verbs again mean no
+// name collision, so the mapping check is what catches it.
+func TestGroupEndpoints_RejectsCollidingSubGroups(t *testing.T) {
+	err := groupEndpointsFromYAML(t, collidingSubGroupSpec)
+	if err == nil {
+		t.Fatal("expected an error for two roots mapping onto one sub-group")
+	}
+	for _, want := range []string{`"brand-kits"`, `"kits"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should mention %s", err, want)
+		}
+	}
+}
+
+const unversionedPrefixSpec = `
+openapi: 3.0.0
+info: {title: t, version: "1"}
+paths:
+  /api/v1/videos:
+    get: {tags: [Videos], summary: List videos, responses: {"200": {description: OK}}}
+`
+
+// Naming skips exactly one leading segment. A two-segment prefix would otherwise
+// treat "api" as the root and ride "v1 videos" onto every command in the spec,
+// with nothing to collide against.
+func TestGroupEndpoints_RejectsUnversionedPrefix(t *testing.T) {
+	err := groupEndpointsFromYAML(t, unversionedPrefixSpec)
+	if err == nil {
+		t.Fatal("expected an error for a path not starting with a version segment")
+	}
+	if !strings.Contains(err.Error(), `"api"`) {
+		t.Errorf("error %q should name the unexpected prefix segment", err)
+	}
+}
+
+const paramRootSpec = `
+openapi: 3.0.0
+info: {title: t, version: "1"}
+paths:
+  /v3/{video_id}:
+    get:
+      tags: [Videos]
+      summary: Get a video
+      parameters:
+        - name: video_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses: {"200": {description: OK}}
+`
+
+// The one shape where buildSpec's root reconcile and validateRootSubGroups would
+// disagree: the builder skips a {param} root, the validator would treat it as a
+// sub-group token. Reject it so the two can't diverge, and so the command isn't a
+// bare verb naming no resource.
+func TestGroupEndpoints_RejectsParameterAsResourceRoot(t *testing.T) {
+	err := groupEndpointsFromYAML(t, paramRootSpec)
+	if err == nil {
+		t.Fatal("expected an error for a {param} in the resource-root position")
+	}
+	if !strings.Contains(err.Error(), "{video_id}") {
+		t.Errorf("error %q should name the offending segment", err)
+	}
+}
+
+const noResourceSegmentSpec = `
+openapi: 3.0.0
+info: {title: t, version: "1"}
+paths:
+  /widgets:
+    get: {tags: [Widgets], summary: List widgets, responses: {"200": {description: OK}}}
+`
+
+// Without a resource segment the command is a bare verb, which can alias a
+// sibling resource instead of colliding with it.
+func TestGroupEndpoints_RejectsPathWithoutResourceSegment(t *testing.T) {
+	err := groupEndpointsFromYAML(t, noResourceSegmentSpec)
+	if err == nil {
+		t.Fatal("expected an error for a path with no resource segment")
+	}
+	if !strings.Contains(err.Error(), "/widgets") {
+		t.Errorf("error %q should name the offending path", err)
+	}
 }
 
 func TestGroupEndpoints_SingletonGetUsesGetVerb(t *testing.T) {

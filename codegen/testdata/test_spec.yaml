@@ -168,6 +168,34 @@ paths:
         "201":
           description: Created
 
+  # Tagged into the "asset" group but rooted elsewhere. The asset commands above
+  # must keep their names; only this one carries a sub-group.
+  /v3/uploads:
+    get:
+      tags: [Assets]
+      summary: List uploads
+      responses:
+        "200":
+          description: OK
+
+  # Same shape, but for a group whose primary root is pinned rather than derived
+  # by normalization ("Video Translate" vs /v3/video-translations).
+  /v3/video-translations:
+    post:
+      tags: [Video Translate]
+      summary: Create a video translation
+      responses:
+        "201":
+          description: Created
+
+  /v3/dubs:
+    get:
+      tags: [Video Translate]
+      summary: List dubs
+      responses:
+        "200":
+          description: OK
+
   /v3/avatars:
     get:
       tags: [Avatars]
@@ -248,6 +276,52 @@ paths:
                 properties:
                   data:
                     type: object
+
+  # One tag spanning two resources: the path root, not the tag, is what tells
+  # brand kits and brand glossaries apart.
+  /v3/brand-kits:
+    get:
+      tags: [Brand]
+      summary: List brand kits
+      responses:
+        "200":
+          description: OK
+
+  /v3/brand-kits/{brand_kit_id}:
+    get:
+      tags: [Brand]
+      summary: Get a brand kit
+      parameters:
+        - name: brand_kit_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /v3/brand-glossaries:
+    get:
+      tags: [Brand]
+      summary: List brand glossaries
+      responses:
+        "200":
+          description: OK
+
+  /v3/brand-glossaries/{brand_glossary_id}:
+    get:
+      tags: [Brand]
+      summary: Get a brand glossary
+      parameters:
+        - name: brand_glossary_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
 
   /v1/legacy:
     get:

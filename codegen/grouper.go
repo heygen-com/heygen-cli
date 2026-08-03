@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -58,14 +59,21 @@ import (
 // Used by the builder for group command help text.
 type GroupDescriptions map[string]string
 
+// versionSegment enforces that the leading path segment naming skips really is a
+// version. buildSpec drops segment 0 unconditionally; this is what makes that safe.
+var versionSegment = regexp.MustCompile(`^v\d+$`)
+
 var descriptionOverrides = GroupDescriptions{
 	"voice":   "Create speech audio and manage voices",
 	"webhook": "Create, list, and manage webhook endpoints and events",
 }
 
 // nameOverrides maps "METHOD /path" to a custom command name.
-// Use this when the default naming algorithm produces conflicts
-// (e.g., two POST endpoints in the same group both map to "create").
+//
+// Reach for this only when the derived *verb* is semantically wrong, i.e. the
+// HTTP method doesn't mean what it usually means for this endpoint. Telling two
+// resources in one group apart is not a reason: buildSpec keeps the path root
+// as a sub-group when a group spans several resources, so those name themselves.
 var nameOverrides = map[string]string{
 	// POST /v3/video-agents/{session_id} sends a message to an existing session,
 	// not "create". Without this, it conflicts with POST /v3/video-agents (create).
@@ -73,22 +81,31 @@ var nameOverrides = map[string]string{
 	// GET /v3/video-agents/{session_id}/videos returns a list of videos, not a
 	// single resource. The default heuristic sees {session_id} and uses "get".
 	"GET /v3/video-agents/{session_id}/videos": "list",
-	// Brand kits and brand glossaries share the "Brand" tag, so both land in the
-	// "brand" group, but the path root that tells them apart (brand-kits vs
-	// brand-glossaries) is dropped as the group root, leaving only the terminal
-	// verb. The two list endpoints then collide on "list"; the glossary detail
-	// endpoint collapses to a bare "get" that names neither resource (and would
-	// collide once brand-kits grows a detail endpoint). Nest each under a
-	// resource sub-group so they read as distinct commands.
-	"GET /v3/brand-kits":                           "kits list",
-	"GET /v3/brand-glossaries":                     "glossaries list",
-	"GET /v3/brand-glossaries/{brand_glossary_id}": "glossaries get",
 	// POST /v3/templates/{template_id} generates a video FROM an existing
 	// template (EF handler: template_generate); it does not create a template.
 	// The default POST→"create" verb is misleading — there is no create-template
 	// endpoint in the API (templates are authored in the HeyGen app), so "create"
 	// would imply a capability that doesn't exist.
 	"POST /v3/templates/{template_id}": "generate",
+}
+
+// groupPrimaryRoots pins the path root that restates a group, for the groups
+// where the OpenAPI tag and the path noun are different words and normalizing
+// the root therefore can't recognize it.
+//
+// One entry per irregular group, not per endpoint, and it does not change as
+// endpoints are added — that stability is the point. A group absent here has
+// its primary root derived by normalization (see isPrimaryRoot); add an entry
+// only when a group's own root is wrongly kept as a sub-group.
+//
+// An umbrella group whose tag spans several resources ("brand" over
+// /v3/brand-kits and /v3/brand-glossaries) correctly has NO primary root — every
+// root becomes a sub-group and the resources name themselves. Don't add an entry
+// to force one.
+var groupPrimaryRoots = map[string]string{
+	// Tag "Video Translate" → group "video-translate", but the paths are
+	// /v3/video-translations, which normalizes to "video-translation".
+	"video-translate": "video-translations",
 }
 
 // groupOverrides reassigns an endpoint to a different CLI group than its
@@ -151,14 +168,27 @@ func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDe
 				continue
 			}
 
-			tag := "Other"
-			if len(op.Tags) > 0 {
-				tag = op.Tags[0]
+			groupName := resolveGroupName(path, method, op)
+			// Naming assumes /<version>/<resource>/...: segment 0 is the version and
+			// segment 1 is a literal resource root. None of these violations collides
+			// with anything, so each would otherwise ship as a quietly wrong name — a
+			// missing resource segment collapses the command to a bare verb, an
+			// unrecognized prefix rides along as a sub-group on every command in the
+			// spec, and a {param} root is the one shape where buildSpec's reconcile
+			// and validateRootSubGroups would disagree about what the root even is.
+			segments := pathSegments(path)
+			if len(segments) < 2 {
+				return nil, nil, fmt.Errorf("path %q has no resource segment after the version prefix", path)
 			}
-
-			groupName := deriveGroupName(tag)
-			if override, ok := groupOverrides[method+" "+path]; ok {
-				groupName = override
+			if !versionSegment.MatchString(segments[0]) {
+				return nil, nil, fmt.Errorf(
+					"path %q does not begin with a version segment (got %q): teach buildSpec the new prefix shape instead of letting every command inherit it as a sub-group",
+					path, segments[0])
+			}
+			if strings.HasPrefix(segments[1], "{") {
+				return nil, nil, fmt.Errorf(
+					"path %q has a parameter (%q) where the resource root belongs: the command would be a bare verb naming no resource",
+					path, segments[1])
 			}
 			spec := buildSpec(path, method, op, pathItem, groupName, examples)
 			groups[groupName] = append(groups[groupName], spec)
@@ -172,6 +202,10 @@ func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDe
 		})
 	}
 
+	if err := validateRootSubGroups(groups); err != nil {
+		return nil, nil, err
+	}
+
 	if err := validateCommandNames(groups); err != nil {
 		return nil, nil, err
 	}
@@ -181,6 +215,89 @@ func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDe
 	}
 
 	return groups, descriptions, nil
+}
+
+// pathSegments splits an endpoint into its segments, version prefix first. The
+// one place this parse lives: GroupEndpoints, buildSpec, and validateRootSubGroups
+// all index the same way, and them drifting apart is what let a {param} root mean
+// different things to the builder and the validator.
+func pathSegments(path string) []string {
+	return strings.Split(strings.Trim(path, "/"), "/")
+}
+
+// resolveGroupName maps an operation to its CLI group: the first OpenAPI tag,
+// unless groupOverrides reassigns the endpoint.
+func resolveGroupName(path, method string, op *openapi3.Operation) string {
+	tag := "Other"
+	if len(op.Tags) > 0 {
+		tag = op.Tags[0]
+	}
+	if override, ok := groupOverrides[method+" "+path]; ok {
+		return override
+	}
+	return deriveGroupName(tag)
+}
+
+// rootSubGroup returns the sub-group token a path root contributes to a command
+// name: "" when the root is the group's own and is dropped, otherwise the root
+// minus the group prefix so the noun doesn't double.
+func rootSubGroup(groupName, root string) string {
+	if isPrimaryRoot(groupName, root) {
+		return ""
+	}
+	return strings.TrimPrefix(root, groupName+"-")
+}
+
+// validateRootSubGroups rejects a group where two distinct path roots produce the
+// same sub-group token, which would present two REST resources as one.
+//
+// Both halves of the root transformation are many-to-one. Normalization maps
+// "asset" and "assets" onto the same group, so both can look primary and both get
+// dropped. Prefix trimming maps "brand-kits" and "kits" onto the same token. In
+// either case the resources only collide, and so only fail loudly, when their
+// terminal verbs happen to match; with a GET on one and a POST on the other the
+// names differ and nothing catches it. Checking the mapping itself does.
+func validateRootSubGroups(groups command.Groups) error {
+	for _, group := range slices.Sorted(maps.Keys(groups)) {
+		owner := make(map[string]string) // sub-group token → the root that claimed it
+		for _, spec := range groups[group] {
+			root := pathSegments(spec.Endpoint)[1]
+			sub := rootSubGroup(group, root)
+			prev, seen := owner[sub]
+			if !seen {
+				owner[sub] = root
+				continue
+			}
+			if prev == root {
+				continue
+			}
+			a, b := min(prev, root), max(prev, root)
+			if sub == "" {
+				return fmt.Errorf(
+					"group %q has two primary path roots (%q and %q): pin the group's own root in groupPrimaryRoots so the other becomes a sub-group",
+					group, a, b)
+			}
+			return fmt.Errorf(
+				"group %q maps path roots %q and %q onto the same sub-group %q: distinct resources would share a command prefix",
+				group, a, b, sub)
+		}
+	}
+	return nil
+}
+
+// isPrimaryRoot reports whether root is the one path root that restates
+// groupName and is therefore dropped from command names.
+//
+// Deliberately a function of (group, root) alone — never of which other roots
+// happen to exist. Deciding by comparing a group's endpoints against each other
+// would make naming cardinality-dependent: the first endpoint to arrive under a
+// second root would push the group off its "all roots agree" case and rename
+// every command already in it, with no collision to fail the build.
+func isPrimaryRoot(groupName, root string) bool {
+	if pinned, ok := groupPrimaryRoots[groupName]; ok {
+		return root == pinned
+	}
+	return deriveGroupName(root) == groupName
 }
 
 // buildSpec creates a command.Spec from an OpenAPI operation.
@@ -193,11 +310,28 @@ func buildSpec(
 ) *command.Spec {
 	contentType := detectContentType(op)
 
-	// Parse path segments after version prefix + group root.
-	segments := strings.Split(strings.Trim(path, "/"), "/")
-	var remaining []string
-	if len(segments) > 2 {
-		remaining = segments[2:]
+	// Parse path segments after the version prefix, then reconcile the root
+	// segment against the group.
+	//
+	// Usually the root restates the group ("/v3/videos" in group "video") and is
+	// dropped, so the name is built from what follows. But a group is an OpenAPI
+	// tag, not a path prefix, and one tag can span several resources: "Brand"
+	// covers both /v3/brand-kits and /v3/brand-glossaries. There the root is the
+	// only thing distinguishing them, so keep it as a sub-group, minus the group
+	// prefix so the noun doesn't double ("brand-glossaries" → "glossaries",
+	// giving "brand glossaries get" rather than "brand brand-glossaries get").
+	//
+	// Which root counts as the group's own is decided per (group, root) by
+	// isPrimaryRoot, independently of what else the spec contains, so adding a
+	// resource to a group never renames the commands already in it.
+	segments := pathSegments(path)
+	remaining := append([]string(nil), segments[1:]...)
+	if !strings.HasPrefix(remaining[0], "{") {
+		if sub := rootSubGroup(groupName, remaining[0]); sub == "" {
+			remaining = remaining[1:]
+		} else {
+			remaining[0] = sub
+		}
 	}
 
 	// Walk segments: literals → sub-groups, params → args
