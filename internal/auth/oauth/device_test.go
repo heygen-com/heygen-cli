@@ -57,6 +57,31 @@ func TestRequestDeviceAuthorization(t *testing.T) {
 	}
 }
 
+func TestRequestDeviceAuthorizationClampsIntervalToMinimum(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"device_code":      "device-secret",
+			"user_code":        "ABCD-EFGH",
+			"verification_uri": "https://app.heygen.com/oauth/device",
+			"expires_in":       600,
+			"interval":         1,
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithDeviceAuthorizationURL(server.URL),
+		WithHTTPClient(server.Client()),
+	)
+	got, err := client.RequestDeviceAuthorization(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("RequestDeviceAuthorization: %v", err)
+	}
+	if got.Interval != 5 {
+		t.Fatalf("interval = %d, want 5", got.Interval)
+	}
+}
+
 func TestRequestDeviceAuthorizationRejectsUnsafeVerificationURI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -158,6 +183,36 @@ func TestPollDeviceTokenPendingSlowDownThenSuccess(t *testing.T) {
 		if waits[i] != want[i] {
 			t.Fatalf("waits = %v, want %v", waits, want)
 		}
+	}
+}
+
+func TestPollDeviceTokenClampsIntervalToMinimum(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "access",
+			"expires_in":   3600,
+			"token_type":   "Bearer",
+		})
+	}))
+	defer server.Close()
+
+	now := time.Unix(1_000, 0)
+	var waits []time.Duration
+	client := NewClient(
+		WithTokenURL(server.URL),
+		WithHTTPClient(server.Client()),
+		WithNow(func() time.Time { return now }),
+		WithSleep(func(_ context.Context, d time.Duration) error {
+			waits = append(waits, d)
+			now = now.Add(d)
+			return nil
+		}),
+	)
+	if _, err := client.PollDeviceToken(context.Background(), "device-secret", 1, 600); err != nil {
+		t.Fatalf("PollDeviceToken: %v", err)
+	}
+	if len(waits) != 1 || waits[0] != 5*time.Second {
+		t.Fatalf("waits = %v, want [5s]", waits)
 	}
 }
 

@@ -91,7 +91,7 @@ func (c *Client) RequestDeviceAuthorization(
 	if !safeUserCode(result.UserCode) {
 		return nil, errors.New("oauth: unsafe device user code")
 	}
-	if result.Interval <= 0 {
+	if result.Interval < 5 {
 		result.Interval = 5
 	}
 	if !safeVerificationURI(result.VerificationURI) {
@@ -113,7 +113,7 @@ func (c *Client) PollDeviceToken(
 	if deviceCode == "" {
 		return nil, errors.New("oauth: device code must be non-empty")
 	}
-	if intervalSeconds <= 0 {
+	if intervalSeconds < 5 {
 		intervalSeconds = 5
 	}
 	if expiresInSeconds <= 0 {
