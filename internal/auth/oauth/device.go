@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const (
@@ -86,6 +87,9 @@ func (c *Client) RequestDeviceAuthorization(
 	if result.DeviceCode == "" || result.UserCode == "" ||
 		result.VerificationURI == "" || result.ExpiresIn <= 0 {
 		return nil, errors.New("oauth: incomplete device authorization response")
+	}
+	if !safeUserCode(result.UserCode) {
+		return nil, errors.New("oauth: unsafe device user code")
 	}
 	if result.Interval <= 0 {
 		result.Interval = 5
@@ -188,6 +192,11 @@ func (c *Client) pollDeviceTokenOnce(
 		if json.Unmarshal(body, &payload) == nil && payload.Error != "" {
 			return nil, payload.Error, nil
 		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			// Some gateways return a bare 429 instead of the RFC 8628
+			// slow_down payload. Preserve the protocol's backoff behavior.
+			return nil, "slow_down", nil
+		}
 		return nil, "", decodeRedactedDeviceError(body, resp.StatusCode)
 	}
 	var raw map[string]any
@@ -210,6 +219,15 @@ func decodeRedactedDeviceError(body []byte, status int) error {
 		return &DeviceAuthorizationError{Code: payload.Error}
 	}
 	return fmt.Errorf("oauth: device endpoint returned HTTP %d", status)
+}
+
+func safeUserCode(value string) bool {
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func safeVerificationURI(raw string) bool {

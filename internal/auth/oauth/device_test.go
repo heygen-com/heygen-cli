@@ -78,6 +78,27 @@ func TestRequestDeviceAuthorizationRejectsUnsafeVerificationURI(t *testing.T) {
 	}
 }
 
+func TestRequestDeviceAuthorizationRejectsTerminalControlInUserCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"device_code":      "device-secret",
+			"user_code":        "ABCD-\x1b[31mEFGH",
+			"verification_uri": "https://app.heygen.com/oauth/device",
+			"expires_in":       600,
+			"interval":         5,
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithDeviceAuthorizationURL(server.URL),
+		WithHTTPClient(server.Client()),
+	)
+	if _, err := client.RequestDeviceAuthorization(context.Background(), "", ""); err == nil {
+		t.Fatal("expected terminal control characters in user_code to be rejected")
+	}
+}
+
 func TestPollDeviceTokenPendingSlowDownThenSuccess(t *testing.T) {
 	var mu sync.Mutex
 	polls := 0
@@ -130,6 +151,49 @@ func TestPollDeviceTokenPendingSlowDownThenSuccess(t *testing.T) {
 		t.Fatalf("token = %+v", tok)
 	}
 	want := []time.Duration{5 * time.Second, 5 * time.Second, 10 * time.Second}
+	if len(waits) != len(want) {
+		t.Fatalf("waits = %v, want %v", waits, want)
+	}
+	for i := range want {
+		if waits[i] != want[i] {
+			t.Fatalf("waits = %v, want %v", waits, want)
+		}
+	}
+}
+
+func TestPollDeviceTokenTreatsBare429AsSlowDown(t *testing.T) {
+	var polls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		polls++
+		if polls == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte("rate limited"))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "access",
+			"expires_in":   3600,
+			"token_type":   "Bearer",
+		})
+	}))
+	defer server.Close()
+
+	now := time.Unix(1_000, 0)
+	var waits []time.Duration
+	client := NewClient(
+		WithTokenURL(server.URL),
+		WithHTTPClient(server.Client()),
+		WithNow(func() time.Time { return now }),
+		WithSleep(func(_ context.Context, d time.Duration) error {
+			waits = append(waits, d)
+			now = now.Add(d)
+			return nil
+		}),
+	)
+	if _, err := client.PollDeviceToken(context.Background(), "device-secret", 5, 600); err != nil {
+		t.Fatalf("PollDeviceToken: %v", err)
+	}
+	want := []time.Duration{5 * time.Second, 10 * time.Second}
 	if len(waits) != len(want) {
 		t.Fatalf("waits = %v, want %v", waits, want)
 	}
