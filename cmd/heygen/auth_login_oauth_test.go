@@ -460,17 +460,21 @@ func TestAuthLogin_CredentialConflict_SelfHeals(t *testing.T) {
 	}
 }
 
-// TestAuthLogin_DeviceCode_NotYetSupported guards the placeholder flag.
-func TestAuthLogin_DeviceCode_NotYetSupported(t *testing.T) {
+// TestAuthLogin_DeviceCodeCompatibilityAlias keeps the pre-release
+// --device-code spelling working while the public help uses --device.
+func TestAuthLogin_DeviceCodeCompatibilityAlias(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	spy := &dispatchSpy{}
+	runAuthLoginTestDeps = spy.deps()
+	t.Cleanup(func() { runAuthLoginTestDeps = nil })
 
 	res := runCommandWithInput(t, "http://example.invalid", "", strings.NewReader(""),
 		"auth", "login", "--device-code")
-	if res.ExitCode != 2 {
-		t.Fatalf("ExitCode = %d, want 2", res.ExitCode)
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "not yet supported") {
-		t.Fatalf("stderr = %q, want 'not yet supported'", res.Stderr)
+	if spy.deviceCalls != 1 {
+		t.Fatalf("deviceCalls = %d, want 1", spy.deviceCalls)
 	}
 }
 
@@ -1180,6 +1184,14 @@ var allowedLoginFailureReasons = map[string]map[string]bool{
 	"api_key": {
 		"internal_error": true, "api_key_aborted": true, "api_key_invalid_input": true,
 	},
+	"device": {
+		"internal_error": true, "unattended_environment": true,
+		"authorization_request_failed": true, "identity_verification_failed": true,
+		"credential_persistence_failed": true, "token_poll_failed": true,
+		"device_access_denied": true, "device_code_expired": true,
+		"device_invalid_client": true, "device_invalid_grant": true,
+		"device_oauth_error": true,
+	},
 	"device_code": {"device_code_unsupported": true},
 }
 
@@ -1226,6 +1238,33 @@ func TestOAuthFailureReasonOutputsAreInAllowedVocabulary(t *testing.T) {
 		if got := oauthFailureReason(err); !allowedLoginFailureReasons["oauth"][got] {
 			t.Errorf("oauthFailureReason(%v) = %q, outside the allowed oauth vocabulary", err, got)
 		}
+	}
+}
+
+func TestDeviceFailureReasonOutputsAreInAllowedVocabulary(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"access denied", &oauth.DeviceAuthorizationError{Code: "access_denied"}, "device_access_denied"},
+		{"expired", &oauth.DeviceAuthorizationError{Code: "expired_token"}, "device_code_expired"},
+		{"invalid client", &oauth.DeviceAuthorizationError{Code: "invalid_client"}, "device_invalid_client"},
+		{"invalid grant", &oauth.DeviceAuthorizationError{Code: "invalid_grant"}, "device_invalid_grant"},
+		{"unknown server code", &oauth.DeviceAuthorizationError{Code: "attacker-controlled"}, "device_oauth_error"},
+		{"non-oauth error", errors.New("network down"), "token_poll_failed"},
+		{"wrapped code", fmt.Errorf("poll: %w", &oauth.DeviceAuthorizationError{Code: "access_denied"}), "device_access_denied"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := deviceFailureReason(tt.err)
+			if got != tt.want {
+				t.Fatalf("deviceFailureReason(%v) = %q, want %q", tt.err, got, tt.want)
+			}
+			if !allowedLoginFailureReasons["device"][got] {
+				t.Fatalf("deviceFailureReason(%v) = %q, outside the allowed device vocabulary", tt.err, got)
+			}
+		})
 	}
 }
 

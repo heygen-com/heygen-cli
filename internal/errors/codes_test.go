@@ -99,7 +99,14 @@ func TestNoUnregisteredCLICodes(t *testing.T) {
 
 	// Codes the CLI never originates: relayed from tests as API-response bodies,
 	// or test-only fixtures. These are not CLI-minted, so exclude them.
-	ignore := map[string]bool{}
+	ignore := map[string]bool{
+		// RFC 8628 token-endpoint errors are protocol values relayed by the
+		// authorization server, not CLI-originated error envelope codes.
+		"authorization_pending": true,
+		"slow_down":             true,
+		"access_denied":         true,
+		"expired_token":         true,
+	}
 
 	for _, dir := range []string{"cmd", "internal"} {
 		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d os.DirEntry, err error) error {

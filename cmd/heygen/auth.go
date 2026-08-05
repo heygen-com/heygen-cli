@@ -8,7 +8,7 @@ import (
 
 // authGuidance is the single source of truth for how to set up CLI auth.
 // Referenced by auth_login.go, auth_status.go, and the auth group help below.
-var authGuidance = `Two ways to authenticate:
+var authGuidance = `Three ways to authenticate:
 
   1. API key (uses API credits, interactive prompt or piped on stdin):
        heygen auth login --api-key
@@ -17,10 +17,17 @@ var authGuidance = `Two ways to authenticate:
   2. Browser OAuth (uses subscription credits — opens https://app.heygen.com):
        heygen auth login --oauth
 
+  3. Device OAuth (attended remote/headless terminal):
+       heygen auth login --device
+
 In an interactive shell, plain "heygen auth login" presents a picker
 defaulted to the API-key path. Non-interactive shells (piped stdin,
 CI=true, HEYGEN_NONINTERACTIVE=1) skip the picker and run the API-key
 flow so agents and scripts keep working unchanged.
+
+Device OAuth is for a human operating a remote terminal. It is refused
+in CI and HEYGEN_NONINTERACTIVE mode; unattended automation must use an
+API key.
 
 The HEYGEN_API_KEY environment variable always takes priority over
 any stored credential when both are set.

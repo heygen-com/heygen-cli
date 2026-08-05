@@ -29,9 +29,10 @@ const DefaultScopes = "openid profile email"
 // cookies); token + revoke live on the api2.heygen.com server-to-server
 // API. See hyperframes-CLI's oauth.ts for the live verification notes.
 const (
-	DefaultAuthorizeURL = "https://app.heygen.com/oauth/authorize"
-	DefaultTokenURL     = "https://api2.heygen.com/v1/oauth/token"
-	DefaultRevokeURL    = "https://api2.heygen.com/v1/oauth/revoke"
+	DefaultAuthorizeURL           = "https://app.heygen.com/oauth/authorize"
+	DefaultDeviceAuthorizationURL = "https://api2.heygen.com/v1/oauth/device_authorization"
+	DefaultTokenURL               = "https://api2.heygen.com/v1/oauth/token"
+	DefaultRevokeURL              = "https://api2.heygen.com/v1/oauth/revoke"
 )
 
 // DefaultExchangeTimeout caps each token-endpoint round trip.
@@ -47,16 +48,20 @@ const DefaultRevokeTimeout = 5 * time.Second
 // overridable so tests can swap in an httptest.Server. Production
 // callers should call NewClient() with no options.
 type Client struct {
-	ClientID     string
-	AuthorizeURL string
-	TokenURL     string
-	RevokeURL    string
+	ClientID               string
+	AuthorizeURL           string
+	DeviceAuthorizationURL string
+	TokenURL               string
+	RevokeURL              string
 
 	// HTTPClient is used for the token + revoke round trips. Defaults
 	// to an http.Client with sensible timeouts.
 	HTTPClient *http.Client
 	// Now is the wall-clock source, overridable for deterministic tests.
 	Now func() time.Time
+	// Sleep waits between RFC 8628 polling attempts. Tests replace it
+	// with a deterministic clock advance.
+	Sleep func(context.Context, time.Duration) error
 }
 
 // Option configures a Client.
@@ -70,6 +75,11 @@ func WithClientID(id string) Option {
 // WithAuthorizeURL overrides the authorize endpoint URL.
 func WithAuthorizeURL(u string) Option {
 	return func(c *Client) { c.AuthorizeURL = u }
+}
+
+// WithDeviceAuthorizationURL overrides the RFC 8628 issuance endpoint.
+func WithDeviceAuthorizationURL(u string) Option {
+	return func(c *Client) { c.DeviceAuthorizationURL = u }
 }
 
 // WithTokenURL overrides the token endpoint URL.
@@ -93,16 +103,23 @@ func WithNow(now func() time.Time) Option {
 	return func(c *Client) { c.Now = now }
 }
 
+// WithSleep overrides the RFC 8628 polling wait.
+func WithSleep(sleep func(context.Context, time.Duration) error) Option {
+	return func(c *Client) { c.Sleep = sleep }
+}
+
 // NewClient returns a Client with sensible defaults, optionally
 // overridden by opts.
 func NewClient(opts ...Option) *Client {
 	c := &Client{
-		ClientID:     DefaultClientID,
-		AuthorizeURL: DefaultAuthorizeURL,
-		TokenURL:     DefaultTokenURL,
-		RevokeURL:    DefaultRevokeURL,
-		HTTPClient:   &http.Client{Timeout: DefaultExchangeTimeout},
-		Now:          time.Now,
+		ClientID:               DefaultClientID,
+		AuthorizeURL:           DefaultAuthorizeURL,
+		DeviceAuthorizationURL: DefaultDeviceAuthorizationURL,
+		TokenURL:               DefaultTokenURL,
+		RevokeURL:              DefaultRevokeURL,
+		HTTPClient:             &http.Client{Timeout: DefaultExchangeTimeout},
+		Now:                    time.Now,
+		Sleep:                  sleepContext,
 	}
 	for _, opt := range opts {
 		opt(c)

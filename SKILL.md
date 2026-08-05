@@ -11,6 +11,11 @@ Official CLI for the HeyGen video generation API. 30+ commands auto-generated fr
 - **Install**: `curl -fsSL https://static.heygen.ai/cli/install.sh | bash`
 - **Auth**: Requires `HEYGEN_API_KEY` environment variable. The key must be provisioned by a user from https://app.heygen.com/settings/api
 
+For attended human setup in a remote/headless terminal, `heygen auth login
+--device` can provision the shared `~/.heygen/credentials` OAuth session.
+Agents and CI must continue using `HEYGEN_API_KEY`; device login deliberately
+refuses unattended environments.
+
 ## Key Commands
 
 ```bash

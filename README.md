@@ -59,7 +59,7 @@ Run `heygen completion --help` for per-shell install instructions.
 
 ## Authenticate
 
-Choose one of the options below. The first three are agent- and CI-friendly; the last two are for humans.
+Choose one of the options below. The first three are agent- and CI-friendly; the remaining options are for humans.
 
 **1. Environment variable** — agents, CI; ephemeral, no file on disk:
 
@@ -85,7 +85,15 @@ heygen auth login --api-key
 heygen auth login --oauth
 ```
 
-**5. Interactive picker** — humans, no flag: a TTY prompt lets you choose between API key (uses API credits) and OAuth (uses subscription credits):
+**5. Device OAuth** — humans in an attended SSH/headless terminal; open the displayed URL on any browser and enter the one-time code:
+
+```bash
+heygen auth login --device
+```
+
+Device OAuth is refused in CI and `HEYGEN_NONINTERACTIVE` mode. Unattended agents must use an API key.
+
+**6. Interactive picker** — humans, no flag: a TTY prompt lets you choose between API key (uses API credits) and OAuth (uses subscription credits):
 
 ```bash
 heygen auth login

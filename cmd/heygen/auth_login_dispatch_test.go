@@ -70,6 +70,7 @@ func (erroringReader) Read(_ []byte) (int, error) {
 // without spinning up the real OAuth / API-key flows.
 type dispatchSpy struct {
 	oauthCalls   int
+	deviceCalls  int
 	apiKeyCalls  int
 	pickerCalls  int
 	pickerChoice loginChoice
@@ -87,6 +88,10 @@ func (s *dispatchSpy) deps() *runAuthLoginDeps {
 		},
 		runOAuth: func(c *cobra.Command, x *cmdContext) error {
 			s.oauthCalls++
+			return nil
+		},
+		runDevice: func(c *cobra.Command, x *cmdContext) error {
+			s.deviceCalls++
 			return nil
 		},
 		runAPIKey: func(c *cobra.Command, x *cmdContext) error {
@@ -119,6 +124,7 @@ func TestRunAuthLogin_Dispatch(t *testing.T) {
 		nonInteractive  bool
 		pickerChoice    loginChoice
 		wantOAuthCalls  int
+		wantDeviceCalls int
 		wantAPIKeyCalls int
 		wantPickerCalls int
 		wantErr         bool
@@ -174,9 +180,9 @@ func TestRunAuthLogin_Dispatch(t *testing.T) {
 			wantAPIKeyCalls: 1,
 		},
 		{
-			name:    "device-code flag is rejected with usage error",
-			flags:   authLoginFlags{deviceCodeMode: true},
-			wantErr: true,
+			name:            "device-code compatibility alias routes to device runner",
+			flags:           authLoginFlags{deviceCodeMode: true},
+			wantDeviceCalls: 1,
 		},
 	}
 
@@ -203,6 +209,9 @@ func TestRunAuthLogin_Dispatch(t *testing.T) {
 			}
 			if spy.oauthCalls != tc.wantOAuthCalls {
 				t.Errorf("oauthCalls = %d, want %d", spy.oauthCalls, tc.wantOAuthCalls)
+			}
+			if spy.deviceCalls != tc.wantDeviceCalls {
+				t.Errorf("deviceCalls = %d, want %d", spy.deviceCalls, tc.wantDeviceCalls)
 			}
 			if spy.apiKeyCalls != tc.wantAPIKeyCalls {
 				t.Errorf("apiKeyCalls = %d, want %d", spy.apiKeyCalls, tc.wantAPIKeyCalls)
@@ -400,23 +409,24 @@ func TestRunAuthLogin_PickerCancel_NoTelemetry(t *testing.T) {
 	}
 }
 
-// U4: --device-code emits started(device_code) then
-// failed(device_code, device_code_unsupported) — the reason is explicitly
-// named in the plan's enum, so this implementation instruments it rather
-// than silently dropping telemetry for the flag.
+// U4: the hidden --device-code compatibility alias uses the same device
+// telemetry as the public --device spelling.
 func TestRunAuthLogin_DeviceCode_Telemetry(t *testing.T) {
 	spy := withLoginAnalyticsSpy(t)
+	dispatchTestSpy := &dispatchSpy{}
+	runAuthLoginTestDeps = dispatchTestSpy.deps()
+	t.Cleanup(func() { runAuthLoginTestDeps = nil })
 
 	cmd, ctx := makeDispatchCmd(t)
-	if err := runAuthLogin(cmd, ctx, authLoginFlags{deviceCodeMode: true}); err == nil {
-		t.Fatal("want usage error, got nil")
+	if err := runAuthLogin(cmd, ctx, authLoginFlags{deviceCodeMode: true}); err != nil {
+		t.Fatalf("runAuthLogin: %v", err)
 	}
 
-	if got := spy.started; len(got) != 1 || got[0] != "device_code" {
-		t.Fatalf("started = %v, want [device_code]", got)
+	if got := spy.started; len(got) != 1 || got[0] != "device" {
+		t.Fatalf("started = %v, want [device]", got)
 	}
-	if got := spy.failed; len(got) != 1 || got[0] != (loginAnalyticsFailedCall{"device_code", "device_code_unsupported"}) {
-		t.Fatalf("failed = %v, want [{device_code device_code_unsupported}]", got)
+	if len(spy.failed) != 0 {
+		t.Fatalf("failed = %v, want none", spy.failed)
 	}
 }
 
