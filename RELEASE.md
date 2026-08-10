@@ -29,51 +29,91 @@ gh workflow run dev-release.yml
 4. Verify a new prerelease was published for the computed dev tag.
 5. Share the installer command or release link with internal users as needed.
 
+## Automated Weekly Stable Release
+
+A scheduled workflow (`.github/workflows/weekly-stable-release.yml`) opens a
+stable **release PR** automatically, so the cadence no longer depends on someone
+remembering to cut one. It does **not** publish; merging the PR does (see
+[How to Cut a Stable Release](#how-to-cut-a-stable-release)). This keeps the
+merge (and the `release` environment approval) as the human gate while removing
+the "did anyone remember to release?" burden.
+
+- **Trigger / schedule:** Cron every Monday at 09:00 UTC. Can also be run on
+  demand via **Actions > Weekly Stable Release > Run workflow**
+  (`workflow_dispatch`).
+- **Skip behavior:** It finds the latest stable tag (`vX.Y.Z`) and counts
+  commits on `main` since it. **No new commits → no PR** (empty weeks are
+  skipped, not failed). If a release PR for the computed version is already
+  **open**, it is left untouched (no clobbering in-progress edits); a leftover
+  branch with no open PR is treated as stale and recreated, so a week you skipped
+  by closing the PR is simply re-offered on the next run.
+- **Versioning:** It **patch-bumps** the latest stable tag (e.g. `v0.0.11` →
+  `v0.0.12`). Patch is the default because the weekly driver (codegen resyncs,
+  fixes, additive schema) is a patch bump. Minor/major bumps (new command
+  groups, breaking changes) are a **manual** release — see below.
+- **What the PR contains:** a `release/vX.Y.Z` branch with a `releases/vX.Y.Z.md`
+  draft changelog (commit subjects since the last tag), committed via the GitHub
+  API so it is signed/verified. Refine it with `/changelog-cli vX.Y.Z` before
+  merging.
+- **Monotonic versions:** `release-stable.yml` refuses any version not strictly
+  greater than the current latest stable tag, so the `stable` pointer never
+  moves backward (e.g. a lingering weekly patch-bump PR after a manual
+  minor/major release already shipped).
+
 ## How to Cut a Stable Release
 
-### Pre-release checklist
+Both the weekly automation and a manual cut converge on the same gate: a
+`release/vX.Y.Z` PR is reviewed and **merged**, which triggers
+`release-stable.yml` (test → tag → GoReleaser → S3) behind the `release`
+environment approval. There are two ways to get that PR.
 
-1. **Review commits since last stable.** Check what's new and confirm nothing is half-finished:
-   ```bash
-   git log $(gh release view --json tagName -q .tagName)..origin/main --oneline
-   ```
-2. **Check open PRs.** Decide if any should merge first (e.g. pending codegen resyncs, small fixes):
-   ```bash
-   gh pr list --state open
-   ```
-3. **Confirm CI is green on main.** All checks should pass on the latest commit.
-4. **Run E2E smoke test.** With `HEYGEN_API_KEY` set, run `/e2e-cli-test` in Claude Code from the repo root. Confirm all phases pass (no FAIL). WARN on Phase 3 means the account lacks data for some get/detail commands and should be investigated. This builds the binary and exercises it against the live API (costs a small number of credits).
-5. **Pick the version number.** Check the last stable tag and bump according to the rules below:
-   - Patch (`v0.0.x`) for bug fixes, UX polish, codegen resyncs, and additive schema changes.
+### From the weekly release PR (normal path)
+
+1. The Monday automation opens a `release: vX.Y.Z` PR (`gh pr list --state open`).
+2. **Refine the changelog.** Run `/changelog-cli vX.Y.Z` in Claude Code and
+   update `releases/vX.Y.Z.md` on the release branch with the result.
+3. **Confirm `main` CI is green.** The release PR only adds the notes file and
+   is opened by the automation's `GITHUB_TOKEN`, so PR CI does not run on it; the
+   build and `make test` run in `release-stable.yml` before publishing. If branch
+   protection requires PR status checks, merge with admin (or provision a PAT/App
+   token so release PRs trigger CI — tracked as a PRINFRA-170 follow-up).
+4. **Run the E2E smoke test.** With `HEYGEN_API_KEY` set, run `/e2e-cli-test` in
+   Claude Code from the repo root. Confirm all phases pass (no FAIL). WARN on
+   Phase 3 means the account lacks data for some get/detail commands and should
+   be investigated. This builds the binary and exercises it against the live API
+   (costs a small number of credits).
+5. **Merge the PR**, then **approve the `release` environment** when prompted.
+   That publishes the release. To skip a week, just close the PR.
+
+### Manual / off-schedule (including minor/major bumps)
+
+1. **Pick the version** (`gh release list --limit 3`):
+   - Patch (`v0.0.x`) for bug fixes, UX polish, codegen resyncs, additive schema.
    - Minor (`v0.x.0`) for new command groups or significant new capabilities.
-   ```bash
-   gh release list --limit 3
-   ```
-6. **Generate changelog.** Run `/changelog-cli v0.x.y` in Claude Code. Review the output and save it for the release notes.
-
-### Trigger the release
-
-From the CLI:
-
-```bash
-gh workflow run release-stable.yml -f version=v0.0.5
-```
-
-Or from the GitHub Actions UI: go to **Actions > Stable Release > Run workflow**, enter the version tag, and click **Run workflow**.
+2. Cut it one of two ways (both still gated by the `release` environment approval):
+   - **Dispatch directly** (works for any version, including minor/major):
+     ```bash
+     gh workflow run release-stable.yml -f version=v0.1.0
+     ```
+     Uses `releases/v0.1.0.md` if present, otherwise GoReleaser autogenerates notes.
+   - **Open a release PR by hand** (if you want the changelog reviewed first):
+     create a `release/v0.1.0` branch, add `releases/v0.1.0.md` (run
+     `/changelog-cli v0.1.0`), open the PR, then merge. Note the **weekly
+     workflow only patch-bumps**, so don't use it for a minor/major, create the
+     `release/*` branch yourself or dispatch directly.
 
 ### Post-release
 
-The workflow validates the version, creates the tag on `main`, and
-publishes the stable release artifacts via GoReleaser, then uploads the
-installer, checksums, and platform archives to S3 for CDN-backed installs.
-CDN propagation takes up to 1 minute for the version pointer and 5 minutes
-for the install script.
+`release-stable.yml` validates the version, creates the tag on `main`, publishes
+the artifacts via GoReleaser, and uploads the installer, checksums, and platform
+archives to S3 for CDN-backed installs. CDN propagation takes up to 1 minute for
+the version pointer and 5 minutes for the install script. Then:
 
-5. **Verify the release was published:**
+1. **Verify the release was published:**
    ```bash
-   gh release view v0.0.5
+   gh release view v0.1.0
    ```
-6. **Verify the install script picks up the new version** (after CDN propagation):
+2. **Verify the install script picks up the new version** (after CDN propagation):
    ```bash
    curl -fsSL https://static.heygen.ai/cli/install.sh | bash
    heygen --version
