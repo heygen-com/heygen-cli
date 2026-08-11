@@ -126,3 +126,23 @@ func TestJSONFormatter_Data_IgnoresDataFieldAndColumns(t *testing.T) {
 		t.Fatalf("expected full response envelope, got: %v", parsed)
 	}
 }
+
+// Warn shares the error envelope's shape and destination so a machine consumer
+// can apply one rule to stderr, and stdout stays a clean response stream.
+func TestJSONFormatter_Warn(t *testing.T) {
+	var out, errOut bytes.Buffer
+	f := NewJSONFormatter(&out, &errOut)
+
+	f.Warn("--brand-voice-id is deprecated")
+
+	if out.Len() != 0 {
+		t.Errorf("warning must not touch stdout, got %q", out.String())
+	}
+	var envelope map[string]map[string]string
+	if err := json.Unmarshal(errOut.Bytes(), &envelope); err != nil {
+		t.Fatalf("warning on stderr is not valid JSON: %v (%q)", err, errOut.String())
+	}
+	if got := envelope["warning"]["message"]; got != "--brand-voice-id is deprecated" {
+		t.Errorf(`warning.message = %q, want the notice`, got)
+	}
+}

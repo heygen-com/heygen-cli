@@ -49,6 +49,20 @@ func (f *JSONFormatter) Data(v json.RawMessage, _ string, _ []command.Column) er
 	return err
 }
 
+// Warn writes a {"warning": {...}} envelope to stderr, mirroring the error
+// envelope so a machine consumer can parse or discard it with the same logic.
+// stdout is untouched, so a warning never breaks a piped response.
+func (f *JSONFormatter) Warn(message string) {
+	envelope := map[string]map[string]string{"warning": {"message": message}}
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		_, _ = f.errOut.Write([]byte(message + "\n"))
+		return
+	}
+	_, _ = f.errOut.Write(data)
+	_, _ = f.errOut.Write([]byte("\n"))
+}
+
 // Error writes a CLIError as a JSON envelope to stderr.
 func (f *JSONFormatter) Error(err *clierrors.CLIError) {
 	envelope := err.ToErrorEnvelope()

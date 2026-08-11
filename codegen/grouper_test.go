@@ -840,3 +840,82 @@ func TestGroupEndpoints_NullableFieldsPromoted(t *testing.T) {
 
 	t.Fatal("video create not found")
 }
+
+// TestGroupEndpoints_BodyFlagsCarryDeprecated locks in that OpenAPI `deprecated`
+// reaches the FlagSpec. Without it the CLI advertises a superseded field as a
+// normal flag: `brand_voice_id` carried `deprecated: true` in the spec for
+// months while `--brand-voice-id` stayed fully visible in `--help`.
+//
+// `fps` is the control. It is an ordinary field on the same body, so if the
+// marker ever leaked onto every flag rather than the tagged one, this case goes
+// red while the positive case stays green.
+func TestGroupEndpoints_BodyFlagsCarryDeprecated(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	examples := loadTestExamples(t)
+	groups, _, err := GroupEndpoints(doc, examples)
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	var sawDeprecated, sawControl bool
+	for _, s := range groups["video"] {
+		if s.Name != "create" {
+			continue
+		}
+		for _, flag := range s.Flags {
+			switch flag.JSONName {
+			case "legacy_caption":
+				sawDeprecated = true
+				if !flag.Deprecated {
+					t.Error("legacy_caption: schema `deprecated: true` should set FlagSpec.Deprecated")
+				}
+			case "fps":
+				sawControl = true
+				if flag.Deprecated {
+					t.Error("fps: an undeprecated field must not be marked Deprecated")
+				}
+			}
+		}
+	}
+	if !sawDeprecated {
+		t.Error("legacy_caption flag not found on video create — a deprecated field must still become a flag, not be dropped")
+	}
+	if !sawControl {
+		t.Error("fps control flag not found on video create")
+	}
+}
+
+// Query parameters carry `deprecated` on the parameter object rather than on a
+// schema property, and grouper reads it from a different place than the body
+// path does. Without this, a refactor that split the two paths could drop the
+// query side silently, since the body test would stay green.
+func TestGroupEndpoints_QueryFlagsCarryDeprecated(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	examples := loadTestExamples(t)
+	groups, _, err := GroupEndpoints(doc, examples)
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	var sawDeprecated, sawControl bool
+	for _, s := range groups["avatar"] {
+		for _, flag := range s.Flags {
+			switch flag.JSONName {
+			case "legacy_filter":
+				sawDeprecated = true
+				if !flag.Deprecated {
+					t.Error("legacy_filter: `deprecated: true` on a query parameter should set FlagSpec.Deprecated")
+				}
+			case "ownership":
+				sawControl = true
+				if flag.Deprecated {
+					t.Error("ownership: an undeprecated query parameter must not be marked Deprecated")
+				}
+			}
+		}
+	}
+	if !sawDeprecated {
+		t.Error("legacy_filter flag not found — a deprecated query param must still become a flag")
+	}
+	if !sawControl {
+		t.Error("ownership control flag not found")
+	}
+}

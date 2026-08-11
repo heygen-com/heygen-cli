@@ -63,6 +63,12 @@ func (f *HumanFormatter) Error(err *clierrors.CLIError) {
 	}
 }
 
+// Warn renders a non-fatal notice to stderr, so it stays out of the rendered
+// table or key-value output on stdout.
+func (f *HumanFormatter) Warn(message string) {
+	_, _ = fmt.Fprintf(f.errOut, "%s %s\n", warningStyle.Render("Warning:"), message)
+}
+
 func unwrapPayload(v json.RawMessage, dataField string) json.RawMessage {
 	if dataField == "" {
 		return v

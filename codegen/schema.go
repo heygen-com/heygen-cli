@@ -134,6 +134,12 @@ func applySchemaMetadata(out map[string]any, schema *openapi3.Schema) {
 	if schema.Nullable {
 		out["nullable"] = true
 	}
+	// --request-schema is the introspection surface an agent reads before
+	// composing a -d/--data body. Dropping `deprecated` here would hide the
+	// signal from exactly the caller that bypasses the flag (and its notice).
+	if schema.Deprecated {
+		out["deprecated"] = true
+	}
 }
 
 func applyDiscriminator(out map[string]any, discriminator *openapi3.Discriminator) {

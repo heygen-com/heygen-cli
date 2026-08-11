@@ -95,6 +95,18 @@ type FlagSpec struct {
 	Source   string   // "query", "body", or "file"
 	JSONName string   // original API parameter/field name ("folder_id")
 
+	// Deprecated mirrors OpenAPI `deprecated` on the parameter or schema
+	// property. The flag is still registered and still works — removing it
+	// would break scripts that already pass it — but it is hidden from help
+	// so the CLI stops advertising it, and using it prints a notice.
+	//
+	// Deprecated does not imply the field is ignored by the API. Some
+	// deprecated fields are live aliases (brand_voice_id resolves to
+	// brand_glossary_id); others are true no-ops (enable_caption, now that
+	// captions are always generated). The spec draws no distinction, so
+	// neither does the notice.
+	Deprecated bool
+
 	// SendDefaultWhenOmitted tells BuildInvocation to materialize the flag's
 	// Default into the request even when the user didn't pass the flag —
 	// but only as a non-destructive fill. If a value for this field already

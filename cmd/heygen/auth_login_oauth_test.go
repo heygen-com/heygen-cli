@@ -40,6 +40,8 @@ func (errorFormatter) Data(_ json.RawMessage, _ string, _ []command.Column) erro
 
 func (errorFormatter) Error(_ *clierrors.CLIError) {}
 
+func (errorFormatter) Warn(_ string) {}
+
 // fakeIdP serves a minimal subset of the HeyGen OAuth endpoints for the
 // PR 2 login integration test. It accepts a single authorization_code
 // exchange and returns a fixed token response.

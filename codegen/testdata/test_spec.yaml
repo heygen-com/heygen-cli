@@ -87,6 +87,10 @@ paths:
                   enum: ["16:9", "9:16", auto]
                   default: "16:9"
                   x-cli-default: auto
+                legacy_caption:
+                  type: boolean
+                  description: Superseded field the API still accepts but ignores
+                  deprecated: true
                 watermark_s3_key:
                   type: string
                   description: Internal watermark asset key
@@ -209,6 +213,12 @@ paths:
             anyOf:
               - type: string
               - type: integer
+        - name: legacy_filter
+          in: query
+          description: Superseded query filter the API still accepts
+          deprecated: true
+          schema:
+            type: string
       responses:
         "200":
           description: OK
