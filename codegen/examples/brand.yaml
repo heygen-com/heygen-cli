@@ -4,6 +4,22 @@
 "GET /v3/brand-glossaries":
   - desc: "List brand glossaries"
     cmd: "heygen brand glossaries list"
+"POST /v3/brand-glossaries":
+  - desc: "Create a glossary with pronunciations (terms has no flag — pass it via -d)"
+    cmd: "heygen brand glossaries create -d '{\"name\":\"Product names\",\"terms\":[{\"term\":\"HeyGen\",\"pronunciation\":\"hey-jen\"}]}'"
+  - desc: "Create an empty glossary to fill in later"
+    cmd: "heygen brand glossaries create --name 'Product names'"
+  - desc: "See all available request fields"
+    cmd: "heygen brand glossaries create --request-schema"
 "GET /v3/brand-glossaries/{brand_glossary_id}":
   - desc: "Inspect a glossary's term mappings"
     cmd: "heygen brand glossaries get <brand-glossary-id>"
+"PATCH /v3/brand-glossaries/{brand_glossary_id}":
+  - desc: "Replace the term list — terms is a full replace, so send every term you want to keep"
+    cmd: "heygen brand glossaries update <brand-glossary-id> -d '{\"terms\":[{\"term\":\"HeyGen\",\"pronunciation\":\"hey-jen\"},{\"term\":\"Avatar IV\",\"pronunciation\":\"avatar four\"}]}'"
+  - desc: "Rename a glossary, leaving its terms untouched"
+    cmd: "heygen brand glossaries update <brand-glossary-id> --name 'Product names'"
+  - desc: "Remove every term but keep the glossary"
+    cmd: "heygen brand glossaries update <brand-glossary-id> -d '{\"terms\":[]}'"
+  - desc: "See all available request fields"
+    cmd: "heygen brand glossaries update --request-schema"
