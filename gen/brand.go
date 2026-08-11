@@ -14,6 +14,11 @@ var BrandGlossariesCreate = &command.Spec{
 	Endpoint:       "/v3/brand-glossaries",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Create a glossary with pronunciations (terms has no flag — pass it via -d)\n  heygen brand glossaries create -d '{\"name\":\"Product names\",\"terms\":[{\"term\":\"HeyGen\",\"pronunciation\":\"hey-jen\"}]}'",
+		"# Create an empty glossary to fill in later\n  heygen brand glossaries create --name 'Product names'",
+		"# See all available request fields\n  heygen brand glossaries create --request-schema",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "name",
@@ -98,6 +103,12 @@ var BrandGlossariesUpdate = &command.Spec{
 	Endpoint:       "/v3/brand-glossaries/{brand_glossary_id}",
 	Method:         "PATCH",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Replace the term list — terms is a full replace, so send every term you want to keep\n  heygen brand glossaries update <brand-glossary-id> -d '{\"terms\":[{\"term\":\"HeyGen\",\"pronunciation\":\"hey-jen\"},{\"term\":\"Avatar IV\",\"pronunciation\":\"avatar four\"}]}'",
+		"# Rename a glossary, leaving its terms untouched\n  heygen brand glossaries update <brand-glossary-id> --name 'Product names'",
+		"# Remove every term but keep the glossary\n  heygen brand glossaries update <brand-glossary-id> -d '{\"terms\":[]}'",
+		"# See all available request fields\n  heygen brand glossaries update --request-schema",
+	},
 	Args: []command.ArgSpec{
 		{Name: "brand-glossary-id", Param: "brand_glossary_id", Help: ""},
 	},
