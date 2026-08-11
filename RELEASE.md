@@ -33,23 +33,33 @@ gh workflow run dev-release.yml
 
 ### Pre-release checklist
 
+Every step compares against `origin/main` and the last stable tag, so start from a fetched checkout:
+
+```bash
+git fetch --tags origin
+LAST_STABLE=$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+```
+
+Keep `$LAST_STABLE` set for the rest of the checklist; steps 4 and 6 reuse it. It filters to release tags, so a run of `-dev.*` prereleases can't shadow the stable one.
+
 1. **Review commits since last stable.** Check what's new and confirm nothing is half-finished:
    ```bash
-   git log $(gh release view --json tagName -q .tagName)..origin/main --oneline
+   git log "$LAST_STABLE"..origin/main --oneline
    ```
 2. **Check open PRs.** Decide if any should merge first (e.g. pending codegen resyncs, small fixes):
    ```bash
    gh pr list --state open
    ```
 3. **Confirm CI is green on main.** All checks should pass on the latest commit.
-4. **Run E2E smoke test.** With `HEYGEN_API_KEY` set, run `/e2e-cli-test` in Claude Code from the repo root. Confirm all phases pass (no FAIL). WARN on Phase 3 means the account lacks data for some get/detail commands and should be investigated. This builds the binary and exercises it against the live API (costs a small number of credits).
-5. **Pick the version number.** Check the last stable tag and bump according to the rules below:
+4. **Diff the generated command surface for regressions.** See [Checking for Regressions](#checking-for-regressions) below. Required on every stable release, not just ones that look risky — a resync that breaks the CLI looks identical in `git log` to one that doesn't. It covers `gen/` only; hand-written commands in `cmd/heygen/` are reviewed the normal way, through their PRs.
+5. **Run E2E smoke test.** With `HEYGEN_API_KEY` set, run `/e2e-cli-test` in Claude Code from the repo root. Confirm all phases pass (no FAIL). WARN on Phase 3 means the account lacks data for some get/detail commands and should be investigated. This builds the binary and exercises it against the live API (costs a small number of credits).
+6. **Pick the version number.** Check the last stable tag and bump according to the rules below:
    - Patch (`v0.0.x`) for bug fixes, UX polish, codegen resyncs, and additive schema changes.
-   - Minor (`v0.x.0`) for new command groups or significant new capabilities.
+   - Minor (`v0.x.0`) for new command groups, significant new capabilities, or **any breaking surface change found in step 4** — a resync is only a patch when it is purely additive.
    ```bash
-   gh release list --limit 3
+   echo "$LAST_STABLE"
    ```
-6. **Generate changelog.** Run `/changelog-cli v0.x.y` in Claude Code. Review the output and save it for the release notes.
+7. **Generate changelog.** Run `/changelog-cli v0.x.y` in Claude Code. Review the output and save it for the release notes. The skill reads `git log`, so it cannot see the step 4 findings — add those to the release notes yourself, at the top, under **Breaking changes** if any was breaking and **Deprecated** otherwise.
 
 ### Trigger the release
 
@@ -69,15 +79,47 @@ installer, checksums, and platform archives to S3 for CDN-backed installs.
 CDN propagation takes up to 1 minute for the version pointer and 5 minutes
 for the install script.
 
-5. **Verify the release was published:**
+1. **Verify the release was published:**
    ```bash
    gh release view v0.0.5
    ```
-6. **Verify the install script picks up the new version** (after CDN propagation):
+2. **Verify the install script picks up the new version** (after CDN propagation):
    ```bash
    curl -fsSL https://static.heygen.ai/cli/install.sh | bash
    heygen --version
    ```
+
+## Checking for Regressions
+
+`gen/` is generated from HeyGen's OpenAPI spec, which lives upstream. A resync lands as one `codegen: resync gen/ from EF <sha>` commit and `/changelog-cli` files it under Internal — so the commit log and the changelog, the two things a releaser reads, are exactly where a breaking change is invisible. Diff the generated surface instead. This covers `gen/` only; hand-written commands in `cmd/heygen/` and the hidden-endpoint list in `internal/command/hidden.go` are reviewed through their own PRs.
+
+```bash
+scripts/release-surface.sh diff "$LAST_STABLE" origin/main
+```
+
+The script reduces `gen/` at both refs to the fields that decide what a user can type, then diffs the two. It filters with an allowlist, since a field left out is invisible forever; `codegen/surface_allowlist_test.go` fails the build if codegen gains a field the allowlist misses, so the list cannot rot. Request and response schemas are compared by presence rather than content: their bodies churn on every resync, but whether a command *has* one decides whether `--request-schema` and `--response-schema` exist.
+
+Empty output means the surface is unchanged. The script exits non-zero and says so if its own reduction matched nothing, because "no changes" and "the check is broken" otherwise look identical. Read the `<` lines (the old side) first — a removal is a break, an addition usually isn't.
+
+| A `<` line showing... | Effect | Action |
+|---|---|---|
+| a command or flag `Name` gone | `unknown command` / `unknown flag`, exit 2 | For a command, re-register the old path in `cmd/heygen/aliases.go`. There is no flag equivalent, so call it out. |
+| a stricter input: `Required` false→true, a dropped `Enum` value, narrowed `Min`/`Max`, changed `Type` | previously valid invocations now rejected before the request is sent | Breaking. Name the command, the flag, and the old vs new constraint. |
+| `Args` losing an entry, or a changed `Param` | positional arity changed, or the same argument now fills a different URL slot | Breaking. Show the old and new call shape. |
+| a changed `Source`, `JSONName`, `Default`, or `SendDefaultWhenOmitted` | same input, different request — routing, wire key, or whether a value is sent at all | Confirm it is intended; none of these change the help text, so nothing else will surface them. |
+| `BodyEncoding` leaving `json` | `-d/--data` is no longer registered — the builder adds it only when `BodyEncoding` is exactly `json` | Breaking for anyone passing a raw body. |
+| a `RequestSchema`/`ResponseSchema` `<present>` line gone | `--request-schema` / `--response-schema` no longer exist there | Breaking for agents that introspect before calling. |
+| `Destructive`, `Endpoint`, or `Method` changing | `--force` and the confirmation prompt appear or disappear; or the command now calls something else | Rarely intended. Confirm before releasing. |
+
+Additions are usually safe, with two exceptions that show up only as `>` lines: a new flag that is already `Required: true`, and a new `Args` entry. Both make every prior invocation of that command exit 2. (`Deprecated: true` appearing is not a break — the flag still works and still sends its value — but it is worth a release note.)
+
+Finally, a flag can stop doing anything without changing shape at all, which the diff above cannot see because it excludes help text:
+
+```bash
+scripts/release-surface.sh deprecated "$LAST_STABLE" origin/main
+```
+
+Each line names a command and the flag that went quiet, e.g. `video-translate create --enable-caption`. It matches loosely on purpose; a false positive is obvious once you can see which flag it named. A real hit belongs in the release notes, because a user whose script sets that flag gets no error and no warning — just different output than they asked for.
 
 ## Version Scheme
 
