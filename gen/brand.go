@@ -4,11 +4,37 @@ package gen
 
 import "github.com/heygen-com/heygen-cli/internal/command"
 
+var BrandGlossariesCreate = &command.Spec{
+	Group:          "brand",
+	Name:           "glossaries create",
+	Summary:        "Create Brand Glossary",
+	Description:    "Creates a brand glossary in your workspace. Pass the returned `brand_glossary_id` when creating a video or translation to apply it.\n\n`name` must be unique within your workspace, compared without regard to case; a duplicate returns 409. `terms` may be omitted to create an empty glossary you fill in later with PATCH /v3/brand-glossaries/{brand_glossary_id}.\n\nPronunciations affect generated audio only — a term keeps its original spelling in captions and subtitles. Translation rules are managed in the HeyGen web app and cannot be set here.",
+	RequestSchema:  "{\n  \"description\": \"Request body for POST /v3/brand-glossaries.\",\n  \"properties\": {\n    \"name\": {\n      \"description\": \"Display name for the glossary. Surrounding whitespace is removed, and the trimmed name must be 1-64 characters and unique within your workspace, compared without regard to case.\",\n      \"type\": \"string\"\n    },\n    \"terms\": {\n      \"default\": [],\n      \"description\": \"Term-to-pronunciation mappings. Omit it, or pass an empty array, to create a glossary you fill in later.\",\n      \"items\": {\n        \"description\": \"One glossary entry: a written term and how it should be spoken.\",\n        \"properties\": {\n          \"pronunciation\": {\n            \"description\": \"Respelling handed to the speech synthesizer in place of `term` (for example 'hey-jen' for 'HeyGen'). Affects generated audio only — captions and subtitles keep the original `term` spelling.\",\n            \"type\": \"string\"\n          },\n          \"term\": {\n            \"description\": \"The term as written in a script, matched case-insensitively.\",\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"term\",\n          \"pronunciation\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    }\n  },\n  \"required\": [\n    \"name\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"A single brand glossary with its full term list (GET /v3/brand-glossaries/{id}).\",\n      \"properties\": {\n        \"brand_glossary_id\": {\n          \"description\": \"Unique brand glossary ID. Pass it as `brand_glossary_id` when creating a video or translation to apply this glossary.\",\n          \"type\": \"string\"\n        },\n        \"created_at\": {\n          \"description\": \"Creation timestamp (UTC).\",\n          \"type\": \"string\"\n        },\n        \"name\": {\n          \"description\": \"Display name of the brand glossary.\",\n          \"type\": \"string\"\n        },\n        \"terms\": {\n          \"description\": \"Every term mapping in this glossary. Empty when the glossary has no terms yet, in which case applying it has no effect.\",\n          \"items\": {\n            \"description\": \"One glossary entry: a written term and how it should be spoken.\",\n            \"properties\": {\n              \"pronunciation\": {\n                \"description\": \"Respelling handed to the speech synthesizer in place of `term` (for example 'hey-jen' for 'HeyGen'). Affects generated audio only — captions and subtitles keep the original `term` spelling.\",\n                \"type\": \"string\"\n              },\n              \"term\": {\n                \"description\": \"The term as written in a script, matched case-insensitively.\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"term\",\n              \"pronunciation\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        },\n        \"updated_at\": {\n          \"description\": \"Last update timestamp (UTC).\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"brand_glossary_id\",\n        \"name\",\n        \"created_at\",\n        \"updated_at\",\n        \"terms\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/brand-glossaries",
+	Method:         "POST",
+	BodyEncoding:   "json",
+	Flags: []command.FlagSpec{
+		{
+			Name:     "name",
+			Type:     "string",
+			Default:  "",
+			Help:     "Display name for the glossary. Surrounding whitespace is removed, and the trimmed name must be 1-64 characters and unique within your workspace, compared without regard to case.",
+			Required: true,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "name",
+		},
+	},
+}
+
 var BrandGlossariesGet = &command.Spec{
 	Group:          "brand",
 	Name:           "glossaries get",
 	Summary:        "Get Brand Glossary",
-	Description:    "Returns one brand glossary with its full term list, so you can see exactly which terms are remapped and how. Use this to verify a glossary's contents when a generated video pronounces a term unexpectedly.\n\nPronunciations affect generated audio only: a term keeps its original spelling in captions and subtitles while being spoken as its `pronunciation`. Glossaries are created and edited in the HeyGen web app under Brand Kit; this endpoint is read-only.",
+	Description:    "Returns one brand glossary with its full term list, so you can see exactly which terms are remapped and how. Use this to verify a glossary's contents when a generated video pronounces a term unexpectedly.\n\nPronunciations affect generated audio only: a term keeps its original spelling in captions and subtitles while being spoken as its `pronunciation`.\n\nA glossary can also carry translation rules, which control how terms are handled when a video is translated. Those are managed in the HeyGen web app under Brand Kit and are not returned here; editing a glossary through this API leaves them unchanged.",
 	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"A single brand glossary with its full term list (GET /v3/brand-glossaries/{id}).\",\n      \"properties\": {\n        \"brand_glossary_id\": {\n          \"description\": \"Unique brand glossary ID. Pass it as `brand_glossary_id` when creating a video or translation to apply this glossary.\",\n          \"type\": \"string\"\n        },\n        \"created_at\": {\n          \"description\": \"Creation timestamp (UTC).\",\n          \"type\": \"string\"\n        },\n        \"name\": {\n          \"description\": \"Display name of the brand glossary.\",\n          \"type\": \"string\"\n        },\n        \"terms\": {\n          \"description\": \"Every term mapping in this glossary. Empty when the glossary has no terms yet, in which case applying it has no effect.\",\n          \"items\": {\n            \"description\": \"One glossary entry: a written term and how it should be spoken.\",\n            \"properties\": {\n              \"pronunciation\": {\n                \"description\": \"Respelling handed to the speech synthesizer in place of `term` (for example 'hey-jen' for 'HeyGen'). Affects generated audio only — captions and subtitles keep the original `term` spelling.\",\n                \"type\": \"string\"\n              },\n              \"term\": {\n                \"description\": \"The term as written in a script, matched case-insensitively.\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"term\",\n              \"pronunciation\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        },\n        \"updated_at\": {\n          \"description\": \"Last update timestamp (UTC).\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"brand_glossary_id\",\n        \"name\",\n        \"created_at\",\n        \"updated_at\",\n        \"terms\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
 	Endpoint:       "/v3/brand-glossaries/{brand_glossary_id}",
 	Method:         "GET",
@@ -25,7 +51,7 @@ var BrandGlossariesList = &command.Spec{
 	Group:          "brand",
 	Name:           "glossaries list",
 	Summary:        "List Brand Glossaries",
-	Description:    "List brand glossaries (custom term mappings, a.k.a. brand voices) in the authenticated user's workspace. A brand glossary enforces custom term translations during video translation — for example, translating \"Reformer\" as Pilates equipment instead of as a political activist. Brand glossaries are created and edited in the HeyGen web app under Brand Kit; this endpoint is read-only for discovery.\n\nPass the returned `brand_glossary_id` when creating a video or translation to apply the glossary. Use GET /v3/brand-glossaries/{brand_glossary_id} to see which terms it remaps.",
+	Description:    "List brand glossaries (custom term mappings, a.k.a. brand voices) in the authenticated user's workspace. A brand glossary controls how custom terms are pronounced in generated speech — for example, speaking \"HeyGen\" as \"hey-jen\".\n\nPass the returned `brand_glossary_id` when creating a video or translation to apply the glossary. Use GET /v3/brand-glossaries/{brand_glossary_id} to see which terms it remaps, POST /v3/brand-glossaries to create one, and PATCH /v3/brand-glossaries/{brand_glossary_id} to change one.",
 	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"description\": \"A single brand glossary entry in the list response.\",\n        \"properties\": {\n          \"brand_glossary_id\": {\n            \"description\": \"Unique brand glossary ID. Pass it as `brand_glossary_id` when creating a video or translation to apply this glossary.\",\n            \"type\": \"string\"\n          },\n          \"created_at\": {\n            \"description\": \"Creation timestamp (UTC).\",\n            \"type\": \"string\"\n          },\n          \"name\": {\n            \"description\": \"Display name of the brand glossary.\",\n            \"type\": \"string\"\n          },\n          \"updated_at\": {\n            \"description\": \"Last update timestamp (UTC).\",\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"brand_glossary_id\",\n          \"name\",\n          \"created_at\",\n          \"updated_at\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
 	Endpoint:       "/v3/brand-glossaries",
 	Method:         "GET",
@@ -58,6 +84,35 @@ var BrandGlossariesList = &command.Spec{
 			Max:      nil,
 			Source:   "query",
 			JSONName: "token",
+		},
+	},
+}
+
+var BrandGlossariesUpdate = &command.Spec{
+	Group:          "brand",
+	Name:           "glossaries update",
+	Summary:        "Update Brand Glossary",
+	Description:    "Updates a brand glossary. Each field is replaced independently: a field you omit is left untouched, a field you send replaces that value in full, and an empty `terms` array removes every term. There is no way to add a single term — read the glossary, append to `terms`, and send the whole list back.\n\nRenaming to a name another glossary in your workspace already uses returns 409.\n\nA glossary's translation rules are managed in the HeyGen web app and are never modified by this endpoint, so a glossary edited there keeps them through an update made here.",
+	RequestSchema:  "{\n  \"description\": \"Request body for PATCH /v3/brand-glossaries/{brand_glossary_id}.\\n\\nEach field is replaced independently: a field you omit is left untouched, a field you send\\nreplaces that value in full, and an empty array clears the term list. There is no way to add a\\nsingle term — read the glossary, append to `terms`, and send the whole list back.\",\n  \"properties\": {\n    \"name\": {\n      \"description\": \"New display name. Surrounding whitespace is removed, and the trimmed name must be 1-64 characters and unique within your workspace, compared without regard to case. Omit to keep the current name.\",\n      \"type\": \"string\"\n    },\n    \"terms\": {\n      \"description\": \"Replacement term list. Omit to leave the existing terms untouched, or pass an empty array to remove them all.\",\n      \"items\": {\n        \"description\": \"One glossary entry: a written term and how it should be spoken.\",\n        \"properties\": {\n          \"pronunciation\": {\n            \"description\": \"Respelling handed to the speech synthesizer in place of `term` (for example 'hey-jen' for 'HeyGen'). Affects generated audio only — captions and subtitles keep the original `term` spelling.\",\n            \"type\": \"string\"\n          },\n          \"term\": {\n            \"description\": \"The term as written in a script, matched case-insensitively.\",\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"term\",\n          \"pronunciation\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"A single brand glossary with its full term list (GET /v3/brand-glossaries/{id}).\",\n      \"properties\": {\n        \"brand_glossary_id\": {\n          \"description\": \"Unique brand glossary ID. Pass it as `brand_glossary_id` when creating a video or translation to apply this glossary.\",\n          \"type\": \"string\"\n        },\n        \"created_at\": {\n          \"description\": \"Creation timestamp (UTC).\",\n          \"type\": \"string\"\n        },\n        \"name\": {\n          \"description\": \"Display name of the brand glossary.\",\n          \"type\": \"string\"\n        },\n        \"terms\": {\n          \"description\": \"Every term mapping in this glossary. Empty when the glossary has no terms yet, in which case applying it has no effect.\",\n          \"items\": {\n            \"description\": \"One glossary entry: a written term and how it should be spoken.\",\n            \"properties\": {\n              \"pronunciation\": {\n                \"description\": \"Respelling handed to the speech synthesizer in place of `term` (for example 'hey-jen' for 'HeyGen'). Affects generated audio only — captions and subtitles keep the original `term` spelling.\",\n                \"type\": \"string\"\n              },\n              \"term\": {\n                \"description\": \"The term as written in a script, matched case-insensitively.\",\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"term\",\n              \"pronunciation\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        },\n        \"updated_at\": {\n          \"description\": \"Last update timestamp (UTC).\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"brand_glossary_id\",\n        \"name\",\n        \"created_at\",\n        \"updated_at\",\n        \"terms\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/brand-glossaries/{brand_glossary_id}",
+	Method:         "PATCH",
+	BodyEncoding:   "json",
+	Args: []command.ArgSpec{
+		{Name: "brand-glossary-id", Param: "brand_glossary_id", Help: ""},
+	},
+	Flags: []command.FlagSpec{
+		{
+			Name:     "name",
+			Type:     "string",
+			Default:  "",
+			Help:     "New display name. Surrounding whitespace is removed, and the trimmed name must be 1-64 characters and unique within your workspace, compared without regard to case. Omit to keep the current name.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "name",
 		},
 	},
 }
