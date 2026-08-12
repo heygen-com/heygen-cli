@@ -382,18 +382,22 @@ func buildSpec(
 			continue
 		}
 		flag := command.FlagSpec{
-			Name:     strcase.ToKebab(param.Name),
-			Type:     schemaToFlagType(param.Schema),
-			Help:     param.Description,
-			Required: param.Required,
-			Source:   "query",
-			JSONName: param.Name,
+			Name:       strcase.ToKebab(param.Name),
+			Type:       schemaToFlagType(param.Schema),
+			Help:       param.Description,
+			Required:   param.Required,
+			Source:     "query",
+			JSONName:   param.Name,
+			Deprecated: param.Deprecated,
 		}
 		if param.Schema != nil && param.Schema.Value != nil {
 			s := param.Schema.Value
 			flag.Enum = schemaEnum(s)
 			flag.Min = floatToIntPtr(s.Min)
 			flag.Max = floatToIntPtr(s.Max)
+			// OpenAPI allows `deprecated` on the parameter or on its schema.
+			// EF authors it on the Pydantic field, so it lands on the schema.
+			flag.Deprecated = flag.Deprecated || s.Deprecated
 			if d, ok, fromExt := schemaCliDefault(s); ok {
 				flag.Default = formatDefault(d)
 				flag.SendDefaultWhenOmitted = fromExt
@@ -437,15 +441,16 @@ func buildSpec(
 				continue
 			}
 			flag := command.FlagSpec{
-				Name:     strcase.ToKebab(name),
-				Type:     schemaToFlagType(propRef),
-				Help:     prop.Description,
-				Required: required[name],
-				Enum:     schemaEnum(prop),
-				Min:      floatToIntPtr(prop.Min),
-				Max:      floatToIntPtr(prop.Max),
-				Source:   "body",
-				JSONName: name,
+				Name:       strcase.ToKebab(name),
+				Type:       schemaToFlagType(propRef),
+				Help:       prop.Description,
+				Required:   required[name],
+				Enum:       schemaEnum(prop),
+				Min:        floatToIntPtr(prop.Min),
+				Max:        floatToIntPtr(prop.Max),
+				Source:     "body",
+				JSONName:   name,
+				Deprecated: prop.Deprecated,
 			}
 			if d, ok, fromExt := schemaCliDefault(prop); ok {
 				flag.Default = formatDefault(d)

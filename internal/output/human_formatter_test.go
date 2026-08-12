@@ -570,3 +570,19 @@ func TestHumanFormatter_Error(t *testing.T) {
 		t.Fatalf("missing hint line:\n%s", got)
 	}
 }
+
+// Even in --human mode the notice belongs on stderr: stdout carries the
+// rendered table or key-value block, and piping it must stay clean.
+func TestHumanFormatter_Warn(t *testing.T) {
+	var out, errOut bytes.Buffer
+	f := NewHumanFormatter(&out, &errOut)
+
+	f.Warn("--brand-voice-id is deprecated")
+
+	if out.Len() != 0 {
+		t.Errorf("warning must not touch stdout, got %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "--brand-voice-id is deprecated") {
+		t.Errorf("stderr should carry the notice, got %q", errOut.String())
+	}
+}

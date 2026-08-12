@@ -100,6 +100,16 @@ var DeprecatedAliases = []Alias{
 }
 ```
 
+**Deprecated flags** (a superseded request field) — nothing to register; this one is spec-driven. When an EF author marks a Pydantic field with `json_schema_extra={"deprecated": True}`, the OpenAPI property carries `deprecated: true`, codegen sets `FlagSpec.Deprecated`, and the builder hides the flag from `--help` while still registering it and still sending its value. Supplying it prints a notice on stderr.
+
+Three things not to "fix" here:
+
+- The flag is hidden with `MarkHidden`, **not** pflag's `MarkDeprecated`. `MarkDeprecated` looks like the right call and does hide the flag, but it also prints its own notice from inside `Set()` to the flag set's output. Cobra buffers that and flushes it through `c.Print` → `OutOrStderr()`, which reads `c.outWriter`: stderr when nobody set one, but **stdout for any in-process caller that has called `SetOut`** — which our own test harness does. Rather than depend on a destination the code inherits, the notice goes through `formatter.Warn`, which always writes to stderr, carries the same envelope as an error, and fires only when the caller actually supplied the field.
+- Deprecated never means removed. Dropping the flag would break every script already passing it, so it stays registered and its value still reaches the API. A flag that is both deprecated *and* required stays visible, since hiding it would report a missing required flag the user cannot find.
+- The notice also fires for a deprecated field supplied through `-d/--data`, matched on `JSONName`. That caller never reads `--help`, so hiding the flag tells it nothing.
+
+`deprecated` says only "don't use this", never why: some deprecated fields are live aliases (`brand_voice_id` resolves to `brand_glossary_id`), others are no-ops the API ignores (`enable_caption`). The notice is generic for that reason, and the field's own description carries the specifics via `--request-schema`.
+
 ## Git Conventions
 
 See [.github/GIT_CONVENTIONS.md](.github/GIT_CONVENTIONS.md) for branch names, commit messages, and PR title format.

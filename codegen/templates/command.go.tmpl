@@ -57,6 +57,9 @@ var {{pascalCase .Group}}{{pascalCase .Name}} = &command.Spec{
 {{- if .SendDefaultWhenOmitted}}
 			SendDefaultWhenOmitted: true,
 {{- end}}
+{{- if .Deprecated}}
+			Deprecated: true,
+{{- end}}
 		},
 {{- end}}
 	},

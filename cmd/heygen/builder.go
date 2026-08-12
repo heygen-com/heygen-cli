@@ -76,6 +76,11 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 				parsedData = parsed
 			}
 
+			// After the schema short-circuit, and after -d is parsed so the raw
+			// body is covered too: --request-schema is introspection, not a
+			// call, so it should not warn about fields it never sends.
+			warnDeprecatedFlags(cmd, spec, parsedData, ctx.formatter)
+
 			inv, err := spec.BuildInvocation(cmd, args, parsedData)
 			if err != nil {
 				return err
@@ -424,6 +429,51 @@ func registerFlag(cmd *cobra.Command, flag command.FlagSpec) {
 
 	if flag.Required {
 		_ = cmd.MarkFlagRequired(flag.Name)
+	}
+	if flag.Deprecated && !flag.Required {
+		// Hidden, not removed: a script that already passes the flag must keep
+		// working.
+		//
+		// Guarded on !Required because hiding a required flag produces an
+		// unwinnable command: the user is told a required flag is missing and
+		// cannot find it in --help. No spec does this today; if one ever does,
+		// staying visible is the lesser evil until the API resolves the
+		// contradiction.
+		//
+		// Deliberately NOT pflag's MarkDeprecated. That would hide the flag too,
+		// but it also prints its own "Flag --x has been deprecated" line from
+		// inside Set(), to the flag set's output. Cobra flushes that through
+		// OutOrStderr(), which reads c.outWriter — stderr when nobody set one,
+		// stdout for any in-process caller that called SetOut, as our test
+		// harness does. warnDeprecatedFlags routes through the formatter so the
+		// destination is owned rather than inherited.
+		_ = cmd.Flags().MarkHidden(flag.Name)
+	}
+}
+
+// deprecationNotice is deliberately generic. OpenAPI `deprecated` says only
+// "don't use this", not why: some deprecated fields are live aliases, others
+// are no-ops the API ignores. The field's own description carries the specifics
+// and stays reachable via --request-schema.
+const deprecationNotice = "it is deprecated in the HeyGen API and may be removed in a future version"
+
+// warnDeprecatedFlags emits one notice per deprecated field the caller actually
+// supplied, whether as a flag or as a key in the -d/--data body. It goes through
+// the formatter to reach stderr — see registerFlag for why pflag's built-in
+// notice cannot be used.
+//
+// A deprecation warning must never corrupt the JSON an agent is reading, so the
+// only correct destination is stderr.
+func warnDeprecatedFlags(cmd *cobra.Command, spec *command.Spec, body map[string]any, f output.Formatter) {
+	for _, flag := range spec.Flags {
+		// The raw-body path is the one that most needs the notice: a caller
+		// composing -d/--data never reads --help, so hiding the flag tells it
+		// nothing. Match on JSONName, which is the key such a caller writes.
+		_, inBody := body[flag.JSONName]
+		if !flag.Deprecated || !(cmd.Flags().Changed(flag.Name) || inBody) {
+			continue
+		}
+		f.Warn(fmt.Sprintf("--%s: %s", flag.Name, deprecationNotice))
 	}
 }
 
