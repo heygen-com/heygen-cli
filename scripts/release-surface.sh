@@ -5,6 +5,7 @@
 #
 #   release-surface.sh diff       <old-ref> <new-ref>   what changed in the surface
 #   release-surface.sh deprecated <old-ref> <new-ref>   flags that newly went quiet
+#   release-surface.sh reduce                           reduce stdin (used by tests)
 #
 # Both checks fail toward printing nothing, and nothing looks identical to a
 # clean bill, so both assert their own input is sane before reporting.
@@ -32,13 +33,31 @@ gen_at() {
 
 # Reduce gen/ to just the contract-bearing lines.
 #
+# The trailing sed collapses the padding gofmt uses to align struct values.
+# Without it, adding one longer field name re-aligns every sibling and the
+# whole block reports as removed-and-re-added: adding Deprecated to FlagSpec
+# produced 27 phantom removals on the first real run, which is exactly the
+# noise a genuine removal would hide in.
+#
 # Request and response schemas are collapsed to a marker rather than dropped:
 # their contents churn on every resync, but whether a command *has* one decides
 # whether --request-schema and --response-schema exist.
+reduce() {
+  # Reads generated Go on stdin, writes the reduced surface on stdout. Split out
+  # from surface() so a test can feed it fixtures and assert real behavior
+  # rather than grep the script for an implementation detail.
+  sed -E 's/^([[:space:]]*(RequestSchema|ResponseSchema)):.*/\1: <present>/' \
+    | grep -E "^[[:space:]]*($SURFACE_FIELDS)" \
+    | sed -E 's/:[[:space:]]+/: /'
+    # No `g` flag, deliberately: this collapses only the field's own colon and
+    # the alignment padding after it. Everything downstream must survive
+    # byte-for-byte — URL values with internal colons, inline
+    # `{Name: "x", Param: "y"}` Args entries, and any colon inside a string.
+    # Adding /g "for consistency" would over-collapse and reintroduce blind spots.
+}
+
 surface() {
-  gen_at "$1" \
-    | sed -E 's/^([[:space:]]*(RequestSchema|ResponseSchema)):.*/\1: <present>/' \
-    | grep -E "^[[:space:]]*($SURFACE_FIELDS)"
+  gen_at "$1" | reduce
 }
 
 # Flags whose help text says they stopped doing anything. Invisible to the
@@ -53,6 +72,10 @@ deprecated_flags() {
         /^\t\t\tHelp:.*([Dd]eprecat|no longer|ignored)/ { print grp, cmd, "--" flag }
       ' | sort
 }
+
+# `reduce` is the one mode that takes no refs: it is the reduction alone, fed
+# from stdin, so tests can exercise it directly.
+if [ "${1:-}" = "reduce" ]; then reduce; exit 0; fi
 
 cmd=${1:-}; old=${2:-}; new=${3:-}
 [ -n "$cmd" ] && [ -n "$old" ] && [ -n "$new" ] || die "usage: $0 {diff|deprecated} <old-ref> <new-ref>"
@@ -80,5 +103,5 @@ case "$cmd" in
     deprecated_flags "$new" > /tmp/dep-new.txt
     comm -13 /tmp/dep-old.txt /tmp/dep-new.txt
     ;;
-  *) die "unknown check '$cmd' (expected: diff, deprecated)" ;;
+  *) die "unknown check '$cmd' (expected: diff, deprecated, reduce)" ;;
 esac
