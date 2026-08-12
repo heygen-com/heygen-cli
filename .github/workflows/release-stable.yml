@@ -65,6 +65,31 @@ jobs:
           git tag "$version"
           git push origin "$version"
 
+      - name: Resolve previous stable tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # GoReleaser defaults the changelog baseline to the previous tag of any
+          # kind. Dev prereleases used to be minted per merge, so that baseline
+          # was routinely a dev tag cut minutes earlier and the notes covered a
+          # commit or two instead of the release. Pin it to the previous *stable*
+          # tag so the range is the release, whoever cuts it.
+          version="${{ github.event.inputs.version }}"
+          prev="$(git tag --list 'v*' --sort=-v:refname \
+                    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+                    | grep -vFx "$version" \
+                    | head -n 1)"
+          if [ -z "$prev" ]; then
+            # First stable release: leave the override unset rather than passing
+            # an empty one. GoReleaser documents the env var as an override but
+            # not what an empty value means, and this is not the place to find out.
+            echo "no previous stable tag; leaving GoReleaser's own baseline in place"
+          else
+            echo "changelog baseline: $prev"
+            echo "GORELEASER_PREVIOUS_TAG=$prev" >> "$GITHUB_ENV"
+          fi
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -73,6 +98,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ github.event.inputs.version }}
+          # GORELEASER_PREVIOUS_TAG is exported by the step above, and only when a
+          # previous stable tag exists.
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6

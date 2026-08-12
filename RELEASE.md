@@ -6,8 +6,8 @@ For install instructions, see [README.md](./README.md).
 
 ### Dev builds
 
-- Immutable prereleases tagged `v{base}-dev.{YYYYMMDD}.{shorthash}`
-- Built from `main`
+- Immutable prereleases tagged `v{base}-dev.{YYYYMMDDHHmm}`
+- Built from `main`, **cut on demand** — merging to `main` does not mint one
 - Intended for internal users and fast feedback
 
 ### Stable releases
@@ -81,13 +81,19 @@ for the install script.
 
 1. **Verify the release was published:**
    ```bash
-   gh release view v0.0.5
+   gh release view "$VERSION"
    ```
-2. **Verify the install script picks up the new version** (after CDN propagation):
+2. **Publish the changelog you wrote in step 7.** GoReleaser fills the release body with a commit list, which is a floor, not the notes. Replace it:
+   ```bash
+   gh release edit "$VERSION" --notes-file notes.md
+   ```
+   Nothing does this for you, and nothing fails if you skip it — the release just keeps the commit list. Read the body back afterwards to confirm it took.
+3. **Verify the install script picks up the new version** (after CDN propagation):
    ```bash
    curl -fsSL https://static.heygen.ai/cli/install.sh | bash
    heygen --version
    ```
+   Run the installed binary rather than trusting the CDN pointer — that is the artifact a user actually gets.
 
 ## Checking for Regressions
 
