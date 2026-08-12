@@ -1,9 +1,13 @@
 name: Dev Release
 
+# On demand only. This used to also fire on every push to main, which tagged a
+# prerelease per merge — 78 of them against 22 stable releases, nearly all with
+# zero downloads. Worse, those tags sat between stable releases and became the
+# baseline GoReleaser computed the changelog from, so v0.7.0 published notes
+# covering one commit instead of five. Dev builds are still available whenever
+# someone wants one; they just are not minted automatically.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: write
