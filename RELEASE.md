@@ -105,6 +105,8 @@ scripts/release-surface.sh diff "$LAST_STABLE" origin/main
 
 The script reduces `gen/` at both refs to the fields that decide what a user can type, then diffs the two. It filters with an allowlist, since a field left out is invisible forever; `codegen/surface_allowlist_test.go` fails the build if codegen gains a field the allowlist misses, so the list cannot rot. Request and response schemas are compared by presence rather than content: their bodies churn on every resync, but whether a command *has* one decides whether `--request-schema` and `--response-schema` exist. gofmt's alignment padding is stripped before the comparison too, so re-padding a struct — which happens whenever a field with a longer name is added — is invisible rather than reported as every field being removed.
 
+CI runs this automatically on any PR that touches `gen/` and posts the result as a comment, so a resync's surface change is visible at review time rather than weeks later at the release cut. It never fails the build: reading the result takes judgment CI cannot supply, and a blocking check would deadlock the codegen sync bot, which cannot add a deprecated alias itself. Running it here is still part of the checklist, not an optional double-check: the CI comment is advisory and easy to scroll past, and it only covers changes that arrived through a PR.
+
 Empty output means the surface is unchanged. The script exits non-zero and says so if its own reduction matched nothing, because "no changes" and "the check is broken" otherwise look identical. Read the `<` lines (the old side) first — a removal is a break, an addition usually isn't.
 
 | A `<` line showing... | Effect | Action |

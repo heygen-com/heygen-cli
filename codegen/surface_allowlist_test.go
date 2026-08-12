@@ -182,3 +182,132 @@ func TestSurfaceReductionSuppressesPaddingButNotChanges(t *testing.T) {
 		})
 	}
 }
+
+// The CI job finds its own previous comment by this marker so it edits rather
+// than posting a new report on every push. The string lives in two files; if
+// they drift, nothing fails loudly — the PR just accumulates a comment per push
+// until someone notices the noise.
+func TestSurfaceReportMarkerMatchesCIWorkflow(t *testing.T) {
+	script, err := os.ReadFile(filepath.Join("..", "scripts", "release-surface.sh"))
+	if err != nil {
+		t.Fatalf("read release-surface.sh: %v", err)
+	}
+	workflow, err := os.ReadFile(filepath.Join("..", ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatalf("read ci.yml: %v", err)
+	}
+
+	re := regexp.MustCompile(`<!-- [a-z-]+ -->`)
+	inScript := re.FindString(string(script))
+	if inScript == "" {
+		t.Fatal("release-surface.sh no longer emits an HTML comment marker; CI cannot find its own comment to update")
+	}
+	if !strings.Contains(string(workflow), inScript) {
+		t.Errorf("marker %q is in release-surface.sh but not in ci.yml — the surface job will post a new comment "+
+			"on every push instead of editing its previous one", inScript)
+	}
+}
+
+// Pins the report's classification against immutable history. v0.5.0 -> v0.6.0
+// added no commands and removed none; it changed existing ones. The distinction
+// is the whole point: a resync that adds commands is routine, one that changes
+// or removes an existing command is not, and a report that conflated them would
+// cry wolf on every resync until people stopped reading it.
+func TestSurfaceReportClassifiesChangeVsAddition(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+	out, err := exec.Command("bash", filepath.Join("..", "scripts", "release-surface.sh"),
+		"report", "v0.5.0", "v0.6.0").Output()
+	if err != nil {
+		t.Skipf("tags unavailable (shallow clone?): %v", err)
+	}
+	got := string(out)
+
+	if !strings.Contains(got, "existing command(s) changed") {
+		t.Errorf("v0.5.0..v0.6.0 changed existing commands; headline should say so.\ngot: %s", firstLines(got, 3))
+	}
+	if strings.Contains(got, "REMOVED") {
+		t.Errorf("v0.5.0..v0.6.0 removed no commands, but the report claims a removal.\ngot: %s", firstLines(got, 3))
+	}
+	if !strings.Contains(got, "never blocking") {
+		t.Error("report should state that it is advisory; a reader who thinks it is a gate will treat a removal as pre-approved")
+	}
+}
+
+// The REMOVED headline is the branch a reader trusts most and the only one that
+// means "someone's script breaks". It was previously exercised only by hand.
+// Built from real refs so the fixture cannot drift from the generated format:
+// a worktree at v0.6.0 with one command deleted.
+func TestSurfaceReportHeadlinesRemovedCommands(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatalf("abs: %v", err)
+	}
+	if err := exec.Command("git", "-C", root, "rev-parse", "--verify", "v0.6.0").Run(); err != nil {
+		t.Skip("v0.6.0 unavailable (shallow clone?)")
+	}
+
+	dir := t.TempDir()
+	wt := filepath.Join(dir, "wt")
+	if out, err := exec.Command("git", "-C", root, "worktree", "add", "--detach", wt, "v0.6.0").CombinedOutput(); err != nil {
+		t.Skipf("worktree add: %v (%s)", err, out)
+	}
+	t.Cleanup(func() {
+		_ = exec.Command("git", "-C", root, "worktree", "remove", "--force", wt).Run()
+	})
+
+	// Delete one command from the generated surface, exactly as an upstream
+	// removal would arrive in a resync.
+	brand := filepath.Join(wt, "gen", "brand.go")
+	b, err := os.ReadFile(brand)
+	if err != nil {
+		t.Fatalf("read gen/brand.go: %v", err)
+	}
+	src := string(b)
+	start := strings.Index(src, "var BrandGlossariesGet")
+	end := strings.Index(src, "var BrandGlossariesList")
+	if start < 0 || end < 0 || end <= start {
+		t.Skip("gen/brand.go no longer has the expected specs at v0.6.0")
+	}
+	if err := os.WriteFile(brand, []byte(src[:start]+src[end:]), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	for _, args := range [][]string{{"add", "-A"}, {"-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "remove a command"}} {
+		if out, err := exec.Command("git", append([]string{"-C", wt}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+
+	// Run from inside the worktree: the script anchors itself to the enclosing
+	// repo root, and HEAD must be the mutated commit, not the main checkout's.
+	cmd := exec.Command("bash", filepath.Join(root, "scripts", "release-surface.sh"),
+		"report", "v0.6.0", "HEAD")
+	cmd.Dir = wt
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	got := string(out)
+
+	if !strings.Contains(got, "REMOVED") {
+		t.Errorf("a deleted command must headline as REMOVED.\ngot: %s", firstLines(got, 3))
+	}
+	if !strings.Contains(got, "heygen brand glossaries get") {
+		t.Errorf("the report must name the removed command so it is actionable.\ngot: %s", firstLines(got, 8))
+	}
+	if !strings.Contains(got, "aliases.go") {
+		t.Error("the removal block should point at the remedy (a deprecated alias), not just state the problem")
+	}
+}
+
+func firstLines(s string, n int) string {
+	lines := strings.SplitN(s, "\n", n+1)
+	if len(lines) > n {
+		lines = lines[:n]
+	}
+	return strings.Join(lines, "\n")
+}
