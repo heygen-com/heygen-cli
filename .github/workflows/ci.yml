@@ -127,3 +127,79 @@ jobs:
         with:
           version: "~> v2"
           args: check
+
+  # Reports what a PR does to the generated command surface. Advisory only: it
+  # never fails, because reading the result needs judgment CI cannot supply — a
+  # removal can be correct when the same PR adds a deprecated alias. Blocking
+  # would also deadlock the codegen sync bot, which cannot add that alias itself.
+  surface-report:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: the report diffs against the base commit.
+          fetch-depth: 0
+
+      - name: Report command-surface changes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+
+          # Only speak up when the generated surface could have moved.
+          if git diff --quiet "$BASE_SHA" HEAD -- gen/; then
+            echo "gen/ untouched; nothing to report."
+            exit 0
+          fi
+
+          marker="<!-- command-surface-report -->"
+
+          if ! scripts/release-surface.sh report "$BASE_SHA" HEAD > /tmp/surface-report.md 2>/tmp/surface-err.txt; then
+            # Say so in the comment rather than only in the log. A silent
+            # failure leaves the previous report sitting there looking current,
+            # and the check stays green either way.
+            {
+              echo "$marker"
+              echo "### Command surface: report failed to generate"
+              echo
+              echo "This check could not read the surface, so it is telling you nothing about this PR."
+              echo "Run \`scripts/release-surface.sh diff <base> HEAD\` locally before merging."
+              echo
+              echo '```'
+              tail -5 /tmp/surface-err.txt 2>/dev/null || true
+              echo '```'
+            } > /tmp/surface-report.md
+            echo "::warning::surface report failed to generate; posting a failure notice, not blocking the PR"
+          fi
+
+          cat /tmp/surface-report.md >> "$GITHUB_STEP_SUMMARY"
+
+          # Update this job's own previous comment rather than posting a new one
+          # on every push. Keyed on the marker the report emits, not on author or
+          # position, so interleaved comments cannot confuse it.
+          # --paginate because issue comments come back 30 per page by default,
+          # so on a busy PR the marker falls off page one and this would post a
+          # duplicate every push - the exact thing the marker exists to prevent.
+          # --jq runs once PER PAGE, so emit every match and take the last
+          # overall; a per-page `last` would concatenate ids into a broken URL.
+          existing=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+            --jq ".[] | select(.body | contains(\"$marker\")) | .id" 2>/dev/null | tail -1 || true)
+
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" \
+              -F body=@/tmp/surface-report.md >/dev/null \
+              && echo "updated comment $existing" \
+              || echo "::warning::could not update the surface comment (fork PR?); summary still written"
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              -F body=@/tmp/surface-report.md >/dev/null \
+              && echo "posted surface comment" \
+              || echo "::warning::could not post the surface comment (fork PR?); summary still written"
+          fi
