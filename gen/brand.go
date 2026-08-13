@@ -128,6 +128,58 @@ var BrandGlossariesUpdate = &command.Spec{
 	},
 }
 
+var BrandKitsCreate = &command.Spec{
+	Group:          "brand",
+	Name:           "kits create",
+	Summary:        "Create Brand Kit",
+	Description:    "Creates a brand kit by importing brand assets from a public website, including logos, colors and font files found on the site. By calling this endpoint you confirm you have the rights and licenses necessary to upload, store and use those assets in HeyGen.\n\nThe kit is assembled in the background: the returned brand_kit_id is usable immediately, but poll GET /v3/brand-kits/{brand_kit_id} every 2 to 5 seconds until its status is 'completed' before relying on its colors, logos or fonts. A website import usually settles in under two minutes.\n\nSend an Idempotency-Key header to make retries safe: without one, a retried request starts a second import of the same site.",
+	RequestSchema:  "{\n  \"description\": \"Request body for POST /v3/brand-kits.\",\n  \"properties\": {\n    \"name\": {\n      \"description\": \"Name for the brand kit, up to 256 characters. Defaults to the brand name detected on the site, or its domain.\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    },\n    \"url\": {\n      \"description\": \"Public website URL to build the brand kit from. HeyGen visits the site and imports the brand assets it finds there, including logos, colors and font files. By calling this endpoint you confirm you have the rights and licenses necessary to upload, store and use those assets in HeyGen.\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"url\"\n  ],\n  \"type\": \"object\"\n}",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for POST /v3/brand-kits.\",\n      \"properties\": {\n        \"brand_kit_id\": {\n          \"description\": \"Unique identifier of the newly created brand kit.\",\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"description\": \"Assembly status, always 'loading' on creation: the kit exists and its id is usable immediately, but its assets are gathered in the background. Poll GET /v3/brand-kits/{brand_kit_id} until status is 'completed'.\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"brand_kit_id\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/brand-kits",
+	Method:         "POST",
+	BodyEncoding:   "json",
+	Flags: []command.FlagSpec{
+		{
+			Name:     "name",
+			Type:     "string",
+			Default:  "",
+			Help:     "Name for the brand kit, up to 256 characters. Defaults to the brand name detected on the site, or its domain.",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "name",
+		},
+		{
+			Name:     "url",
+			Type:     "string",
+			Default:  "",
+			Help:     "Public website URL to build the brand kit from. HeyGen visits the site and imports the brand assets it finds there, including logos, colors and font files. By calling this endpoint you confirm you have the rights and licenses necessary to upload, store and use those assets in HeyGen.",
+			Required: true,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "body",
+			JSONName: "url",
+		},
+	},
+}
+
+var BrandKitsGet = &command.Spec{
+	Group:          "brand",
+	Name:           "kits get",
+	Summary:        "Get Brand Kit",
+	Description:    "Returns one brand kit with the colors, logos and fonts it was built from, and which of them play which role. A brand kit imported from a website is assembled in the background: while status is 'loading' the collections and roles are provisional, and they are final once status is 'completed'. Poll every 2 to 5 seconds while status is 'loading'; a website import usually settles in under two minutes, and fonts are typically the last thing to land.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"A single brand kit with its colors, logos and fonts.\\n\\nA brand kit imported from a website is assembled in the background. While `status` is `loading`\\nthe collections and role fields are provisional and may be empty or incomplete; the import has\\nfinished contributing to them once `status` is `completed`. A kit whose import failed reports\\n`error` and keeps whatever was assembled before the failure. A kit can still be edited in the\\nHeyGen web app afterwards, so `completed` means the import is done, not that the kit is frozen.\",\n      \"properties\": {\n        \"brand_kit_id\": {\n          \"description\": \"Unique brand kit identifier.\",\n          \"type\": \"string\"\n        },\n        \"color_roles\": {\n          \"description\": \"Which color plays which part. May be absent while the kit is still loading.\",\n          \"nullable\": true,\n          \"properties\": {\n            \"accent\": {\n              \"description\": \"Accent color, used for highlights and calls to action.\",\n              \"nullable\": true,\n              \"type\": \"string\"\n            },\n            \"primary\": {\n              \"description\": \"Primary brand color.\",\n              \"nullable\": true,\n              \"type\": \"string\"\n            },\n            \"secondary\": {\n              \"description\": \"Secondary brand color.\",\n              \"nullable\": true,\n              \"type\": \"string\"\n            },\n            \"tertiary\": {\n              \"description\": \"Tertiary brand color.\",\n              \"nullable\": true,\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"colors\": {\n          \"description\": \"Brand colors as hex values, e.g. '#FF5733'. A color playing a role may sit outside this list — see color_roles — so do not treat it as the full set of colors the kit references.\",\n          \"items\": {\n            \"type\": \"string\"\n          },\n          \"type\": \"array\"\n        },\n        \"font_roles\": {\n          \"description\": \"Which font plays which typographic part. May be absent while the kit is still loading.\",\n          \"nullable\": true,\n          \"properties\": {\n            \"body_text\": {\n              \"description\": \"Font for body copy.\",\n              \"nullable\": true,\n              \"properties\": {\n                \"font_id\": {\n                  \"description\": \"Identifier of the assigned font.\",\n                  \"nullable\": true,\n                  \"type\": \"string\"\n                },\n                \"weight\": {\n                  \"description\": \"Font weight, e.g. 400 for regular or 700 for bold.\",\n                  \"nullable\": true,\n                  \"type\": \"integer\"\n                }\n              },\n              \"required\": [],\n              \"type\": \"object\"\n            },\n            \"title_text\": {\n              \"description\": \"Font for headings and titles.\",\n              \"nullable\": true,\n              \"properties\": {\n                \"font_id\": {\n                  \"description\": \"Identifier of the assigned font.\",\n                  \"nullable\": true,\n                  \"type\": \"string\"\n                },\n                \"weight\": {\n                  \"description\": \"Font weight, e.g. 400 for regular or 700 for bold.\",\n                  \"nullable\": true,\n                  \"type\": \"integer\"\n                }\n              },\n              \"required\": [],\n              \"type\": \"object\"\n            }\n          },\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"fonts\": {\n          \"description\": \"Fonts belonging to the brand kit.\",\n          \"items\": {\n            \"description\": \"A font belonging to a brand kit.\",\n            \"properties\": {\n              \"font_id\": {\n                \"description\": \"Unique font identifier. Matches the font_id referenced by font_roles.\",\n                \"type\": \"string\"\n              },\n              \"name\": {\n                \"description\": \"Font family name.\",\n                \"nullable\": true,\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"font_id\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        },\n        \"logo_roles\": {\n          \"description\": \"Which logo is the main one. May be absent while the kit is still loading.\",\n          \"nullable\": true,\n          \"properties\": {\n            \"primary\": {\n              \"description\": \"Identifier of the primary logo. Names a logo_id in `logos` unless that logo has since been deleted.\",\n              \"nullable\": true,\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"logos\": {\n          \"description\": \"Logos belonging to the brand kit.\",\n          \"items\": {\n            \"description\": \"A logo belonging to a brand kit.\",\n            \"properties\": {\n              \"logo_id\": {\n                \"description\": \"Unique logo identifier. The logo named by logo_roles.primary is the brand's main logo.\",\n                \"type\": \"string\"\n              },\n              \"name\": {\n                \"description\": \"Display name of the logo.\",\n                \"nullable\": true,\n                \"type\": \"string\"\n              },\n              \"url\": {\n                \"description\": \"URL of the logo image. Absent if the logo has no stored file yet.\",\n                \"nullable\": true,\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"logo_id\"\n            ],\n            \"type\": \"object\"\n          },\n          \"type\": \"array\"\n        },\n        \"name\": {\n          \"description\": \"Display name of the brand kit.\",\n          \"type\": \"string\"\n        },\n        \"status\": {\n          \"description\": \"Assembly status: 'loading' while the kit is still being built, 'completed' when it is ready, or 'error' if the import failed.\",\n          \"enum\": [\n            \"loading\",\n            \"completed\",\n            \"error\"\n          ],\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"brand_kit_id\",\n        \"name\",\n        \"status\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/brand-kits/{brand_kit_id}",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Args: []command.ArgSpec{
+		{Name: "brand-kit-id", Param: "brand_kit_id", Help: ""},
+	},
+}
+
 var BrandKitsList = &command.Spec{
 	Group:          "brand",
 	Name:           "kits list",
