@@ -41,6 +41,7 @@ var Groups = map[string][]*command.Spec{
 		AvatarLooksGet,
 		AvatarLooksList,
 		AvatarLooksUpdate,
+		AvatarUpdate,
 	},
 	"background-removal": {
 		BackgroundRemovalCreate,
@@ -53,7 +54,11 @@ var Groups = map[string][]*command.Spec{
 		BrandGlossariesGet,
 		BrandGlossariesList,
 		BrandGlossariesUpdate,
+		BrandKitsCreate,
+		BrandKitsDelete,
+		BrandKitsGet,
 		BrandKitsList,
+		BrandKitsUpdate,
 	},
 	"filler-word-removal": {
 		FillerWordRemovalCreate,
