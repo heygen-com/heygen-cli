@@ -1,6 +1,26 @@
 "GET /v3/brand-kits":
   - desc: "List brand kits"
     cmd: "heygen brand kits list"
+"POST /v3/brand-kits":
+  - desc: "Build a brand kit from a public website, importing its logos, colors and fonts"
+    cmd: "heygen brand kits create --url https://www.heygen.com"
+  - desc: "Name the kit yourself instead of taking the brand name detected on the site"
+    cmd: "heygen brand kits create --url https://www.heygen.com --name 'HeyGen brand'"
+"GET /v3/brand-kits/{brand_kit_id}":
+  - desc: "Inspect a kit's colors, logos and fonts. Create returns while the import is still running, so poll this until status is no longer 'loading'"
+    cmd: "heygen brand kits get <brand-kit-id>"
+"PATCH /v3/brand-kits/{brand_kit_id}":
+  - desc: "Rename a kit, leaving its role assignments untouched"
+    cmd: "heygen brand kits update <brand-kit-id> --name 'HeyGen brand'"
+  - desc: "Assign color roles (no flags for these, pass them via -d). Each role object is a full replace, so send every role you want to keep"
+    cmd: "heygen brand kits update <brand-kit-id> -d '{\"color_roles\":{\"primary\":\"#FF5733\",\"accent\":\"#1B998B\"}}'"
+  - desc: "Clear every color role, leaving the kit's colors themselves in place"
+    cmd: "heygen brand kits update <brand-kit-id> -d '{\"color_roles\":{}}'"
+  - desc: "See all available request fields"
+    cmd: "heygen brand kits update --request-schema"
+"DELETE /v3/brand-kits/{brand_kit_id}":
+  - desc: "Delete a brand kit and the colors, logos and fonts it holds"
+    cmd: "heygen brand kits delete <brand-kit-id>"
 "GET /v3/brand-glossaries":
   - desc: "List brand glossaries"
     cmd: "heygen brand glossaries list"

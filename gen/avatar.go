@@ -293,6 +293,9 @@ var AvatarUpdate = &command.Spec{
 	Endpoint:       "/v3/avatars/{group_id}",
 	Method:         "PATCH",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Set the avatar's default voice for video generation\n  heygen avatar update <group-id> --default-voice-id <voice-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "group-id", Param: "group_id", Help: ""},
 	},

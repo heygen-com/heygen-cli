@@ -138,6 +138,10 @@ var BrandKitsCreate = &command.Spec{
 	Endpoint:       "/v3/brand-kits",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Build a brand kit from a public website, importing its logos, colors and fonts\n  heygen brand kits create --url https://www.heygen.com",
+		"# Name the kit yourself instead of taking the brand name detected on the site\n  heygen brand kits create --url https://www.heygen.com --name 'HeyGen brand'",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "name",
@@ -176,6 +180,9 @@ var BrandKitsDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Examples: []string{
+		"# Delete a brand kit and the colors, logos and fonts it holds\n  heygen brand kits delete <brand-kit-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "brand-kit-id", Param: "brand_kit_id", Help: ""},
 	},
@@ -190,6 +197,9 @@ var BrandKitsGet = &command.Spec{
 	Endpoint:       "/v3/brand-kits/{brand_kit_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Inspect a kit's colors, logos and fonts. Create returns while the import is still running, so poll this until status is no longer 'loading'\n  heygen brand kits get <brand-kit-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "brand-kit-id", Param: "brand_kit_id", Help: ""},
 	},
@@ -246,6 +256,12 @@ var BrandKitsUpdate = &command.Spec{
 	Endpoint:       "/v3/brand-kits/{brand_kit_id}",
 	Method:         "PATCH",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Rename a kit, leaving its role assignments untouched\n  heygen brand kits update <brand-kit-id> --name 'HeyGen brand'",
+		"# Assign color roles (no flags for these, pass them via -d). Each role object is a full replace, so send every role you want to keep\n  heygen brand kits update <brand-kit-id> -d '{\"color_roles\":{\"primary\":\"#FF5733\",\"accent\":\"#1B998B\"}}'",
+		"# Clear every color role, leaving the kit's colors themselves in place\n  heygen brand kits update <brand-kit-id> -d '{\"color_roles\":{}}'",
+		"# See all available request fields\n  heygen brand kits update --request-schema",
+	},
 	Args: []command.ArgSpec{
 		{Name: "brand-kit-id", Param: "brand_kit_id", Help: ""},
 	},
