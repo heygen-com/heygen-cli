@@ -16,6 +16,26 @@ For install instructions, see [README.md](./README.md).
 - Built from a tagged commit via GoReleaser
 - Intended for milestone cuts and broader distribution later
 
+## Go toolchain
+
+Release artifacts are built with the Go version in `go.mod`'s `go` directive. Every `setup-go` step,
+in CI and in both release workflows, resolves its toolchain from that directive via
+`go-version-file`, so it is the only place the version is written. To move the toolchain, edit that
+one line.
+
+Two properties of the directive are load-bearing for releases, and `cmd/heygen/go_version_pin_test.go`
+enforces both:
+
+- **It must carry a patch component.** `setup-go` matches its input as a semver range, so
+  `go 1.25.13` installs exactly that patch while a two-component `go 1.26` installs the latest
+  `1.26.x` available at build time. The second form makes a release non-reproducible: rebuilding the
+  same tag later can link a different stdlib.
+- **`go.mod` must not contain a `toolchain` directive.** `setup-go` prefers it over the `go`
+  directive, so a `toolchain` line silently decides what ships while `go` still appears to. Go
+  tooling adds that line on its own sometimes; remove it and bump `go` instead.
+
+A patch bump is therefore a one-line change to `go.mod`, and no workflow needs editing.
+
 ## How to Cut a Dev Release
 
 1. Make sure `main` is in a good state.
