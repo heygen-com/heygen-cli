@@ -90,6 +90,7 @@ sufficient data for meaningful get/detail coverage.
 ./bin/heygen lipsync get <id>                  # .data[0].id from lipsync list
 ./bin/heygen voice get <voice-id>              # .data[0].voice_id from voice list
 ./bin/heygen template get <template-id>        # .data[0].id from template list
+./bin/heygen brand kits get <id>               # .data[0].brand_kit_id from brand kits list
 ./bin/heygen brand glossaries get <id>         # .data[0].brand_glossary_id from brand glossaries list
 ./bin/heygen video statuses list --video-ids <video-id>   # a video-id from video list (bulk status lookup)
 ./bin/heygen lipsync statuses list --lipsync-ids <id>     # .data[0].id from lipsync list

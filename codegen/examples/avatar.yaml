@@ -10,6 +10,9 @@
 "DELETE /v3/avatars/{group_id}":
   - desc: "Delete an avatar group and all its looks"
     cmd: "heygen avatar delete <group-id>"
+"PATCH /v3/avatars/{group_id}":
+  - desc: "Set the avatar's default voice for video generation"
+    cmd: "heygen avatar update <group-id> --default-voice-id <voice-id>"
 "POST /v3/avatars/{group_id}/consent":
   - desc: "Submit avatar consent"
     cmd: "heygen avatar consent create <group-id>"
