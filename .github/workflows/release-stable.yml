@@ -21,9 +21,10 @@ jobs:
           fetch-depth: 0
           ref: main
 
+      # Go version comes from go.mod's `go` directive; see ci.yml for why it lives there.
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.13"
+          go-version-file: go.mod
 
       - name: Validate version
         shell: bash

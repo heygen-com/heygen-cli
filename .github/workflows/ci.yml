@@ -20,9 +20,14 @@ jobs:
         run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
 
+      # Single source of truth for the Go version: go.mod's `go` directive.
+      # setup-go exports GOTOOLCHAIN=local, so the installed toolchain cannot
+      # upgrade itself to satisfy go.mod — a literal pin here that drifts below
+      # that directive is a hard build failure, not a silent downgrade. Reading
+      # the directive means the two cannot disagree.
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.13"
+          go-version-file: go.mod
 
       - name: Build
         run: make build
@@ -37,7 +42,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.13"
+          go-version-file: go.mod
 
       - uses: golangci/golangci-lint-action@v9
         with:
@@ -80,7 +85,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.13"
+          go-version-file: go.mod
 
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
@@ -121,7 +126,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.13"
+          go-version-file: go.mod
 
       - uses: goreleaser/goreleaser-action@v7
         with:
