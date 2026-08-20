@@ -51,6 +51,7 @@ var Groups = map[string][]*command.Spec{
 	},
 	"brand": {
 		BrandGlossariesCreate,
+		BrandGlossariesDelete,
 		BrandGlossariesGet,
 		BrandGlossariesList,
 		BrandGlossariesUpdate,
