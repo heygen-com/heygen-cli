@@ -51,6 +51,7 @@ var Groups = map[string][]*command.Spec{
 	},
 	"brand": {
 		BrandGlossariesCreate,
+		BrandGlossariesDelete,
 		BrandGlossariesGet,
 		BrandGlossariesList,
 		BrandGlossariesUpdate,
@@ -89,6 +90,7 @@ var Groups = map[string][]*command.Spec{
 		VideoDelete,
 		VideoGet,
 		VideoList,
+		VideoScenesGet,
 		VideoStatusesList,
 	},
 	"video-agent": {
