@@ -45,6 +45,10 @@ var BrandGlossariesDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Examples: []string{
+		"# Delete a brand glossary, confirming at an interactive prompt. Cannot be undone: the glossary stops applying immediately, though videos already generated with it keep the audio they were synthesized with\n  heygen brand glossaries delete <brand-glossary-id>",
+		"# Skip the prompt. Required when stdin is not a terminal, so this is the form a script or agent needs\n  heygen brand glossaries delete <brand-glossary-id> --force",
+	},
 	Args: []command.ArgSpec{
 		{Name: "brand-glossary-id", Param: "brand_glossary_id", Help: ""},
 	},

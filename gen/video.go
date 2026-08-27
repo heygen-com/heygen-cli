@@ -228,6 +228,11 @@ var VideoScenesGet = &command.Spec{
 	Endpoint:       "/v3/videos/{video_id}/scenes",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Read a video's scenes as they stand now, including edits made in the editor after it was created. Never paginated. Only a video with an editor document has scenes, so a translated video returns 404\n  heygen video scenes get <video-id>",
+		"# A heavy read, not a status poll: it is rate limited an order of magnitude below an ordinary GET. Poll 'video get' instead and read scenes once it is done\n  heygen video get <video-id>",
+		"# See the full scene shape. A whole-frame image or clip is the scene's background, not one of its elements, so reading only elements misses it\n  heygen video scenes get --response-schema",
+	},
 	Args: []command.ArgSpec{
 		{Name: "video-id", Param: "video_id", Help: ""},
 	},

@@ -43,3 +43,8 @@
     cmd: "heygen brand glossaries update <brand-glossary-id> -d '{\"terms\":[]}'"
   - desc: "See all available request fields"
     cmd: "heygen brand glossaries update --request-schema"
+"DELETE /v3/brand-glossaries/{brand_glossary_id}":
+  - desc: "Delete a brand glossary, confirming at an interactive prompt. Cannot be undone: the glossary stops applying immediately, though videos already generated with it keep the audio they were synthesized with"
+    cmd: "heygen brand glossaries delete <brand-glossary-id>"
+  - desc: "Skip the prompt. Required when stdin is not a terminal, so this is the form a script or agent needs"
+    cmd: "heygen brand glossaries delete <brand-glossary-id> --force"
