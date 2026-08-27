@@ -81,6 +81,7 @@ sufficient data for meaningful get/detail coverage.
 
 ```bash
 ./bin/heygen video get <video-id>              # .data[0].id from video list
+./bin/heygen video scenes get <video-id>       # .data[0].id from video list; 404 "no editor document" (e.g. a translated video) is SKIPPED, not FAIL
 ./bin/heygen ai-clipping get <job-id>          # .data[0].id from ai-clipping list
 ./bin/heygen avatar get <group-id>             # .data[0].id from avatar list
 ./bin/heygen avatar looks get <look-id>        # .data[0].id from avatar looks list
