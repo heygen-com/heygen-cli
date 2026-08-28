@@ -155,13 +155,17 @@ auth test only; restore the real key afterward.
 This phase must always clean up, even on failure.
 
 ```bash
-# Create a short video
-./bin/heygen video-agent create --prompt "Say hello world" --wait
+# Create a short video. Keep the prompt phrased as a video request -- the agent
+# answers a conversational one ("Say hello world") in chat and never generates,
+# so the phase burns the full --wait timeout and reports FAIL on a healthy CLI.
+./bin/heygen video-agent create --prompt "Create a short 5 second video of an avatar saying: Hello world." --wait
 ```
 
 - Accept exit 0 (completed) or exit 4 (poll timeout) as success
-- Extract `video_id` from stdout (present in both cases)
-- If exit code is anything other than 0 or 4, or `video_id` is missing, fail immediately but still run cleanup below
+- Extract the video id from stdout as `.data.id`. Under `--wait` the CLI prints the
+  polled video object, not the create response, in both the completed and the
+  timeout case -- so there is no `.data.video_id` to read here
+- If exit code is anything other than 0 or 4, or the id is missing, fail immediately but still run cleanup below
 
 ```bash
 # Verify the video exists
