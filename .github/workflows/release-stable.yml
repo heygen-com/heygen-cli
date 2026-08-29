@@ -22,7 +22,7 @@ jobs:
           ref: main
 
       # Go version comes from go.mod's `go` directive; see ci.yml for why it lives there.
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
