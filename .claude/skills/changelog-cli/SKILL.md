@@ -67,7 +67,17 @@ Group changes into these categories (omit empty categories):
 - **New** - new commands, features, or capabilities
 - **Improved** - enhancements to existing behavior
 - **Fixed** - bug fixes
-- **Internal** - codegen, CI, docs, refactors (collapsed, less detail)
+- **Internal** - changes with no user-visible effect (CI, refactors, docs)
+
+A codegen resync is not automatically Internal. What it did to the command
+surface is what a user cares about, so a resync that added a command or a flag
+is a **New** entry naming that command or flag, carrying the resync's PR number.
+List a resync under Internal only when it changed nothing a user can type.
+
+The commit subject does not tell you which case you are in -- every resync reads
+`codegen: resync gen/ from EF <sha>`. Get the surface change from the resync PR's
+body, which lists new and changed commands, or from
+`scripts/release-surface.sh diff <last-stable> origin/main`.
 
 ## Step 4: Format the output
 
@@ -86,7 +96,6 @@ Output the changelog in this format:
 - **Short title.** One-sentence description. (#PR)
 
 ### Internal
-- Codegen resync from EF abcdef1 (#PR)
 - Updated CI workflow (#PR)
 ```
 
@@ -97,8 +106,10 @@ Rules:
   was fixed, not what code changed.
 - Include the PR number in parentheses at the end of each entry.
 - Do not fabricate changes. Only include what is in the git log.
-- Collapse codegen resyncs, CI changes, and doc updates into the Internal section
-  with minimal detail.
+- Collapse CI changes and doc updates into the Internal section with minimal detail.
+- Never let an Internal entry restate something already listed above it. If a
+  resync's only content is the command it added, that command's New entry is the
+  whole story and a second Internal line for the same PR adds nothing.
 
 ## Step 5: Present for review
 
