@@ -51,10 +51,6 @@ func TestAuthStatus_Success(t *testing.T) {
 
 func TestAuthStatus_APIKeySelfError(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
-		"GET /v3/users/me": {
-			StatusCode: 200,
-			Body:       `{"data":{"email":"user@example.com"}}`,
-		},
 		"GET /v3/api_keys/self": {
 			StatusCode: 500,
 			Body:       `{"error":{"message":"failed to load API key metadata"}}`,
@@ -69,6 +65,34 @@ func TestAuthStatus_APIKeySelfError(t *testing.T) {
 	}
 	if !strings.Contains(res.Stderr, "failed to load API key metadata") {
 		t.Fatalf("stderr = %s, want API key metadata error", res.Stderr)
+	}
+}
+
+func TestAuthStatus_CustomAPIKeyWithoutAccountReadStillSucceeds(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/api_keys/self": successfulAPIKeySelfHandler(),
+		"GET /v3/users/me": {
+			StatusCode: 403,
+			Body:       `{"error":{"code":"forbidden","message":"missing account.read"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "auth", "status")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
+	}
+	if _, present := parsed["data"]; present {
+		t.Errorf("data should be absent when account.read is unavailable: %v", parsed["data"])
+	}
+	credMeta, ok := parsed["credential"].(map[string]any)
+	if !ok || credMeta["key_name"] != "production automation" {
+		t.Fatalf("credential metadata missing: %v", parsed)
 	}
 }
 
@@ -113,7 +137,7 @@ func TestMergeAPIKeyMetadata_RejectsInvalidResponses(t *testing.T) {
 
 func TestAuthStatus_InvalidKey(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
-		"GET /v3/users/me": {
+		"GET /v3/api_keys/self": {
 			StatusCode: 401,
 			Body:       `{"error":{"message":"invalid API key"}}`,
 		},
@@ -137,7 +161,7 @@ func TestAuthStatus_InvalidKey(t *testing.T) {
 // source-aware auth hint from centralized enrichment in the error path.
 func TestAuthStatus_AuthError_AddsHint(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
-		"GET /v3/users/me": {
+		"GET /v3/api_keys/self": {
 			StatusCode: 401,
 			Body:       `{"error":{"message":"unauthorized"}}`,
 		},
@@ -163,6 +187,7 @@ func TestAuthStatus_AuthError_AddsHint(t *testing.T) {
 // not mutated by the centralized auth hint enrichment.
 func TestAuthStatus_NonAuthError_NoHintMutation(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/api_keys/self": successfulAPIKeySelfHandler(),
 		"GET /v3/users/me": {
 			StatusCode: 500,
 			Body:       `{"error":{"message":"internal server error"}}`,

@@ -31,28 +31,32 @@ func newAuthStatusCmd(ctx *cmdContext) *cobra.Command {
 		Example: "heygen auth status",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			result, err := ctx.client.Execute(gen.UserMeGet, &command.Invocation{
-				PathParams:  make(map[string]string),
-				QueryParams: make(url.Values),
-			})
-			if err != nil {
-				return err
-			}
 			credMeta := credentialMetadata()
 			if credMeta == nil {
+				result, err := executeAuthStatusRequest(ctx, gen.UserMeGet)
+				if err != nil {
+					return err
+				}
 				return ctx.formatter.Data(result, client.APIDataField, nil)
 			}
-			if credMeta["type"] == "api_key" {
-				apiKeyResult, err := ctx.client.Execute(apiKeySelfSpec, &command.Invocation{
-					PathParams:  make(map[string]string),
-					QueryParams: make(url.Values),
-				})
+
+			isAPIKey := credMeta["type"] == "api_key"
+			if isAPIKey {
+				apiKeyResult, err := executeAuthStatusRequest(ctx, apiKeySelfSpec)
 				if err != nil {
 					return err
 				}
 				if err := mergeAPIKeyMetadata(apiKeyResult, credMeta); err != nil {
 					return clierrors.New("failed to assemble API key status: " + err.Error())
 				}
+			}
+
+			result, err := executeAuthStatusRequest(ctx, gen.UserMeGet)
+			if err != nil {
+				if !isAPIKey || !isForbidden(err) {
+					return err
+				}
+				result = json.RawMessage(`{}`)
 			}
 			merged, err := mergeStatusEnvelope(result, credMeta)
 			if err != nil {
@@ -61,6 +65,18 @@ func newAuthStatusCmd(ctx *cmdContext) *cobra.Command {
 			return ctx.formatter.Data(merged, "", nil)
 		},
 	}
+}
+
+func executeAuthStatusRequest(ctx *cmdContext, spec *command.Spec) (json.RawMessage, error) {
+	return ctx.client.Execute(spec, &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: make(url.Values),
+	})
+}
+
+func isForbidden(err error) bool {
+	var cliErr *clierrors.CLIError
+	return errors.As(err, &cliErr) && cliErr.HTTPStatus == http.StatusForbidden
 }
 
 func credentialMetadata() map[string]any {
