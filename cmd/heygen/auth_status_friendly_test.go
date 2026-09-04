@@ -15,6 +15,7 @@ import (
 func TestAuthStatus_SurfacesPersistedUserInfo(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", configDir)
+	t.Setenv("HEYGEN_API_KEY", "")
 
 	// Seed: api_key + user block (post-login state).
 	if err := (&auth.FileCredentialStore{}).Save("hg_test"); err != nil {
@@ -34,6 +35,7 @@ func TestAuthStatus_SurfacesPersistedUserInfo(t *testing.T) {
 			StatusCode: 200,
 			Body:       `{"data":{"email":"jane@example.com","username":"jdoe"}}`,
 		},
+		"GET /v3/api_keys/self": successfulAPIKeySelfHandler(),
 	})
 	defer srv.Close()
 
@@ -77,6 +79,7 @@ func TestAuthStatus_SurfacesPersistedUserInfo(t *testing.T) {
 func TestAuthStatus_NoUserBlock_FallsBack(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", configDir)
+	t.Setenv("HEYGEN_API_KEY", "")
 
 	if err := (&auth.FileCredentialStore{}).Save("hg_legacy"); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -87,6 +90,7 @@ func TestAuthStatus_NoUserBlock_FallsBack(t *testing.T) {
 			StatusCode: 200,
 			Body:       `{"data":{"email":"u@example.com","username":"u"}}`,
 		},
+		"GET /v3/api_keys/self": successfulAPIKeySelfHandler(),
 	})
 	defer srv.Close()
 
@@ -140,6 +144,7 @@ func TestAuthStatus_EnvSourceCredential_SkipsUserBlock(t *testing.T) {
 			StatusCode: 200,
 			Body:       `{"data":{"email":"env-user@example.com","username":"env"}}`,
 		},
+		"GET /v3/api_keys/self": successfulAPIKeySelfHandler(),
 	})
 	defer srv.Close()
 

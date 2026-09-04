@@ -99,7 +99,7 @@ Device OAuth is refused in CI and `HEYGEN_NONINTERACTIVE` mode. Unattended agent
 heygen auth login
 ```
 
-Verify any of the above with `heygen auth status`. Get an API key at [app.heygen.com/settings/api](https://app.heygen.com/settings/api).
+Verify any of the above with `heygen auth status`. When an API key is active, the status includes its name, permission mode and scopes, and expiration. Get an API key at [app.heygen.com/settings/api](https://app.heygen.com/settings/api).
 
 > **Single-credential file.** The credentials file holds at most **one** of `api_key` / OAuth tokens at any time. Running `heygen auth login` (any method) clears the other on success — re-login overwrites, it does not merge. `heygen auth status` will tell you which one is active.
 >

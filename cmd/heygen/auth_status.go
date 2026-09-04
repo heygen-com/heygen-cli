@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -14,55 +15,70 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var apiKeySelfSpec = &command.Spec{
+	Endpoint: "/v3/api_keys/self",
+	Method:   http.MethodGet,
+}
+
 func newAuthStatusCmd(ctx *cmdContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Verify the active credential (API key or OAuth) and show account info",
 		Long: "Verifies the credential currently in use by calling the HeyGen API.\n\n" +
-			"For OAuth credentials, also reports the credential type, source,\n" +
-			"expiry, scope, and refreshability so you can tell whether a\n" +
-			"refresh is imminent without inspecting the credentials file.\n\n" + authGuidance,
+			"For API keys, reports the key name, permission mode and scopes,\n" +
+			"creation and update times, and expiration. For OAuth credentials,\n" +
+			"reports the credential source, expiry, scope, and refreshability.\n\n" + authGuidance,
 		Example: "heygen auth status",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			result, err := ctx.client.Execute(gen.UserMeGet, &command.Invocation{
-				PathParams:  make(map[string]string),
-				QueryParams: make(url.Values),
-			})
-			if err != nil {
-				return err
-			}
-			// Build the auth-status envelope: API user info on the
-			// existing `data` key, plus credential metadata on a new
-			// `credential` key. Existing api-key consumers see strictly
-			// additive output.
-			//
-			// The credential metadata is best-effort — if we can't
-			// re-resolve here we return the API response shape as-is
-			// so the api-key happy path is unchanged.
 			credMeta := credentialMetadata()
 			if credMeta == nil {
+				result, err := executeAuthStatusRequest(ctx, gen.UserMeGet)
+				if err != nil {
+					return err
+				}
 				return ctx.formatter.Data(result, client.APIDataField, nil)
+			}
+
+			isAPIKey := credMeta["type"] == "api_key"
+			if isAPIKey {
+				apiKeyResult, err := executeAuthStatusRequest(ctx, apiKeySelfSpec)
+				if err != nil {
+					return err
+				}
+				if err := mergeAPIKeyMetadata(apiKeyResult, credMeta); err != nil {
+					return clierrors.New("failed to assemble API key status: " + err.Error())
+				}
+			}
+
+			result, err := executeAuthStatusRequest(ctx, gen.UserMeGet)
+			if err != nil {
+				if !isAPIKey || !isForbidden(err) {
+					return err
+				}
+				result = json.RawMessage(`{}`)
 			}
 			merged, err := mergeStatusEnvelope(result, credMeta)
 			if err != nil {
 				return clierrors.New("failed to assemble auth status: " + err.Error())
 			}
-			return ctx.formatter.Data(merged, client.APIDataField, nil)
+			return ctx.formatter.Data(merged, "", nil)
 		},
 	}
 }
 
-// credentialMetadata re-resolves the credential (same chain
-// initContext used) to describe its type/source/expiry without storing
-// any of the secret values themselves. Returns nil on any resolution
-// failure so the existing happy path remains unchanged for api-key
-// users.
-//
-// Also folds in the persisted friendly-display block (email / name /
-// username) under a `user` key so callers can surface "Logged in as
-// ..." without re-hitting /v3/users/me. The block is omitted when the
-// credentials file holds no user block (e.g. pre-this-change logins).
+func executeAuthStatusRequest(ctx *cmdContext, spec *command.Spec) (json.RawMessage, error) {
+	return ctx.client.Execute(spec, &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: make(url.Values),
+	})
+}
+
+func isForbidden(err error) bool {
+	var cliErr *clierrors.CLIError
+	return errors.As(err, &cliErr) && cliErr.HTTPStatus == http.StatusForbidden
+}
+
 func credentialMetadata() map[string]any {
 	resolver := &auth.ChainCredentialResolver{
 		Resolvers: []auth.CredentialResolver{
@@ -124,6 +140,22 @@ func credentialMetadata() map[string]any {
 		}
 	}
 	return meta
+}
+
+func mergeAPIKeyMetadata(raw json.RawMessage, credMeta map[string]any) error {
+	var envelope struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return errors.New("upstream response was not JSON")
+	}
+	if envelope.Data == nil {
+		return errors.New("upstream response did not contain API key metadata")
+	}
+	for key, value := range envelope.Data {
+		credMeta[key] = value
+	}
+	return nil
 }
 
 // mergeStatusEnvelope folds the credential metadata into the

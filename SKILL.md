@@ -34,6 +34,9 @@ heygen video download <video-id>
 # Check for and install a newer release
 heygen update
 
+# Verify the active credential; API-key auth also returns its scopes and expiry
+heygen auth status
+
 # List resources
 heygen video list --limit 5
 heygen avatar list --limit 10

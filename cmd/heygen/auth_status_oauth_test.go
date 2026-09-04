@@ -17,6 +17,7 @@ func TestAuthStatus_APIKey_AddsCredentialMeta(t *testing.T) {
 			StatusCode: 200,
 			Body:       `{"data":{"email":"u@example.com","username":"demo"}}`,
 		},
+		"GET /v3/api_keys/self": successfulAPIKeySelfHandler(),
 	})
 	defer srv.Close()
 
@@ -39,6 +40,18 @@ func TestAuthStatus_APIKey_AddsCredentialMeta(t *testing.T) {
 	if credMeta["source"] != "env" {
 		t.Errorf("credential.source = %v, want env", credMeta["source"])
 	}
+	if credMeta["key_name"] != "production automation" {
+		t.Errorf("credential.key_name = %v, want production automation", credMeta["key_name"])
+	}
+	if credMeta["scope_mode"] != "custom" {
+		t.Errorf("credential.scope_mode = %v, want custom", credMeta["scope_mode"])
+	}
+	if _, present := credMeta["key_id"]; present {
+		t.Errorf("credential.key_id should not be returned: %v", credMeta["key_id"])
+	}
+	if _, present := credMeta["user_type"]; present {
+		t.Errorf("credential.user_type should not be returned: %v", credMeta["user_type"])
+	}
 	// Data field still present + unchanged.
 	data, ok := parsed["data"].(map[string]any)
 	if !ok {
@@ -55,6 +68,7 @@ func TestAuthStatus_APIKey_AddsCredentialMeta(t *testing.T) {
 func TestAuthStatus_OAuth_ReportsExpiryAndScope(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HEYGEN_CONFIG_DIR", dir)
+	t.Setenv("HEYGEN_API_KEY", "")
 	// runCommand sets HEYGEN_API_KEY when non-empty — leave it blank so
 	// the file path wins.
 	if err := auth.SaveOAuthTokens(auth.OAuthTokens{
