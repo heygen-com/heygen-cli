@@ -31,27 +31,41 @@ func newAuthStatusCmd(ctx *cmdContext) *cobra.Command {
 		Example: "heygen auth status",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			result, err := ctx.client.Execute(gen.UserMeGet, &command.Invocation{
-				PathParams:  make(map[string]string),
-				QueryParams: make(url.Values),
-			})
-			if err != nil {
-				return err
-			}
 			credMeta := credentialMetadata()
 			if credMeta == nil {
-				return ctx.formatter.Data(result, client.APIDataField, nil)
-			}
-			if credMeta["type"] == "api_key" {
-				apiKeyResult, err := ctx.client.Execute(apiKeySelfSpec, &command.Invocation{
-					PathParams:  make(map[string]string),
-					QueryParams: make(url.Values),
-				})
+				result, err := executeAuthStatusRequest(ctx, gen.UserMeGet)
 				if err != nil {
 					return err
 				}
-				if err := mergeAPIKeyMetadata(apiKeyResult, credMeta); err != nil {
+				return ctx.formatter.Data(result, client.APIDataField, nil)
+			}
+
+			isAPIKey := credMeta["type"] == "api_key"
+			if isAPIKey {
+				apiKeyResult, err := executeAuthStatusRequest(ctx, apiKeySelfSpec)
+				if err != nil {
+					if !hasHTTPStatus(err, http.StatusNotFound) {
+						return err
+					}
+					ctx.formatter.Warn("API key permission metadata is unavailable because this server does not support /v3/api_keys/self; showing legacy auth status")
+				} else if err := mergeAPIKeyMetadata(apiKeyResult, credMeta); err != nil {
 					return clierrors.New("failed to assemble API key status: " + err.Error())
+				}
+			}
+
+			result, err := executeAuthStatusRequest(ctx, gen.UserMeGet)
+			if err != nil {
+				if !isAPIKey || !isInsufficientAPIKeyScope(err) {
+					return err
+				}
+				result = json.RawMessage(`{"data":{}}`)
+			}
+			if !isAPIKey {
+				// The OAuth transport may have refreshed and persisted the
+				// credential while executing /v3/users/me. Re-resolve after
+				// that request so the status reflects the new expiry and scope.
+				if refreshedMeta := credentialMetadata(); refreshedMeta != nil {
+					credMeta = refreshedMeta
 				}
 			}
 			merged, err := mergeStatusEnvelope(result, credMeta)
@@ -61,6 +75,25 @@ func newAuthStatusCmd(ctx *cmdContext) *cobra.Command {
 			return ctx.formatter.Data(merged, "", nil)
 		},
 	}
+}
+
+func executeAuthStatusRequest(ctx *cmdContext, spec *command.Spec) (json.RawMessage, error) {
+	return ctx.client.Execute(spec, &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: make(url.Values),
+	})
+}
+
+func isInsufficientAPIKeyScope(err error) bool {
+	var cliErr *clierrors.CLIError
+	return errors.As(err, &cliErr) &&
+		cliErr.HTTPStatus == http.StatusForbidden &&
+		cliErr.Code == "insufficient_api_key_scope"
+}
+
+func hasHTTPStatus(err error, status int) bool {
+	var cliErr *clierrors.CLIError
+	return errors.As(err, &cliErr) && cliErr.HTTPStatus == status
 }
 
 func credentialMetadata() map[string]any {
@@ -136,7 +169,15 @@ func mergeAPIKeyMetadata(raw json.RawMessage, credMeta map[string]any) error {
 	if envelope.Data == nil {
 		return errors.New("upstream response did not contain API key metadata")
 	}
+	locallyOwned := map[string]struct{}{
+		"source": {},
+		"type":   {},
+		"user":   {},
+	}
 	for key, value := range envelope.Data {
+		if _, owned := locallyOwned[key]; owned {
+			continue
+		}
 		credMeta[key] = value
 	}
 	return nil
