@@ -8,12 +8,22 @@ import (
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
+func successfulAPIKeySelfHandler() testHandler {
+	return testHandler{
+		StatusCode: 200,
+		Body: `{"data":{"key_name":"production automation","status":"active","scope_mode":"custom","scopes":["video.read"],` +
+			`"created_at":"2026-09-01T12:00:00Z","updated_at":"2026-09-02T12:00:00Z","expires_at":"2026-10-01T12:00:00Z",` +
+			`"expires_in_seconds":2332800}}`,
+	}
+}
+
 func TestAuthStatus_Success(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/users/me": {
 			StatusCode: 200,
 			Body:       `{"data":{"email":"user@example.com","username":"demo"}}`,
 		},
+		"GET /v3/api_keys/self": successfulAPIKeySelfHandler(),
 	})
 	defer srv.Close()
 
@@ -36,6 +46,68 @@ func TestAuthStatus_Success(t *testing.T) {
 	}
 	if data["email"] != "user@example.com" {
 		t.Fatalf("data.email = %v, want %q", data["email"], "user@example.com")
+	}
+}
+
+func TestAuthStatus_APIKeySelfError(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/users/me": {
+			StatusCode: 200,
+			Body:       `{"data":{"email":"user@example.com"}}`,
+		},
+		"GET /v3/api_keys/self": {
+			StatusCode: 500,
+			Body:       `{"error":{"message":"failed to load API key metadata"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "auth", "status")
+
+	if res.ExitCode != clierrors.ExitGeneral {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stderr)
+	}
+	if !strings.Contains(res.Stderr, "failed to load API key metadata") {
+		t.Fatalf("stderr = %s, want API key metadata error", res.Stderr)
+	}
+}
+
+func TestAuthStatus_APIKeyHumanOutputIncludesPolicy(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/users/me": {
+			StatusCode: 200,
+			Body:       `{"data":{"email":"user@example.com"}}`,
+		},
+		"GET /v3/api_keys/self": successfulAPIKeySelfHandler(),
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "auth", "status", "--human")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	for _, want := range []string{"Credential:", "Key Name", "production automation", "Scope Mode", "custom", "video.read", "Expires At"} {
+		if !strings.Contains(res.Stdout, want) {
+			t.Errorf("stdout missing %q:\n%s", want, res.Stdout)
+		}
+	}
+}
+
+func TestMergeAPIKeyMetadata_RejectsInvalidResponses(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "invalid JSON", raw: "not-json"},
+		{name: "missing data", raw: `{"meta":{}}`},
+		{name: "null data", raw: `{"data":null}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := mergeAPIKeyMetadata([]byte(tc.raw), map[string]any{}); err == nil {
+				t.Fatal("mergeAPIKeyMetadata() error = nil, want error")
+			}
+		})
 	}
 }
 
