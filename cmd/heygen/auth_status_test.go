@@ -49,23 +49,111 @@ func TestAuthStatus_Success(t *testing.T) {
 	}
 }
 
-func TestAuthStatus_APIKeySelfError(t *testing.T) {
+// A 5xx on the enrichment call is transient and must not brick the command:
+// `auth status` still knows which credential is in use and that it authenticates.
+// This previously hard-failed; degrading is the deliberate change.
+func TestAuthStatus_APIKeySelfServerErrorDegrades(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{
 		"GET /v3/api_keys/self": {
 			StatusCode: 500,
 			Body:       `{"error":{"message":"failed to load API key metadata"}}`,
+		},
+		"GET /v3/users/me": {
+			StatusCode: 200,
+			Body:       `{"data":{"email":"user@example.com"}}`,
 		},
 	})
 	defer srv.Close()
 
 	res := runCommand(t, srv.URL, "test-key", "auth", "status")
 
-	if res.ExitCode != clierrors.ExitGeneral {
-		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stderr)
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0 (5xx should degrade, not fail)\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "failed to load API key metadata") {
-		t.Fatalf("stderr = %s, want API key metadata error", res.Stderr)
+	if !strings.Contains(res.Stderr, "/v3/api_keys/self") || !strings.Contains(res.Stderr, "transient") {
+		t.Fatalf("stderr = %s, want a transient-server warning naming the endpoint", res.Stderr)
 	}
+	credMeta := credentialBlock(t, res.Stdout)
+	reason, ok := credMeta["permissions_unavailable"].(string)
+	if !ok || !strings.Contains(reason, "500") {
+		t.Fatalf("credential.permissions_unavailable = %v, want an inline reason naming HTTP 500", credMeta["permissions_unavailable"])
+	}
+	if _, leaked := credMeta["scope_mode"]; leaked {
+		t.Fatalf("scope_mode must be absent when the metadata call failed: %v", credMeta)
+	}
+}
+
+// 401 is the one class that must stay fatal. Degrading it would render
+// "credential present, from local file" for a revoked key — false reassurance
+// about the single question `auth status` exists to answer.
+func TestAuthStatus_APIKeySelfUnauthorizedStaysFatal(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/api_keys/self": {
+			StatusCode: 401,
+			Body:       `{"error":{"code":"auth_error","message":"api key is revoked"}}`,
+		},
+		"GET /v3/users/me": {
+			StatusCode: 200,
+			Body:       `{"data":{"email":"user@example.com"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "auth", "status")
+
+	if res.ExitCode == 0 {
+		t.Fatalf("ExitCode = 0, want non-zero: a rejected credential must fail\nstdout: %s", res.Stdout)
+	}
+	if !strings.Contains(res.Stderr, "api key is revoked") {
+		t.Fatalf("stderr = %s, want the upstream rejection surfaced", res.Stderr)
+	}
+}
+
+// A 403 degrades like the rest, but must NOT read like the routine
+// not-deployed-yet state: /v3/api_keys/self is scope-exempt, so a 403 there is
+// an anomaly (exemption regression, or an upstream proxy intercepting).
+func TestAuthStatus_APIKeySelfForbiddenDegradesButReadsAsAnomalous(t *testing.T) {
+	srv := setupTestServer(t, map[string]testHandler{
+		"GET /v3/api_keys/self": {
+			StatusCode: 403,
+			Body:       `{"error":{"code":"forbidden","message":"forbidden"}}`,
+		},
+		"GET /v3/users/me": {
+			StatusCode: 200,
+			Body:       `{"data":{"email":"user@example.com"}}`,
+		},
+	})
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "auth", "status")
+
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0 (403 degrades)\nstderr: %s", res.ExitCode, res.Stderr)
+	}
+	reason, ok := credentialBlock(t, res.Stdout)["permissions_unavailable"].(string)
+	if !ok {
+		t.Fatalf("want an inline permissions_unavailable reason, stdout: %s", res.Stdout)
+	}
+	if !strings.Contains(reason, "unexpected") || !strings.Contains(reason, "no scope grant") {
+		t.Fatalf("reason = %q, want it flagged as unexpected for a scope-exempt endpoint", reason)
+	}
+	// The distinguishing property: it must not read as the 404 case.
+	if strings.Contains(reason, "does not support") {
+		t.Fatalf("reason = %q, must not render as the routine pre-deploy state", reason)
+	}
+}
+
+func credentialBlock(t *testing.T, stdout string) map[string]any {
+	t.Helper()
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, stdout)
+	}
+	credMeta, ok := parsed["credential"].(map[string]any)
+	if !ok {
+		t.Fatalf("credential block missing: %v", parsed)
+	}
+	return credMeta
 }
 
 func TestAuthStatus_APIKeySelfNotFoundFallsBack(t *testing.T) {
@@ -88,6 +176,11 @@ func TestAuthStatus_APIKeySelfNotFoundFallsBack(t *testing.T) {
 	}
 	if !strings.Contains(res.Stderr, `"warning"`) || !strings.Contains(res.Stderr, "/v3/api_keys/self") {
 		t.Fatalf("stderr = %s, want structured endpoint-unavailable warning", res.Stderr)
+	}
+	// The calm end of the taxonomy: 404 is the expected pre-deploy state, and
+	// must stay distinguishable from the 403 anomaly wording.
+	if reason, ok := credentialBlock(t, res.Stdout)["permissions_unavailable"].(string); !ok || !strings.Contains(reason, "does not support") {
+		t.Fatalf("credential.permissions_unavailable = %v, want the calm not-deployed-yet reason", reason)
 	}
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {

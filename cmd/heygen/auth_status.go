@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/heygen-com/heygen-cli/gen"
@@ -44,10 +45,15 @@ func newAuthStatusCmd(ctx *cmdContext) *cobra.Command {
 			if isAPIKey {
 				apiKeyResult, err := executeAuthStatusRequest(ctx, apiKeySelfSpec)
 				if err != nil {
-					if !hasHTTPStatus(err, http.StatusNotFound) {
+					reason, fatal := classifyAPIKeySelfFailure(err)
+					if fatal {
 						return err
 					}
-					ctx.formatter.Warn("API key permission metadata is unavailable because this server does not support /v3/api_keys/self; showing legacy auth status")
+					// Recorded inline as well as on stderr: a JSON consumer, or
+					// anyone piping stdout, has to be able to tell "we could not
+					// read this key's permissions" apart from "this key has none".
+					credMeta["permissions_unavailable"] = reason
+					ctx.formatter.Warn("/v3/api_keys/self did not return permission metadata — " + reason)
 				} else if err := mergeAPIKeyMetadata(apiKeyResult, credMeta); err != nil {
 					return clierrors.New("failed to assemble API key status: " + err.Error())
 				}
@@ -91,9 +97,42 @@ func isInsufficientAPIKeyScope(err error) bool {
 		cliErr.Code == "insufficient_api_key_scope"
 }
 
-func hasHTTPStatus(err error, status int) bool {
+// classifyAPIKeySelfFailure decides how a /v3/api_keys/self failure is reported,
+// returning the reason to show for a degrade and whether the failure is fatal.
+//
+// `auth status` is a diagnostic: it is run precisely when something already
+// looks wrong, so failing to *enrich* the credential with permission metadata
+// must not take down the answer the CLI can always give — which credential is
+// in use, and whether it authenticates. Only 401 is fatal, because "this
+// credential was rejected" is the one question this command must never answer
+// optimistically.
+//
+// Everything else degrades, but each class carries its own reason: the routine
+// pre-deploy state and a genuine server-side anomaly must never render
+// identically, or nobody goes looking when it is the anomaly.
+func classifyAPIKeySelfFailure(err error) (reason string, fatal bool) {
 	var cliErr *clierrors.CLIError
-	return errors.As(err, &cliErr) && cliErr.HTTPStatus == status
+	if !errors.As(err, &cliErr) || cliErr.HTTPStatus == 0 {
+		// Network failure, timeout, DNS — no HTTP response to classify.
+		return "the request did not complete (" + err.Error() + "), which is usually transient", false
+	}
+
+	switch status := cliErr.HTTPStatus; {
+	case status == http.StatusUnauthorized:
+		return "", true
+	case status == http.StatusNotFound:
+		return "this server does not support /v3/api_keys/self yet", false
+	case status == http.StatusForbidden:
+		// /v3/api_keys/self deliberately carries no x-heygen-required-scopes:
+		// any valid key may introspect itself. So a 403 here cannot be a
+		// legitimately under-scoped key, and must not be presented as the
+		// routine "not deployed yet" state.
+		return "unexpected — /v3/api_keys/self requires no scope grant, so a 403 points at a server-side scope-exemption regression or an upstream proxy intercepting the request", false
+	case status >= 500:
+		return "the server reported HTTP " + strconv.Itoa(status) + ", which is usually transient", false
+	default:
+		return "the server reported HTTP " + strconv.Itoa(status), false
+	}
 }
 
 func credentialMetadata() map[string]any {
