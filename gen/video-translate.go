@@ -601,6 +601,21 @@ var VideoTranslateProofreadsCreate = &command.Spec{
 	},
 }
 
+var VideoTranslateProofreadsDelete = &command.Spec{
+	Group:          "video-translate",
+	Name:           "proofreads delete",
+	Summary:        "Delete Proofread Session",
+	Description:    "Deletes a proofread session, removing it from listings and from the workspace's projects. Requires an account role of Creator or higher. This action cannot be undone.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"description\": \"Response for DELETE /v3/video-translations/proofreads/{id}.\",\n      \"properties\": {\n        \"id\": {\n          \"description\": \"ID of the deleted proofread session\",\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"id\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/proofreads/{proofread_id}",
+	Method:         "DELETE",
+	BodyEncoding:   "",
+	Destructive:    true,
+	Args: []command.ArgSpec{
+		{Name: "proofread-id", Param: "proofread_id", Help: ""},
+	},
+}
+
 var VideoTranslateProofreadsGenerate = &command.Spec{
 	Group:          "video-translate",
 	Name:           "proofreads generate",
@@ -684,6 +699,44 @@ var VideoTranslateProofreadsGet = &command.Spec{
 	},
 	Args: []command.ArgSpec{
 		{Name: "proofread-id", Param: "proofread_id", Help: ""},
+	},
+}
+
+var VideoTranslateProofreadsList = &command.Spec{
+	Group:          "video-translate",
+	Name:           "proofreads list",
+	Summary:        "List Proofread Sessions",
+	Description:    "Returns a paginated list of all proofread sessions in the workspace, newest first.",
+	ResponseSchema: "{\n  \"properties\": {\n    \"data\": {\n      \"items\": {\n        \"description\": \"Detailed proofread resource.\",\n        \"properties\": {\n          \"created_at\": {\n            \"description\": \"Unix timestamp when the proofread was created\",\n            \"nullable\": true,\n            \"type\": \"integer\"\n          },\n          \"failure_message\": {\n            \"description\": \"Error description. Only present when status is failed.\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"id\": {\n            \"description\": \"Unique proofread identifier\",\n            \"type\": \"string\"\n          },\n          \"input_language\": {\n            \"description\": \"Detected or specified source language code\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"output_language\": {\n            \"description\": \"Target language code\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          },\n          \"status\": {\n            \"description\": \"Current status\",\n            \"enum\": [\n              \"processing\",\n              \"completed\",\n              \"failed\"\n            ],\n            \"type\": \"string\"\n          },\n          \"submitted_for_review\": {\n            \"description\": \"Whether the proofread has been submitted for review\",\n            \"nullable\": true,\n            \"type\": \"boolean\"\n          },\n          \"title\": {\n            \"description\": \"Title of the proofread job\",\n            \"nullable\": true,\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"id\",\n          \"status\"\n        ],\n        \"type\": \"object\"\n      },\n      \"type\": \"array\"\n    },\n    \"has_more\": {\n      \"description\": \"Whether more pages are available\",\n      \"type\": \"boolean\"\n    },\n    \"next_token\": {\n      \"description\": \"Opaque cursor for the next page\",\n      \"nullable\": true,\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [],\n  \"type\": \"object\"\n}",
+	Endpoint:       "/v3/video-translations/proofreads",
+	Method:         "GET",
+	BodyEncoding:   "",
+	Paginated:      true,
+	Flags: []command.FlagSpec{
+		{
+			Name:     "limit",
+			Type:     "int",
+			Default:  "10",
+			Help:     "Maximum number of items per page",
+			Required: false,
+			Enum:     nil,
+			Min:      intPtr(1),
+			Max:      intPtr(100),
+			Source:   "query",
+			JSONName: "limit",
+		},
+		{
+			Name:     "token",
+			Type:     "string",
+			Default:  "",
+			Help:     "Opaque cursor token for the next page",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "query",
+			JSONName: "token",
+		},
 	},
 }
 
