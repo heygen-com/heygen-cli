@@ -24,9 +24,15 @@
 "POST /v3/video-translations/proofreads":
   - desc: "Create a proofread from JSON"
     cmd: "heygen video-translate proofreads create -d request.json"
+"GET /v3/video-translations/proofreads":
+  - desc: "List proofread sessions, newest first"
+    cmd: "heygen video-translate proofreads list --limit 10"
 "GET /v3/video-translations/proofreads/{proofread_id}":
   - desc: "Check proofread status"
     cmd: "heygen video-translate proofreads get <proofread-id>"
+"DELETE /v3/video-translations/proofreads/{proofread_id}":
+  - desc: "Delete a proofread session"
+    cmd: "heygen video-translate proofreads delete <proofread-id>"
 "POST /v3/video-translations/proofreads/{proofread_id}/generate":
   - desc: "Generate proofread output"
     cmd: "heygen video-translate proofreads generate <proofread-id>"

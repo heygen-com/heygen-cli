@@ -52,10 +52,13 @@ Save the JSON output from each -- Phase 3 will extract IDs from these results.
 ./bin/heygen ai-clipping list --limit 1
 ./bin/heygen avatar list --limit 1
 ./bin/heygen avatar looks list --limit 1
+./bin/heygen avatar look-templates list --limit 1
 ./bin/heygen voice list --limit 1
+./bin/heygen model audio voices list --limit 1
 ./bin/heygen audio sounds list --query "calm ambient piano" --limit 1
 ./bin/heygen video-translate list --limit 1
 ./bin/heygen video-translate languages list
+./bin/heygen video-translate proofreads list --limit 1
 ./bin/heygen video-agent list --limit 1
 ./bin/heygen video-agent styles list --limit 1
 ./bin/heygen lipsync list --limit 1
@@ -66,6 +69,11 @@ Save the JSON output from each -- Phase 3 will extract IDs from these results.
 ./bin/heygen brand glossaries list --limit 1
 ```
 
+`model audio voices list` reads professional voice clones, which need a
+purchased voice slot. On an account with no slot, treat a 403 as SKIPPED and note
+the missing entitlement; any other non-zero exit is a FAIL. A SKIPPED list saves
+no JSON, so `model audio voices get` in Phase 3 is SKIPPED with it.
+
 `asset list` requires `--username` (the workspace member whose assets to list,
 the `owner` value on asset items) while the endpoint is in beta. Use the
 `.data.username` captured in Phase 1 (`user me get`):
@@ -74,9 +82,9 @@ the `owner` value on asset items) while the endpoint is in beta. Use the
 ### Step 4: Phase 3 -- Read-only get/detail commands
 
 For each command below, extract the required ID from the corresponding Phase 2
-list result. If a list returned an empty `.data` array, skip that detail command
-and mark it as SKIPPED (not FAIL). If more than half of the detail commands are
-skipped, mark the phase as WARN and print a warning that the account lacks
+list result. If a list returned an empty `.data` array, or was itself SKIPPED,
+skip that detail command and mark it as SKIPPED (not FAIL). If more than half of
+the detail commands are skipped, mark the phase as WARN and print a warning that the account lacks
 sufficient data for meaningful get/detail coverage.
 
 ```bash
@@ -90,6 +98,7 @@ sufficient data for meaningful get/detail coverage.
 ./bin/heygen video-translate get <id>          # .data[0].id from video-translate list
 ./bin/heygen lipsync get <id>                  # .data[0].id from lipsync list
 ./bin/heygen voice get <voice-id>              # .data[0].voice_id from voice list
+./bin/heygen model audio voices get <voice-id> # .data[0].voice_id from model audio voices list
 ./bin/heygen template get <template-id>        # .data[0].id from template list
 ./bin/heygen brand kits get <id>               # .data[0].brand_kit_id from brand kits list
 ./bin/heygen brand glossaries get <id>         # .data[0].brand_glossary_id from brand glossaries list
@@ -133,9 +142,18 @@ These do not make API calls.
 ```bash
 ./bin/heygen video create --request-schema
 ./bin/heygen video create --response-schema
+./bin/heygen model audio tts create --request-schema
+./bin/heygen model audio voices create --request-schema
+./bin/heygen avatar looks create --request-schema
 ```
 
 Assert exit 0 and stdout is valid JSON for each.
+
+The last three creates are covered here rather than in the write path because
+each bills a resource the write path cannot reclaim: voice training occupies a
+purchased slot and consumes one of five monthly trainings, and a Look Pack bills
+per generated look, so its cost is set by the pack rather than by the call.
+`--request-schema` exercises their flag and schema wiring at no cost.
 
 ### Step 7: Phase 6 -- Error handling
 
@@ -200,7 +218,7 @@ Print a summary table:
 Phase                    Result
 -----                    ------
 1. Auth and account      PASS
-2. List commands         PASS (<passed>/<total>)
+2. List commands         PASS (<passed>/<ran>, <skipped> skipped)
 3. Get/detail commands   PASS (<passed>/<ran>, <skipped> skipped)   # or WARN if >50% skipped
 4. --human output        PASS
 5. Schema introspection  PASS
