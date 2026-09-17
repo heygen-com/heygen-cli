@@ -1,0 +1,19 @@
+"POST /v3/models/audio/tts":
+  - desc: "Generate speech from text with an ACTIVE professional voice"
+    cmd: "heygen model audio tts create --voice-id <voice-id> --text 'Hello from HeyGen.' --language en"
+  - desc: "Reuse a seed for best-effort consistency across runs"
+    cmd: "heygen model audio tts create --voice-id <voice-id> --text 'Hello from HeyGen.' --language en --seed 42"
+"POST /v3/models/audio/voices":
+  - desc: "Train a professional voice from uploaded recordings (at least 20 minutes of audio)"
+    cmd: "heygen model audio voices create --name 'Narrator' --language en --mode professional -d '{\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'"
+  - desc: "Retrain an existing voice, keeping its id, name, language, and mode"
+    cmd: "heygen model audio voices create --voice-id <voice-id> -d '{\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'"
+"GET /v3/models/audio/voices":
+  - desc: "List the workspace's audio voices, newest first"
+    cmd: "heygen model audio voices list --limit 10"
+"GET /v3/models/audio/voices/{voice_id}":
+  - desc: "Poll training status until it is ACTIVE or FAILED"
+    cmd: "heygen model audio voices get <voice-id>"
+"DELETE /v3/models/audio/voices/{voice_id}":
+  - desc: "Delete a voice (rejected while its status is PENDING)"
+    cmd: "heygen model audio voices delete <voice-id>"

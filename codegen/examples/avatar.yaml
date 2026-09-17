@@ -19,6 +19,11 @@
 "GET /v3/avatars/looks":
   - desc: "Browse avatar looks"
     cmd: "heygen avatar looks list --limit 10"
+"POST /v3/avatars/looks":
+  - desc: "Apply a Look Pack to the avatar a reference look belongs to"
+    cmd: "heygen avatar looks create -d '{\"type\":\"look_pack\",\"reference_look_id\":\"<look-id>\",\"template_id\":\"<template-id>\"}'"
+  - desc: "See both generation methods and their required fields"
+    cmd: "heygen avatar looks create --request-schema"
 "GET /v3/avatars/looks/{look_id}":
   - desc: "Get look details"
     cmd: "heygen avatar looks get <look-id>"
@@ -28,3 +33,8 @@
 "DELETE /v3/avatars/looks/{look_id}":
   - desc: "Delete an avatar look"
     cmd: "heygen avatar looks delete <look-id>"
+"GET /v3/avatars/look-templates":
+  - desc: "Browse the templates 'avatar looks create' accepts"
+    cmd: "heygen avatar look-templates list --limit 10"
+  - desc: "Find Look Packs curated for a female avatar"
+    cmd: "heygen avatar look-templates list --type look_pack --gender female"

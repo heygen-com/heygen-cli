@@ -68,11 +68,25 @@ var DefaultColumns = map[string][]command.Column{
 		{Header: "Type", Field: "avatar_type"},
 		{Header: "Gender", Field: "gender"},
 	},
+	"avatar/look-templates list": {
+		{Header: "ID", Field: "id"},
+		{Header: "Name", Field: "name"},
+		{Header: "Type", Field: "type"},
+		{Header: "Looks", Field: "looks_count"},
+		{Header: "Gender", Field: "gender"},
+	},
 	"voice/list": {
 		{Header: "ID", Field: "voice_id"},
 		{Header: "Name", Field: "name"},
 		{Header: "Language", Field: "language"},
 		{Header: "Gender", Field: "gender"},
+	},
+	"model/audio voices list": {
+		{Header: "ID", Field: "voice_id"},
+		{Header: "Name", Field: "name"},
+		{Header: "Status", Field: "status"},
+		{Header: "Language", Field: "language"},
+		{Header: "Created", Field: "created_at"},
 	},
 	"audio/sounds list": {
 		{Header: "ID", Field: "id"},
@@ -81,6 +95,12 @@ var DefaultColumns = map[string][]command.Column{
 		{Header: "Score", Field: "score"},
 	},
 	"video-translate/list": {
+		{Header: "ID", Field: "id"},
+		{Header: "Language", Field: "output_language"},
+		{Header: "Status", Field: "status"},
+		{Header: "Title", Field: "title"},
+	},
+	"video-translate/proofreads list": {
 		{Header: "ID", Field: "id"},
 		{Header: "Language", Field: "output_language"},
 		{Header: "Status", Field: "status"},

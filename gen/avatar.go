@@ -149,6 +149,10 @@ var AvatarLookTemplatesList = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Paginated:      true,
+	Examples: []string{
+		"# Browse the templates 'avatar looks create' accepts\n  heygen avatar look-templates list --limit 10",
+		"# Find Look Packs curated for a female avatar\n  heygen avatar look-templates list --type look_pack --gender female",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "type",
@@ -211,6 +215,10 @@ var AvatarLooksCreate = &command.Spec{
 	Endpoint:       "/v3/avatars/looks",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Apply a Look Pack to the avatar a reference look belongs to\n  heygen avatar looks create -d '{\"type\":\"look_pack\",\"reference_look_id\":\"<look-id>\",\"template_id\":\"<template-id>\"}'",
+		"# See both generation methods and their required fields\n  heygen avatar looks create --request-schema",
+	},
 }
 
 var AvatarLooksDelete = &command.Spec{

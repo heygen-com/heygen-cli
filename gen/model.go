@@ -14,6 +14,10 @@ var ModelAudioTtsCreate = &command.Spec{
 	Endpoint:       "/v3/models/audio/tts",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Generate speech from text with an ACTIVE professional voice\n  heygen model audio tts create --voice-id <voice-id> --text 'Hello from HeyGen.' --language en",
+		"# Reuse a seed for best-effort consistency across runs\n  heygen model audio tts create --voice-id <voice-id> --text 'Hello from HeyGen.' --language en --seed 42",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "language",
@@ -75,6 +79,10 @@ var ModelAudioVoicesCreate = &command.Spec{
 	Endpoint:      "/v3/models/audio/voices",
 	Method:        "POST",
 	BodyEncoding:  "json",
+	Examples: []string{
+		"# Train a professional voice from uploaded recordings (at least 20 minutes of audio)\n  heygen model audio voices create --name 'Narrator' --language en --mode professional -d '{\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'",
+		"# Retrain an existing voice, keeping its id, name, language, and mode\n  heygen model audio voices create --voice-id <voice-id> -d '{\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "language",
@@ -137,6 +145,9 @@ var ModelAudioVoicesDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Examples: []string{
+		"# Delete a voice (rejected while its status is PENDING)\n  heygen model audio voices delete <voice-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "voice-id", Param: "voice_id", Help: ""},
 	},
@@ -151,6 +162,9 @@ var ModelAudioVoicesGet = &command.Spec{
 	Endpoint:       "/v3/models/audio/voices/{voice_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Poll training status until it is ACTIVE or FAILED\n  heygen model audio voices get <voice-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "voice-id", Param: "voice_id", Help: ""},
 	},
@@ -166,6 +180,9 @@ var ModelAudioVoicesList = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Paginated:      true,
+	Examples: []string{
+		"# List the workspace's audio voices, newest first\n  heygen model audio voices list --limit 10",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "limit",

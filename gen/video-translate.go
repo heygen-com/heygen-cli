@@ -611,6 +611,9 @@ var VideoTranslateProofreadsDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Examples: []string{
+		"# Delete a proofread session\n  heygen video-translate proofreads delete <proofread-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "proofread-id", Param: "proofread_id", Help: ""},
 	},
@@ -712,6 +715,9 @@ var VideoTranslateProofreadsList = &command.Spec{
 	Method:         "GET",
 	BodyEncoding:   "",
 	Paginated:      true,
+	Examples: []string{
+		"# List proofread sessions, newest first\n  heygen video-translate proofreads list --limit 10",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "limit",

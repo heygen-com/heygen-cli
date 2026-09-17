@@ -160,6 +160,7 @@ Mirrors the [HeyGen v3 API](https://developers.heygen.com). Pattern: `heygen <no
 | `avatar` | List and manage avatars and looks |
 | `voice` | List voices, design voices, generate speech |
 | `audio` | Search the background-music catalog |
+| `model` | Train professional voice clones and synthesize speech from them |
 | `video-translate` | Translate videos into other languages |
 | `lipsync` | Dub or replace audio on existing videos |
 | `webhook` | Manage webhook endpoints and events |
