@@ -43,6 +43,14 @@ paths:
       tags: [Videos]
       summary: Create a video
       description: Creates a new video.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Key for safely retrying this mutation.
+          schema:
+            type: string
+          example: 550e8400-e29b-41d4-a716-446655440000
       requestBody:
         required: true
         content:

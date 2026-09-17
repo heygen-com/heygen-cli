@@ -919,3 +919,115 @@ func TestGroupEndpoints_QueryFlagsCarryDeprecated(t *testing.T) {
 		t.Error("ownership control flag not found")
 	}
 }
+
+// gen/ is committed, so a command-level test reads whatever was generated last
+// and stays green if this mapping regresses without a regeneration. This asserts
+// the mapping itself: a header parameter becomes a flag whose value is routed by
+// Source and addressed by its wire name, with the spec's example in the help an
+// agent reads.
+func TestGroupEndpoints_HeaderParamBecomesFlag(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	examples := loadTestExamples(t)
+	groups, _, err := GroupEndpoints(doc, examples)
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+
+	var found bool
+	for _, s := range groups["video"] {
+		if s.Name != "create" {
+			continue
+		}
+		for _, flag := range s.Flags {
+			if flag.JSONName != "Idempotency-Key" {
+				continue
+			}
+			found = true
+			if flag.Name != "idempotency-key" {
+				t.Errorf("flag name = %q, want kebab-cased %q", flag.Name, "idempotency-key")
+			}
+			if flag.Source != "header" {
+				t.Errorf("source = %q, want %q", flag.Source, "header")
+			}
+			if flag.Type != "string" {
+				t.Errorf("type = %q, want %q", flag.Type, "string")
+			}
+			if flag.Required {
+				t.Error("an optional header parameter must not produce a required flag")
+			}
+			if !strings.Contains(flag.Help, "550e8400-e29b-41d4-a716-446655440000") {
+				t.Errorf("help does not carry the spec example: %q", flag.Help)
+			}
+		}
+	}
+	if !found {
+		t.Error("no flag with JSONName Idempotency-Key on video create")
+	}
+}
+
+// validateFlags is the build-time gate for spec shapes that would otherwise
+// produce a command that misbehaves only at runtime. The builder registers most
+// of its own flags conditionally, so the same parameter name is a collision on
+// one command and perfectly fine on another.
+func TestValidateFlags(t *testing.T) {
+	tests := []struct {
+		name    string
+		spec    command.Spec
+		wantErr string
+	}{
+		{
+			name: "array-typed header",
+			spec: command.Spec{Flags: []command.FlagSpec{
+				{Name: "tags", Type: "string-slice", Source: "header", JSONName: "X-Tags"},
+			}},
+			wantErr: "header values are serialized as a single string",
+		},
+		{
+			name: "scalar headers other than string are allowed",
+			spec: command.Spec{Flags: []command.FlagSpec{
+				{Name: "retries", Type: "int", Source: "header", JSONName: "X-Retries"},
+			}},
+		},
+		{
+			name: "name collision across sources",
+			spec: command.Spec{Flags: []command.FlagSpec{
+				{Name: "trace-id", Type: "string", Source: "query", JSONName: "trace_id"},
+				{Name: "trace-id", Type: "string", Source: "header", JSONName: "Trace-Id"},
+			}},
+			wantErr: "both become --trace-id",
+		},
+		{
+			name: "force collides only where the builder registers it",
+			spec: command.Spec{Destructive: true, Flags: []command.FlagSpec{
+				{Name: "force", Type: "bool", Source: "query", JSONName: "force"},
+			}},
+			wantErr: "the builder already registers",
+		},
+		{
+			name: "same parameter is fine on a non-destructive command",
+			spec: command.Spec{Flags: []command.FlagSpec{
+				{Name: "force", Type: "bool", Source: "query", JSONName: "force"},
+			}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := tc.spec
+			spec.Group, spec.Name = "video", "create"
+			err := validateFlags(command.Groups{"video": {&spec}})
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateFlags: unexpected error %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("validateFlags: want an error containing %q, got nil", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("error = %q, want it to contain %q", err, tc.wantErr)
+			}
+		})
+	}
+}

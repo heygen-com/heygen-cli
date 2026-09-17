@@ -210,6 +210,10 @@ func GroupEndpoints(doc *openapi3.T, examples Examples) (command.Groups, GroupDe
 		return nil, nil, err
 	}
 
+	if err := validateFlags(groups); err != nil {
+		return nil, nil, err
+	}
+
 	if err := validateFlagNames(groups); err != nil {
 		return nil, nil, err
 	}
@@ -257,6 +261,71 @@ func rootSubGroup(groupName, root string) string {
 // either case the resources only collide, and so only fail loudly, when their
 // terminal verbs happen to match; with a GET on one and a POST on the other the
 // names differ and nothing catches it. Checking the mapping itself does.
+// builderFlagName reports whether the builder registers flagName on this spec's
+// command, in which case a spec parameter of the same name would panic pflag at
+// tree construction rather than fail generation.
+//
+// Each case mirrors a guard in buildCobraCommand, so a parameter is rejected
+// only where the clash is real: "force" is free on anything but a DELETE. The
+// exception is --wait/--timeout, which the builder keys off poll_configs.go in
+// cmd/heygen; codegen cannot see that table, so a parameter named for either
+// one is left to fail loudly at runtime instead of being rejected here on a
+// guess.
+func builderFlagName(spec *command.Spec, flagName string) bool {
+	switch flagName {
+	case "help", "human", "headers":
+		return true
+	case "data":
+		return spec.BodyEncoding == "json"
+	case "force":
+		return spec.Destructive
+	case "request-schema":
+		return spec.RequestSchema != ""
+	case "response-schema":
+		return spec.ResponseSchema != ""
+	default:
+		return false
+	}
+}
+
+// validateFlags rejects spec shapes that would otherwise generate a command that
+// misbehaves at runtime rather than failing the build.
+//
+// Header values are serialized by getFlagAsString, which handles every scalar
+// type but falls through to GetString for a slice, so a string-slice header
+// would register fine and then send an empty value. Comma-joined simple style is
+// the real fix if a spec ever needs one; until then, failing names the gap
+// instead of shipping a silent drop.
+//
+// A name collision is checked against both namespaces the command draws from:
+// other spec parameters, and the flags the builder adds for that spec.
+func validateFlags(groups command.Groups) error {
+	for _, group := range sortedMapKeys(groups) {
+		for _, spec := range groups[group] {
+			seen := make(map[string]string, len(spec.Flags))
+			for _, flag := range spec.Flags {
+				if flag.Source == "header" && flag.Type == "string-slice" {
+					return fmt.Errorf(
+						"%s %s: header parameter %q generates a string-slice flag, but header values are serialized as a single string; add OpenAPI header serialization before using an array-typed header",
+						group, spec.Name, flag.JSONName)
+				}
+				if builderFlagName(spec, flag.Name) {
+					return fmt.Errorf(
+						"%s %s: parameter %q becomes --%s, which the builder already registers on every command",
+						group, spec.Name, flag.JSONName, flag.Name)
+				}
+				if prev, dup := seen[flag.Name]; dup {
+					return fmt.Errorf(
+						"%s %s: parameters %q and %q both become --%s: one would shadow the other",
+						group, spec.Name, prev, flag.JSONName, flag.Name)
+				}
+				seen[flag.Name] = flag.JSONName
+			}
+		}
+	}
+	return nil
+}
+
 func validateRootSubGroups(groups command.Groups) error {
 	for _, group := range slices.Sorted(maps.Keys(groups)) {
 		owner := make(map[string]string) // sub-group token → the root that claimed it
@@ -375,18 +444,18 @@ func buildSpec(
 	spec.Paginated = detectPagination(op, pathItem)
 	spec.Destructive = method == "DELETE"
 
-	// Flags from query params
+	// Flags from query and header params.
 	for _, paramRef := range collectParams(pathItem, op) {
 		param := paramRef.Value
-		if param == nil || param.In != "query" {
+		if param == nil || (param.In != "query" && param.In != "header") {
 			continue
 		}
 		flag := command.FlagSpec{
 			Name:       strcase.ToKebab(param.Name),
 			Type:       schemaToFlagType(param.Schema),
-			Help:       param.Description,
+			Help:       paramHelp(param),
 			Required:   param.Required,
-			Source:     "query",
+			Source:     param.In,
 			JSONName:   param.Name,
 			Deprecated: param.Deprecated,
 		}
@@ -795,6 +864,20 @@ func isComplexType(s *openapi3.Schema) bool {
 // detectPagination returns true if the endpoint supports cursor-based pagination.
 // An endpoint is paginated when both: (1) the response has a cursor field
 // (next_token) and (2) the request has a cursor query param (token).
+// paramHelp returns a parameter's help text with its spec example appended,
+// unless the description already quotes it.
+func paramHelp(param *openapi3.Parameter) string {
+	help := param.Description
+	example, ok := param.Example.(string)
+	if !ok || example == "" || strings.Contains(help, example) {
+		return help
+	}
+	if help != "" && !strings.HasSuffix(help, " ") {
+		help += " "
+	}
+	return help + "Example: " + example
+}
+
 func detectPagination(op *openapi3.Operation, pathItem *openapi3.PathItem) bool {
 	respSchema := successResponseSchema(op)
 	if respSchema == nil {
