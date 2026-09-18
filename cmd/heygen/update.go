@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -24,6 +25,27 @@ type updateResponse struct {
 	Current  string `json:"current"`
 	Message  string `json:"message"`
 }
+
+type updateCheckResponse struct {
+	Current         string `json:"current"`
+	Latest          string `json:"latest"`
+	UpdateAvailable bool   `json:"update_available"`
+	ReleaseBuild    bool   `json:"release_build"`
+	InstallMethod   string `json:"install_method"`
+	Channel         string `json:"channel"`
+	Message         string `json:"message"`
+}
+
+// releaseTaggedVersion matches a stable tag or a dev prerelease. The dev suffix
+// stays loose on purpose: dev-release.yml stamps a timestamp while the fixtures
+// below carry a timestamp plus a sha, so the marker is what identifies the
+// channel, not the stamp's shape.
+//
+// It is a shape check rather than a semver parse because git-describe is what it
+// must reject, and "v0.8.1-6-gabc1234-dirty" parses fine as semver while
+// ordering BELOW v0.8.1. Accepting it makes the newest release compare as newer,
+// so an "update" installs older code than the build already running.
+var releaseTaggedVersion = regexp.MustCompile(`^v\d+\.\d+\.\d+(-dev\.[0-9A-Za-z.]+)?$`)
 
 type updateRelease struct {
 	Version string
@@ -97,11 +119,75 @@ func newUpdateCmd(ctx *cmdContext) *cobra.Command {
 		Annotations: map[string]string{"skipAuth": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			targetVersion, _ := cmd.Flags().GetString("version")
+			check, _ := cmd.Flags().GetBool("check")
+			if check {
+				if cmd.Flags().Changed("version") {
+					return clierrors.NewUsage("--check reports what an update would do; it cannot be combined with --version")
+				}
+				return runUpdateCheck(ctx)
+			}
 			return runUpdate(ctx, targetVersion)
 		},
 	}
 	cmd.Flags().String("version", "", "Update to a specific version (e.g., v0.1.0)")
+	cmd.Flags().Bool("check", false, "Report whether an update is available without installing it")
 	return cmd
+}
+
+// runUpdateCheck answers "what would heygen update do", without doing it.
+//
+// It reports rather than refuses, which is the whole difference from runUpdate:
+// a non-release build and a package-manager install are both terminal errors
+// there, but here they are the answer, so a caller can branch on the fields
+// instead of parsing an error.
+func runUpdateCheck(ctx *cmdContext) error {
+	raw := updateBuildVersion(ctx)
+	resp := updateCheckResponse{Current: raw}
+
+	// Best-effort: an install method we cannot determine still permits the
+	// version comparison, which is the part the caller asked for.
+	if method, _, err := detectInstallMethod(); err == nil {
+		resp.InstallMethod = method
+	}
+
+	current, err := validateCurrentVersion(raw)
+	if err != nil {
+		resp.Message = "not a release build, so no update can be offered"
+		return emitUpdateCheck(ctx, resp)
+	}
+	resp.Current = current
+	resp.ReleaseBuild = true
+	resp.Channel = updateChannel(current)
+
+	updater, err := newReleaseUpdater(resp.Channel == "dev")
+	if err != nil {
+		return err
+	}
+	rel, found, err := updater.DetectLatest(context.Background())
+	if err != nil {
+		return clierrors.New(fmt.Sprintf("failed to check for updates: %v", err))
+	}
+	if !found {
+		resp.Message = fmt.Sprintf("no %s release found for this platform", resp.Channel)
+		return emitUpdateCheck(ctx, resp)
+	}
+
+	resp.Latest = rel.Version
+	resp.UpdateAvailable = isVersionGreater(rel.Version, current)
+	if resp.UpdateAvailable {
+		resp.Message = fmt.Sprintf("heygen %s is available; you have %s", rel.Version, current)
+	} else {
+		resp.Message = fmt.Sprintf("heygen is up to date at %s", current)
+	}
+	return emitUpdateCheck(ctx, resp)
+}
+
+func emitUpdateCheck(ctx *cmdContext, resp updateCheckResponse) error {
+	data, err := marshalData(resp)
+	if err != nil {
+		return err
+	}
+	return ctx.formatter.Data(data, "", nil)
 }
 
 func runUpdate(ctx *cmdContext, targetVersion string) error {
@@ -138,10 +224,7 @@ func runUpdate(ctx *cmdContext, targetVersion string) error {
 		return clierrors.New(fmt.Sprintf("failed to resolve executable path: %v", err))
 	}
 
-	// Auto-detect update channel from current version: dev builds track
-	// dev prereleases, stable builds track stable releases only.
-	isDevBuild := strings.Contains(current, "-dev.")
-	updater, err := newReleaseUpdater(isDevBuild)
+	updater, err := newReleaseUpdater(updateChannel(current) == "dev")
 	if err != nil {
 		return err
 	}
@@ -190,14 +273,23 @@ func runUpdate(ctx *cmdContext, targetVersion string) error {
 }
 
 func validateCurrentVersion(raw string) (string, error) {
-	if raw == "" || raw == "dev" || raw == "test" {
+	version := canonicalVersion(raw)
+	if !releaseTaggedVersion.MatchString(version) {
 		return "", clierrors.New("current build version is not release-tagged; reinstall from a release build to use heygen update")
 	}
-	version := canonicalVersion(raw)
 	if _, err := semver.NewVersion(strings.TrimPrefix(version, "v")); err != nil {
 		return "", clierrors.New(fmt.Sprintf("current build version %q is not a valid semantic version", raw))
 	}
 	return version, nil
+}
+
+// updateChannel selects the release track, which becomes the updater's
+// prerelease flag: a dev build sees dev prereleases, a stable build never does.
+func updateChannel(version string) string {
+	if strings.Contains(version, "-dev.") {
+		return "dev"
+	}
+	return "stable"
 }
 
 func validateTargetVersion(raw string) error {

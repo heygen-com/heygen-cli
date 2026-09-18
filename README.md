@@ -44,6 +44,7 @@ You only need a HeyGen API key — see [Authenticate](#authenticate) below.
 
 ```bash
 heygen update            # install the latest version
+heygen update --check    # report whether one is available, without installing
 ```
 
 ## Shell completion

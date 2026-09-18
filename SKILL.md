@@ -135,6 +135,15 @@ heygen video get --response-schema
 
 - The CLI automatically retries 429 and selected transient 5xx (500/502/503/504) on
   retry-eligible requests.
-- Use `heygen update` to check for and install a newer CLI release.
+- Use `heygen update` to install a newer CLI release, or `heygen update --check` to
+  report whether one exists without installing it. `--check` answers on stdout with
+  `update_available`, `current`, `latest`, `channel`, `install_method`, and
+  `release_build`. Branch on `update_available`, which means a newer release
+  exists upstream, not that this install can fetch it: an `install_method` of
+  `homebrew` or `npm` must update through that manager, and an empty one means
+  the method could not be determined. When `release_build` is false the build is
+  local and no update can be offered. Neither command needs an API key.
+  If `update_available` is true, tell the user rather than updating unprompted:
+  a new CLI version can change command output mid-task.
 - Video download writes to `{video-id}.mp4` by default. Override with `--output-path`. Errors if the file already exists; use `--force` to overwrite.
 - For the full API reference (concepts, limits, pricing), see https://developers.heygen.com
