@@ -1,3 +1,0 @@
-# HeyGen CLI
-
-@AGENTS.md
