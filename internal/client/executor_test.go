@@ -1089,3 +1089,123 @@ func TestExecute_GETRequestTimeout_SafeToRetryHint(t *testing.T) {
 		t.Errorf("GET timeout hint should not carry create/duplicate guidance, got: %q", cliErr.Hint)
 	}
 }
+
+// Pins both halves of the ordering documented in executeWithContext: the
+// invocation's header reaches the wire, and the credential still does too.
+func TestExecute_InvocationHeadersReachRequestWithoutDisplacingAuth(t *testing.T) {
+	var gotKey, gotAPIKey string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.Header.Get("Idempotency-Key")
+		gotAPIKey = r.Header.Get("x-api-key")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer srv.Close()
+
+	c := New("secret-key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "POST", BodyEncoding: "json"}
+	inv := &command.Invocation{
+		PathParams:  make(map[string]string),
+		QueryParams: make(url.Values),
+		Body:        map[string]any{"title": "t"},
+		Headers:     map[string]string{"Idempotency-Key": "550e8400-e29b-41d4-a716-446655440000"},
+	}
+
+	if _, err := c.Execute(spec, inv); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotKey != "550e8400-e29b-41d4-a716-446655440000" {
+		t.Errorf("Idempotency-Key = %q, want the invocation's value", gotKey)
+	}
+	if gotAPIKey != "secret-key" {
+		t.Errorf("x-api-key = %q, want the credential to still be applied", gotAPIKey)
+	}
+}
+
+// The unkeyed hint tells the caller to reconcile before retrying, which is the
+// wrong instruction once a key makes the retry safe. One case per branch.
+func TestExecute_TimeoutHintDependsOnIdempotencyKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(60 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer srv.Close()
+
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "POST", BodyEncoding: "json"}
+
+	for _, tc := range []struct {
+		name    string
+		headers map[string]string
+		want    string
+	}{
+		{"unkeyed", nil, "Check with the corresponding get/list command"},
+		{"keyed", map[string]string{"Idempotency-Key": "k1"}, "Re-run the same command with the same --idempotency-key"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+			c.SetTimeout(10 * time.Millisecond)
+			inv := &command.Invocation{
+				PathParams:  make(map[string]string),
+				QueryParams: make(url.Values),
+				Body:        map[string]any{"title": "t"},
+				Headers:     tc.headers,
+			}
+
+			_, err := c.Execute(spec, inv)
+			var cliErr *clierrors.CLIError
+			if !errors.As(err, &cliErr) {
+				t.Fatalf("error = %v, want *CLIError", err)
+			}
+			if !strings.Contains(cliErr.Hint, tc.want) {
+				t.Errorf("hint = %q, want it to contain %q", cliErr.Hint, tc.want)
+			}
+		})
+	}
+}
+
+// The --wait path wraps a create timeout before any resource ID exists, so it
+// builds its own hint rather than reusing the one executeWithContext produced.
+// An empty key is sent as an empty header and rejected, so it must not be read
+// as a usable one on either path.
+func TestCreateContextError_HintTracksEffectiveKey(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		keyed bool
+		want  string
+	}{
+		{"unkeyed", false, "Re-run the corresponding get command"},
+		{"keyed", true, "same --idempotency-key value"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := newCreateContextError(context.DeadlineExceeded, tc.keyed)
+			var cliErr *clierrors.CLIError
+			if !errors.As(err, &cliErr) {
+				t.Fatalf("error = %v, want *CLIError", err)
+			}
+			if !strings.Contains(cliErr.Hint, tc.want) {
+				t.Errorf("hint = %q, want it to contain %q", cliErr.Hint, tc.want)
+			}
+		})
+	}
+}
+
+func TestHasIdempotencyKey(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		inv  *command.Invocation
+		want bool
+	}{
+		{"nil invocation", nil, false},
+		{"no headers", &command.Invocation{}, false},
+		{"empty value", &command.Invocation{Headers: map[string]string{"Idempotency-Key": ""}}, false},
+		{"usable key", &command.Invocation{Headers: map[string]string{"Idempotency-Key": "k"}}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasIdempotencyKey(tc.inv); got != tc.want {
+				t.Errorf("hasIdempotencyKey = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

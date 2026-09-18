@@ -92,6 +92,24 @@ heygen video download <video-id>      # downloads file, stdout: JSON with path
    (exit 3) and `usage_error` (exit 2). Retry only transient ones, with backoff:
    `network_error`, `timeout` (exit 4), `rate_limit_exceeded`, `quota_exceeded`,
    `internal_error`, `unclassified_server_error`.
+
+   **Retrying a create needs an idempotency key.** A timed-out or 5xx create may
+   already have been committed server-side, so a bare retry can bill a second
+   resource. Generate one key per logical operation, pass it as
+   `--idempotency-key`, and reuse that exact value on every retry of it: the
+   server replays the original result rather than creating another. Replay lasts
+   24 hours, so a retry after that window creates and bills a second resource;
+   reconcile instead of retrying if the original is older. A retry sent while the
+   original is still in flight returns 409 `request_in_progress`, which means
+   wait and poll, not retry again. Without a key, reconcile with the matching
+   `get`/`list` before retrying. Only endpoints whose spec declares the header
+   accept the flag, so check `--help` on the command. Keys are 1-255 characters
+   from `[A-Za-z0-9_:.-]`, and a UUID works:
+
+   ```bash
+   KEY=$(uuidgen)
+   heygen video create -d '{...}' --idempotency-key "$KEY"   # retry with the same $KEY
+   ```
 3. **Cap the loop.** Bound it by attempts or wall-clock and exit non-zero at the cap
    rather than looping forever.
 

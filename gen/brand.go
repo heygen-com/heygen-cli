@@ -21,6 +21,18 @@ var BrandGlossariesCreate = &command.Spec{
 	},
 	Flags: []command.FlagSpec{
 		{
+			Name:     "idempotency-key",
+			Type:     "string",
+			Default:  "",
+			Help:     "Optional client-supplied key for safely retrying mutations. Subsequent calls within 24 hours that share this key replay the original response — even if the request body differs slightly (a warning is logged). A retry that arrives while the original is still in flight gets a 409 `request_in_progress`. Keys must be 1–255 characters from `[A-Za-z0-9_:.-]`; a UUID is a safe default. Scope is per-endpoint and per-resource: the same key on a different route or path parameter is independent. Example: 550e8400-e29b-41d4-a716-446655440000",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "header",
+			JSONName: "Idempotency-Key",
+		},
+		{
 			Name:     "name",
 			Type:     "string",
 			Default:  "",
@@ -162,6 +174,18 @@ var BrandKitsCreate = &command.Spec{
 		"# Name the kit yourself instead of taking the brand name detected on the site\n  heygen brand kits create --url https://www.heygen.com --name 'HeyGen brand'",
 	},
 	Flags: []command.FlagSpec{
+		{
+			Name:     "idempotency-key",
+			Type:     "string",
+			Default:  "",
+			Help:     "Optional client-supplied key for safely retrying mutations. Subsequent calls within 24 hours that share this key replay the original response — even if the request body differs slightly (a warning is logged). A retry that arrives while the original is still in flight gets a 409 `request_in_progress`. Keys must be 1–255 characters from `[A-Za-z0-9_:.-]`; a UUID is a safe default. Scope is per-endpoint and per-resource: the same key on a different route or path parameter is independent. Example: 550e8400-e29b-41d4-a716-446655440000",
+			Required: false,
+			Enum:     nil,
+			Min:      nil,
+			Max:      nil,
+			Source:   "header",
+			JSONName: "Idempotency-Key",
+		},
 		{
 			Name:     "name",
 			Type:     "string",

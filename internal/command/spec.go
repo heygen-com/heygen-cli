@@ -80,9 +80,10 @@ type ArgSpec struct {
 // FlagSpec defines a named CLI flag (--name value). Source determines
 // where the resolved value is routed:
 //
-//   - "query": → inv.QueryParams     (e.g., --limit 10)
-//   - "body":  → inv.Body            (e.g., --title "Hello")
-//   - "file":  → inv.FilePath        (e.g., --file ./video.mp4, for multipart upload)
+//   - "query":  → inv.QueryParams     (e.g., --limit 10)
+//   - "body":   → inv.Body            (e.g., --title "Hello")
+//   - "file":   → inv.FilePath        (e.g., --file ./video.mp4, for multipart upload)
+//   - "header": → inv.Headers         (e.g., --idempotency-key <uuid>)
 type FlagSpec struct {
 	Name     string   // kebab-case ("folder-id")
 	Type     string   // "string", "int", "bool", "float64", "string-slice"
@@ -92,7 +93,7 @@ type FlagSpec struct {
 	Enum     []string // from OpenAPI enum (empty = any value)
 	Min      *int     // from OpenAPI minimum (nil if not defined)
 	Max      *int     // from OpenAPI maximum (nil if not defined)
-	Source   string   // "query", "body", or "file"
+	Source   string   // "query", "body", "file", or "header"
 	JSONName string   // original API parameter/field name ("folder_id")
 
 	// Deprecated mirrors OpenAPI `deprecated` on the parameter or schema
@@ -154,6 +155,7 @@ type Invocation struct {
 	QueryParams url.Values        // resolved query parameters (stdlib type, handles repeated keys)
 	Body        map[string]any    // merged from flags + -d/--data; nil means no body sent
 	FilePath    string            // local file path for multipart upload
+	Headers     map[string]string // request headers from header-sourced flags; keyed by wire name
 }
 
 // BuildInvocation resolves positional args and flags from a Cobra command
@@ -240,6 +242,11 @@ func (s *Spec) BuildInvocation(cmd *cobra.Command, args []string, data map[strin
 				inv.Body = make(map[string]any)
 			}
 			inv.Body[flag.JSONName] = getFlagValue(cmd, flag)
+		case "header":
+			if inv.Headers == nil {
+				inv.Headers = make(map[string]string)
+			}
+			inv.Headers[flag.JSONName] = getFlagAsString(cmd, flag)
 		case "file":
 			v, _ := cmd.Flags().GetString(flag.Name)
 			inv.FilePath = v

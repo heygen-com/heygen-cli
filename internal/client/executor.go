@@ -77,7 +77,7 @@ func (c *Client) ExecuteAndPoll(
 
 	createResp, err := c.executeWithContext(pollCtx, spec, inv)
 	if err != nil {
-		return nil, translateCreateContextError(pollCtx, err)
+		return nil, translateCreateContextError(pollCtx, err, hasIdempotencyKey(inv))
 	}
 
 	resourceID, err := extractJSONPath(createResp, spec.PollConfig.IDField)
@@ -174,6 +174,18 @@ func (c *Client) Execute(spec *command.Spec, inv *command.Invocation) (json.RawM
 	return c.executeWithContext(context.Background(), spec, inv)
 }
 
+// idempotencyKeyHeader is the spec-declared header behind --idempotency-key.
+// Header flags are generic, but timeout guidance is not: whether a write can be
+// safely re-sent depends on this header specifically.
+const idempotencyKeyHeader = "Idempotency-Key"
+
+// hasIdempotencyKey reports whether the invocation sends a usable key. An empty
+// value still occupies the map and still goes on the wire, where the API rejects
+// it, so presence alone must not be read as "this write is safe to re-send".
+func hasIdempotencyKey(inv *command.Invocation) bool {
+	return inv != nil && inv.Headers[idempotencyKeyHeader] != ""
+}
+
 func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv *command.Invocation) (json.RawMessage, error) {
 	if spec.Method == "" {
 		return nil, clierrors.New("Spec.Method must be set")
@@ -198,6 +210,13 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 	}
 	req = req.WithContext(ctx)
 
+	// Spec-declared headers (Idempotency-Key today). Set before Do, whose
+	// applyHeaders writes the reserved auth and attribution headers afterwards
+	// and so still wins: a spec header can never displace credentials.
+	for k, v := range inv.Headers {
+		req.Header.Set(k, v)
+	}
+
 	resp, err := c.Do(req)
 	if err != nil {
 		if errors.Is(err, ErrReLoginNeeded) {
@@ -219,15 +238,19 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 		var netErr net.Error
 		if (errors.As(err, &netErr) && netErr.Timeout()) || errors.Is(err, context.DeadlineExceeded) {
 			// A GET is safe to retry. A non-GET (create/write) may have been
-			// committed server-side before the client deadline elapsed, and CLI
-			// writes carry no idempotency key, so a blind retry can produce a
-			// duplicate (e.g. a second video create + charge). Steer writes to
-			// "check status first", mirroring the poll-deadline guidance in
-			// newCreateContextError. Include the applied budget so support can
-			// see which per-operation timeout tripped.
+			// committed server-side before the client deadline elapsed, so a
+			// blind retry can produce a duplicate (e.g. a second video create +
+			// charge). A caller-supplied idempotency key removes that risk,
+			// since the server replays the original response; without one the
+			// only safe move is to reconcile first, mirroring the poll-deadline
+			// guidance in newCreateContextError. Include the applied budget so
+			// support can see which per-operation timeout tripped.
 			hint := "The request took too long and timed out. Retry — a slow endpoint or a stalled network connection can cause this."
 			if spec.Method != http.MethodGet {
 				hint = "The request timed out, but the operation may have been submitted. Check with the corresponding get/list command before retrying, to avoid creating a duplicate."
+				if hasIdempotencyKey(inv) {
+					hint = "The request timed out, but the operation may have been submitted. Re-run the same command with the same --idempotency-key value: the server replays the original result instead of creating a duplicate."
+				}
 			}
 			msg := "request timed out"
 			if c.httpClient.Timeout > 0 {
@@ -495,30 +518,37 @@ func extractJSONPath(raw json.RawMessage, path string) (string, error) {
 // request timeout that fires while the poll context is still live is already
 // classified as timeout/exit 4 by executeWithContext, so it passes through the
 // final return unchanged — no message string-matching required.
-func translateCreateContextError(ctx context.Context, err error) error {
+func translateCreateContextError(ctx context.Context, err error, keyed bool) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return newCreateContextError(ctxErr)
+		return newCreateContextError(ctxErr, keyed)
 	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return newCreateContextError(err)
+		return newCreateContextError(err, keyed)
 	}
 	return err
 }
 
-func newCreateContextError(err error) error {
+// keyed carries whether the create sent a usable idempotency key. This path runs
+// before any resource ID is known, so the default advice is to reconcile by
+// hand; with a key, re-running the same command is both simpler and safe.
+func newCreateContextError(err error, keyed bool) error {
+	hint := "Re-run the corresponding get command to check the current status manually"
+	if keyed {
+		hint = "Re-run the same command with the same --idempotency-key value: the server replays the original result instead of creating a duplicate"
+	}
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return &clierrors.CLIError{
 			Code:     "timeout",
 			Message:  "polling timed out before the operation completed",
-			Hint:     "Re-run the corresponding get command to check the current status manually",
+			Hint:     hint,
 			ExitCode: clierrors.ExitTimeout,
 		}
 	case errors.Is(err, context.Canceled):
 		return &clierrors.CLIError{
 			Code:     "canceled",
 			Message:  "polling was canceled before the operation completed",
-			Hint:     "Re-run the corresponding get command to check the current status manually",
+			Hint:     hint,
 			ExitCode: clierrors.ExitGeneral,
 		}
 	default:
