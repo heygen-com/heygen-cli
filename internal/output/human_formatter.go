@@ -20,6 +20,7 @@ var (
 	hintStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	noticeStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 	failureStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 )
 
@@ -63,10 +64,16 @@ func (f *HumanFormatter) Error(err *clierrors.CLIError) {
 	}
 }
 
-// Warn renders a non-fatal notice to stderr, so it stays out of the rendered
+// Warn renders a non-fatal warning to stderr, so it stays out of the rendered
 // table or key-value output on stdout.
 func (f *HumanFormatter) Warn(message string) {
 	_, _ = fmt.Fprintf(f.errOut, "%s %s\n", warningStyle.Render("Warning:"), message)
+}
+
+// Notice renders an informational message to stderr. The code is a machine
+// key with no place in human output, so it is dropped here.
+func (f *HumanFormatter) Notice(_, message string) {
+	_, _ = fmt.Fprintf(f.errOut, "%s %s\n", noticeStyle.Render("Note:"), message)
 }
 
 func unwrapPayload(v json.RawMessage, dataField string) json.RawMessage {
