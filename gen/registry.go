@@ -85,9 +85,13 @@ var Groups = map[string][]*command.Spec{
 		ModelAudioVoicesList,
 	},
 	"template": {
+		TemplateCreate,
+		TemplateDelete,
 		TemplateGenerate,
 		TemplateGet,
 		TemplateList,
+		TemplateUpdate,
+		TemplateVariablesUpdate,
 	},
 	"user": {
 		UserMeGet,
