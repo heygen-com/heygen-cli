@@ -17,3 +17,13 @@
 "DELETE /v3/models/audio/voices/{voice_id}":
   - desc: "Delete a voice (rejected while its status is PENDING)"
     cmd: "heygen model audio voices delete <voice-id>"
+"POST /v3/models/videos":
+  - desc: "Generate an Instant Video from a text prompt"
+    cmd: "heygen model videos create -d '{\"model\":\"heygen-video-1\",\"mode\":\"text_to_video\",\"prompt\":\"A person walking through a garden\",\"duration\":5,\"resolution\":\"768p\"}'"
+  - desc: "Animate a first-frame image"
+    cmd: "heygen model videos create -d '{\"model\":\"heygen-video-1\",\"mode\":\"image_to_video\",\"prompt\":\"The person smiles and waves\",\"image\":{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}}'"
+  - desc: "Generate with reference images and reuse an idempotency key for retries"
+    cmd: "heygen model videos create --idempotency-key <unique-key> -d '{\"model\":\"heygen-video-1\",\"mode\":\"reference_to_video\",\"prompt\":\"The person walks through a garden\",\"reference_images\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'"
+"GET /v3/models/videos/{video_id}":
+  - desc: "Poll an Instant Video until completed, failed, or cancelled"
+    cmd: "heygen model videos get <video-id>"
