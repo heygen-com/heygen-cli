@@ -162,7 +162,7 @@ var GroupDescriptions = map[string]string{
 	"audio":           "Search the background-music and sound-effects catalog",
 	"avatar":          "List and manage avatars and looks",
 	"brand":           "Brand-related resources — brand kits (colors, fonts, logos) and brand glossaries (custom term translations)",
-	"folder":          "Create folders to organize videos and translations in the workspace",
+	"folder":          "Create folders to organize videos and translations in the workspace, and look up any folder, Assets library folders included, by id",
 	"lipsync":         "Dub or replace audio on existing videos",
 	"template":        "Generate videos from reusable templates by replacing their variables",
 	"user":            "Account information and billing",
