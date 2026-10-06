@@ -14,6 +14,9 @@ var TemplateCreate = &command.Spec{
 	Endpoint:       "/v3/templates",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Create a template from one of your videos (it starts with no variables)\n  heygen template create --video-id <video-id> --name \"Product demo\"",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "idempotency-key",
@@ -64,6 +67,9 @@ var TemplateDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Examples: []string{
+		"# Delete a template (videos already generated from it are kept)\n  heygen template delete <template-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "template-id", Param: "template_id", Help: ""},
 	},
@@ -328,6 +334,9 @@ var TemplateUpdate = &command.Spec{
 	Endpoint:       "/v3/templates/{template_id}",
 	Method:         "PATCH",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Rename a template\n  heygen template update <template-id> --name \"Product demo v2\"",
+	},
 	Args: []command.ArgSpec{
 		{Name: "template-id", Param: "template_id", Help: ""},
 	},
@@ -357,6 +366,11 @@ var TemplateVariablesUpdate = &command.Spec{
 	Endpoint:       "/v3/templates/{template_id}/variables",
 	Method:         "PUT",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Replace the full variable set: turn the text 'Acme' into {{company}} and bind {{logo}} to an image element (variables omitted here are removed)\n  heygen template variables update <template-id> -d '{\"variables\":{\"company\":{\"type\":\"text\",\"match\":\"Acme\"},\"logo\":{\"type\":\"image\",\"element_id\":\"<element-id>\"}}}'",
+		"# Reject the update if the template changed since your last 'template get'\n  heygen template variables update <template-id> --expected-edit-version <edit-version> -d variables.json",
+		"# See the request shape, including every variable type\n  heygen template variables update <template-id> --request-schema",
+	},
 	Args: []command.ArgSpec{
 		{Name: "template-id", Param: "template_id", Help: ""},
 	},
