@@ -11,3 +11,19 @@
     cmd: "heygen template generate <template-id> --scene-ids <scene-id-1>,<scene-id-2> -d variables.json"
   - desc: "See the request shape (variables are template-specific)"
     cmd: "heygen template generate <template-id> --request-schema"
+"POST /v3/templates":
+  - desc: "Create a template from one of your videos (it starts with no variables)"
+    cmd: "heygen template create --video-id <video-id> --name \"Product demo\""
+"PATCH /v3/templates/{template_id}":
+  - desc: "Rename a template"
+    cmd: "heygen template update <template-id> --name \"Product demo v2\""
+"DELETE /v3/templates/{template_id}":
+  - desc: "Delete a template (videos already generated from it are kept)"
+    cmd: "heygen template delete <template-id>"
+"PUT /v3/templates/{template_id}/variables":
+  - desc: "Replace the full variable set: turn the text 'Acme' into {{company}} and bind {{logo}} to an image element (variables omitted here are removed)"
+    cmd: "heygen template variables update <template-id> -d '{\"variables\":{\"company\":{\"type\":\"text\",\"match\":\"Acme\"},\"logo\":{\"type\":\"image\",\"element_id\":\"<element-id>\"}}}'"
+  - desc: "Reject the update if the template changed since your last 'template get'"
+    cmd: "heygen template variables update <template-id> --expected-edit-version <edit-version> -d variables.json"
+  - desc: "See the request shape, including every variable type"
+    cmd: "heygen template variables update <template-id> --request-schema"
