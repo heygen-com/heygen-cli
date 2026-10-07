@@ -95,7 +95,10 @@ func startUpdateCheck(args []string, version string) *updateNotifier {
 		return nil
 	}
 	defer unlock()
-	// Re-read under the lock: another invocation may have checked meanwhile.
+	// Re-read the cache and the clock under the lock. Another invocation may
+	// have checked meanwhile, and a clock read before the lock can trail its
+	// stamp, which checkDue would take for a clock set back and treat as due.
+	now = updateNow()
 	c := readUpdateCache()
 	if !c.checkDue(now) {
 		return n
@@ -125,6 +128,7 @@ func (n *updateNotifier) finish(formatter output.Formatter) {
 		return
 	}
 	defer unlock()
+	now = updateNow() // under the lock, as in startUpdateCheck
 	c := readUpdateCache()
 	if !c.noticeDue(n.current, now) {
 		return
@@ -139,6 +143,8 @@ func (n *updateNotifier) finish(formatter output.Formatter) {
 
 // runUpdateCheckWorker is the detached child: fetch the pointer, then record
 // the outcome. Nobody waits on it, so unlike the parent it waits for a busy lock.
+// Its life is capped near updateFetchTimeout plus updateWorkerLockWait, which
+// is what a harness waiting on the whole process tree, not on pipes, waits.
 func runUpdateCheckWorker() {
 	ctx, cancel := context.WithTimeout(context.Background(), updateFetchTimeout)
 	latest, fetchErr := updateFetchLatest(ctx)
@@ -222,7 +228,7 @@ func updateNoticeMessage(latest, current string) string {
 			how = "Upgrade it through your package manager."
 		}
 	}
-	return fmt.Sprintf("heygen %s is available; you have %s. %s", latest, current, how)
+	return updateAvailableMessage(latest, current) + ". " + how
 }
 
 // updateCheckEnabled is off in CI because a job gets a fresh HOME, so the
@@ -341,8 +347,9 @@ func readUpdateCache() updateCheckCache {
 }
 
 // writeUpdateCache replaces the file by rename, so an unlocked reader sees the
-// old cache or the new one, never a partial write. Callers hold
-// lockUpdateCache.
+// old cache or the new one, never a partial write. On Windows the rename fails
+// instead while such a reader has the file open, and every caller treats a
+// failed write as nothing recorded. Callers hold lockUpdateCache.
 func writeUpdateCache(c updateCheckCache) error {
 	c.Schema = updateCacheSchema
 	data, err := json.Marshal(c)

@@ -334,20 +334,78 @@ func TestUpdateCheck_UnrecordedAttemptDoesNotSpawn(t *testing.T) {
 }
 
 // A notice whose timestamp cannot be saved would repeat on every invocation.
+// A read-only config dir lets the lock and the read succeed while the write
+// fails, so finish reaches the emit decision.
 func TestUpdateCheck_NoticeRequiresRecordedTimestamp(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs POSIX permissions enforced on the caller")
+	}
 	setupUpdateNotice(t)
 	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow})
-	n := startUpdateCheck([]string{"video", "list"}, "v0.9.0")
-	notADir := filepath.Join(t.TempDir(), "file")
-	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
+	unlock, err := lockUpdateCache() // creates the lock file while the dir is writable
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("HEYGEN_CONFIG_DIR", notADir)
+	unlock()
+	dir := os.Getenv("HEYGEN_CONFIG_DIR")
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 
-	var stderr bytes.Buffer
-	n.finish(output.NewJSONFormatter(io.Discard, &stderr))
-	if stderr.Len() != 0 {
-		t.Errorf("stderr = %q, want no notice when it cannot be recorded", stderr.String())
+	if stderr := runUpdateNotice(t, "v0.9.0"); stderr != "" {
+		t.Errorf("stderr = %q, want no notice when it cannot be recorded", stderr)
+	}
+}
+
+// A concurrent invocation can record its stamp after this one first read the
+// clock but before this one takes the lock. Read with the earlier clock, that
+// stamp looks like a clock set back, which counts as elapsed, so this run
+// would spawn a second worker or print a second notice.
+func TestUpdateCheck_ConcurrentStampBeforeLockIsHonored(t *testing.T) {
+	cases := []struct {
+		name string
+		seed func(stamp time.Time) updateCheckCache
+		run  func() (stderr string)
+	}{
+		{
+			name: "worker spawn",
+			seed: func(stamp time.Time) updateCheckCache { return updateCheckCache{LastAttempt: stamp} },
+			run: func() string {
+				startUpdateCheck([]string{"video", "list"}, "v0.9.0")
+				return ""
+			},
+		},
+		{
+			name: "notice",
+			seed: func(stamp time.Time) updateCheckCache {
+				return updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow, NotifiedAt: stamp}
+			},
+			run: func() string {
+				var stderr bytes.Buffer
+				(&updateNotifier{current: "v0.9.0"}).finish(output.NewJSONFormatter(io.Discard, &stderr))
+				return stderr.String()
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spawns := setupUpdateNotice(t)
+			clock := updateTestNow
+			updateNow = func() time.Time {
+				clock = clock.Add(time.Millisecond)
+				return clock
+			}
+			// Between the first read (+1ms) and the read under the lock (+2ms).
+			seedUpdateCache(t, tc.seed(updateTestNow.Add(1500*time.Microsecond)))
+
+			if stderr := tc.run(); stderr != "" {
+				t.Errorf("stderr = %q, want no second notice", stderr)
+			}
+			if spawns.Load() != 0 {
+				t.Errorf("spawned %d workers, want no second worker", spawns.Load())
+			}
+		})
 	}
 }
 
