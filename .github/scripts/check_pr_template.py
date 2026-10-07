@@ -1,8 +1,7 @@
 import json
 import os
 import sys
-
-import requests
+import urllib.request
 
 MIN_DESCRIPTION_LENGTH = 50
 
@@ -25,8 +24,8 @@ headers = {
     "Accept": "application/vnd.github.v3+json",
 }
 
-response = requests.get(url, headers=headers)
-pr_data = response.json()
+with urllib.request.urlopen(urllib.request.Request(url, headers=headers)) as response:
+    pr_data = json.load(response)
 pr_body = (pr_data.get("body") or "").strip()
 
 if len(pr_body) < MIN_DESCRIPTION_LENGTH:
