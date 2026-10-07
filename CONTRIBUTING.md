@@ -37,6 +37,7 @@ gen/               GENERATED — do not hand-edit
 codegen/           OpenAPI → Go codegen pipeline
 codegen/examples/  Per-group example YAML files
 scripts/           Install script, CI helpers
+.claude/skills/    Maintainer skills for Claude Code (release, E2E, changelog)
 ```
 
 ### Key separation
@@ -147,4 +148,8 @@ Command tests use `runCommand()` from `cmd/heygen/testutil_test.go`, which creat
 
 ## Release Process
 
-See [RELEASE.md](./RELEASE.md) for how to cut dev and stable releases.
+See [RELEASE.md](./RELEASE.md) for how to cut dev and stable releases. In Claude Code, `/release-cli` runs that process and stops for you at each decision.
+
+## Maintainer Skills
+
+Claude Code skills for releasing and testing this repo live in `.claude/skills/`. [.claude/skills/README.md](.claude/skills/README.md) lists what each does and when to use it.

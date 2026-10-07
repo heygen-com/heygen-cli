@@ -1,0 +1,17 @@
+# Maintainer skills
+
+Claude Code skills for working on this repository. They load automatically in
+Claude Code from the repo root; run one with `/<name>`.
+
+These are for maintainers developing and releasing the CLI. They are not the
+skills for agents that *use* the CLI: that is the root [SKILL.md](../../SKILL.md),
+and README's "Agent skills" section links HeyGen's public skills collection.
+
+| Skill | What it does | When |
+|---|---|---|
+| [`/release-cli`](release-cli/SKILL.md) | Runs [RELEASE.md](../../RELEASE.md)'s whole release, stopping for a person at each decision. Calls the two below. | Cutting a stable or dev release |
+| [`/e2e-cli-test`](e2e-cli-test/SKILL.md) | Builds the binary and exercises it against the live API. Spends a few credits. | Release step 5, or after a change you want to see work for real |
+| [`/changelog-cli`](changelog-cli/SKILL.md) | Drafts release notes from the commits since the last stable tag. | Release step 7 |
+
+When you add a list or get command, also add it to `e2e-cli-test` (see AGENTS.md,
+"New list commands").

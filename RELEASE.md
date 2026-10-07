@@ -1,5 +1,7 @@
 # Release Process
 
+In Claude Code, `/release-cli` ([.claude/skills/release-cli/SKILL.md](.claude/skills/release-cli/SKILL.md)) runs this whole process and stops for a person at each decision.
+
 For install instructions, see [README.md](./README.md).
 
 ## Release Types
