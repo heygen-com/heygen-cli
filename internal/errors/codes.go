@@ -29,6 +29,7 @@ var cliPrefixedCodes = []string{
 	// here anyway because the reservation guarantee is about the identifier,
 	// not the severity, and a notice code reaches a consumer the same way.
 	"cli_telemetry_notice",
+	"cli_update_available",
 }
 
 // grandfatheredBareCodes are CLI-originated codes that shipped bare in a stable

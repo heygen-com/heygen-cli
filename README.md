@@ -196,6 +196,8 @@ Example error envelope:
 
 `HEYGEN_API_KEY` and `HEYGEN_OUTPUT` env vars override the respective files.
 
+**Update notice.** A release build checks for a newer stable release at most once a day, in the background, without delaying the command. When one exists it prints `{"notice": {"code": "cli_update_available", ...}}` on stderr (a `Note:` line with `--human`), at most once a day, and never changes the exit code. It is off in CI (`CI`, `GITHUB_ACTIONS`, `HEYGEN_NONINTERACTIVE`) and skipped for `help`, `completion`, `update`, `--version`, and the schema flags. Turn it off with `HEYGEN_NO_UPDATE_CHECK=1` or `heygen config set update_check false`.
+
 ```bash
 heygen config list       # show all settings with sources
 ```
