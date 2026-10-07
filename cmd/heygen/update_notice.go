@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -24,6 +25,10 @@ const (
 	updateNoticeInterval = 24 * time.Hour
 	updateRetryBase      = time.Hour
 	updateFetchTimeout   = 3 * time.Second
+	updateWorkerLockWait = 2 * time.Second
+
+	// updateCheckWorkerArg runs this binary as the detached worker.
+	updateCheckWorkerArg = "__update-check"
 
 	updateCacheSchema     = 1
 	updateCacheMaxBytes   = 4 << 10
@@ -36,6 +41,7 @@ var (
 	updateStablePointerURL = "https://static.heygen.ai/cli/stable"
 	updateNow              = time.Now
 	updateFetchLatest      = fetchStablePointer
+	updateSpawnWorker      = spawnUpdateCheckWorker
 )
 
 // Invocations matching these never check or notify. __complete runs on every
@@ -59,21 +65,15 @@ type updateCheckCache struct {
 	NotifiedAt  time.Time `json:"notified_at"`
 }
 
-type updateFetchResult struct {
-	latest string
-	err    error
-}
-
 // A nil *updateNotifier means the check is off for this invocation; finish
 // does nothing on it.
 type updateNotifier struct {
 	current string
-	cache   updateCheckCache
-	result  chan updateFetchResult
 }
 
-// startUpdateCheck starts a due check in the background, so it races the
-// command rather than delaying it.
+// startUpdateCheck runs before the command. When a check is due it records the
+// attempt and starts the detached worker, which refreshes the cache without
+// this process waiting for it.
 func startUpdateCheck(args []string, version string) *updateNotifier {
 	if !updateCheckEnabled() || skipsUpdateCheck(args) {
 		return nil
@@ -82,53 +82,42 @@ func startUpdateCheck(args []string, version string) *updateNotifier {
 	if err != nil || updateChannel(current) != "stable" {
 		return nil
 	}
-	n := &updateNotifier{current: current, cache: readUpdateCache()}
+	n := &updateNotifier{current: current}
 	now := updateNow()
-	if !n.cache.checkDue(now) {
+	if !readUpdateCache().checkDue(now) {
 		return n
 	}
 	unlock, err := lockUpdateCache()
+	if errors.Is(err, errUpdateCacheBusy) {
+		return n
+	}
 	if err != nil {
 		return nil
 	}
 	defer unlock()
 	// Re-read under the lock: another invocation may have checked meanwhile.
-	n.cache = readUpdateCache()
-	if !n.cache.checkDue(now) {
+	c := readUpdateCache()
+	if !c.checkDue(now) {
 		return n
 	}
-	// The attempt is recorded before fetching so an abandoned or failed check
-	// still counts toward backoff. If it cannot be recorded, nothing could stop
-	// the next invocation fetching again, so the check stays off.
-	n.cache.LastAttempt = now
-	if err := writeUpdateCache(n.cache); err != nil {
+	// The attempt is recorded before spawning so a worker that fails or never
+	// starts still counts toward backoff. If it cannot be recorded, nothing
+	// could stop the next invocation spawning again, so the check stays off.
+	c.LastAttempt = now
+	if err := writeUpdateCache(c); err != nil {
 		return nil
 	}
-	n.result = make(chan updateFetchResult, 1)
-	fetch := updateFetchLatest
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), updateFetchTimeout)
-		defer cancel()
-		latest, err := fetch(ctx)
-		n.result <- updateFetchResult{latest: latest, err: err}
-	}()
+	_ = updateSpawnWorker()
 	return n
 }
 
-// finish never waits: a check still in flight is abandoned, and the notice is
-// decided from whatever the cache already knew.
+// finish runs after the command and decides the notice from the cache alone.
 func (n *updateNotifier) finish(formatter output.Formatter) {
 	if n == nil {
 		return
 	}
-	var result *updateFetchResult
-	select {
-	case r := <-n.result:
-		result = &r
-	default:
-	}
 	now := updateNow()
-	if result == nil && !n.cache.noticeDue(n.current, now) {
+	if !readUpdateCache().noticeDue(n.current, now) {
 		return
 	}
 	unlock, err := lockUpdateCache()
@@ -136,29 +125,72 @@ func (n *updateNotifier) finish(formatter output.Formatter) {
 		return
 	}
 	defer unlock()
-	// Apply to the cache as it is now on disk, not as startUpdateCheck read it,
-	// so a concurrent invocation's check or notice is not overwritten.
 	c := readUpdateCache()
-	if result != nil {
-		c.apply(*result, now)
+	if !c.noticeDue(n.current, now) {
+		return
 	}
-	notify := c.noticeDue(n.current, now)
-	if notify {
-		c.NotifiedAt = now
-	}
+	c.NotifiedAt = now
 	// Emitted only once recorded, or an unwritable config dir would repeat the
 	// notice on every invocation.
-	if writeUpdateCache(c) == nil && notify {
+	if writeUpdateCache(c) == nil {
 		formatter.Notice(updateNoticeCode, updateNoticeMessage(c.Latest, n.current))
 	}
 }
 
-func (c *updateCheckCache) apply(r updateFetchResult, now time.Time) {
-	if r.err != nil {
+// runUpdateCheckWorker is the detached child: fetch the pointer, then record
+// the outcome. Nobody waits on it, so unlike the parent it waits for a busy lock.
+func runUpdateCheckWorker() {
+	ctx, cancel := context.WithTimeout(context.Background(), updateFetchTimeout)
+	latest, fetchErr := updateFetchLatest(ctx)
+	cancel()
+	deadline := time.Now().Add(updateWorkerLockWait)
+	unlock, err := lockUpdateCache()
+	for errors.Is(err, errUpdateCacheBusy) && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+		unlock, err = lockUpdateCache()
+	}
+	if err != nil {
+		return
+	}
+	defer unlock()
+	c := readUpdateCache()
+	c.apply(latest, fetchErr, updateNow())
+	_ = writeUpdateCache(c)
+}
+
+func spawnUpdateCheckWorker() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	return startDetached(exe, updateCheckWorkerArg)
+}
+
+// startDetached does not wait for the child. A child holding any descriptor
+// the caller reads to EOF (a pipe, $(...), an agent harness) would keep that
+// caller waiting until the child exits, so the child's standard streams are
+// left unset, which exec connects to the null device, and every other
+// inherited descriptor is made close-on-exec first. The child is still reaped
+// in the background, or a long-running parent would hold a zombie.
+func startDetached(name string, args ...string) error {
+	if err := closeInheritedOnExec(); err != nil {
+		return err
+	}
+	cmd := exec.Command(name, args...) //nolint:gosec // G702: name is this binary's own path, never caller input
+	cmd.SysProcAttr = detachedProcAttr()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
+func (c *updateCheckCache) apply(latest string, err error, now time.Time) {
+	if err != nil {
 		c.Failures++
 		return
 	}
-	c.Latest = r.latest
+	c.Latest = latest
 	c.CheckedAt = now
 	c.Failures = 0
 }

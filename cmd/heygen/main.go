@@ -18,6 +18,12 @@ import (
 var version = "dev"
 
 func main() {
+	// The update-check worker is not a user command: no telemetry notice, no
+	// analytics event, no output.
+	if len(os.Args) == 2 && os.Args[1] == updateCheckWorkerArg {
+		runUpdateCheckWorker()
+		return
+	}
 	// Bootstrap formatter created before the Cobra tree so it's available
 	// for errors returned from command execution, including in --human mode.
 	formatter := formatterForArgs(os.Args[1:], os.Stdout, os.Stderr)

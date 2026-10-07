@@ -9,8 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -29,34 +32,28 @@ func setupUpdateNotice(t *testing.T) *atomic.Int32 {
 	for _, name := range []string{"CI", "GITHUB_ACTIONS", "HEYGEN_NONINTERACTIVE", "HEYGEN_NO_UPDATE_CHECK"} {
 		t.Setenv(name, "")
 	}
-	origNow, origFetch := updateNow, updateFetchLatest
+	origNow, origFetch, origSpawn := updateNow, updateFetchLatest, updateSpawnWorker
 	origExe, origEval := updateExecutablePath, updateEvalSymlinks
 	t.Cleanup(func() {
-		updateNow, updateFetchLatest = origNow, origFetch
+		updateNow, updateFetchLatest, updateSpawnWorker = origNow, origFetch, origSpawn
 		updateExecutablePath, updateEvalSymlinks = origExe, origEval
 	})
 	updateNow = func() time.Time { return updateTestNow }
 	updateExecutablePath = func() (string, error) { return "/usr/local/bin/heygen", nil }
 	updateEvalSymlinks = func(path string) (string, error) { return path, nil }
-	var fetches atomic.Int32
-	updateFetchLatest = func(context.Context) (string, error) {
-		fetches.Add(1)
-		return "v0.9.1", nil
+	updateFetchLatest = func(context.Context) (string, error) { return "v0.9.1", nil }
+	var spawns atomic.Int32
+	updateSpawnWorker = func() error {
+		spawns.Add(1)
+		return nil
 	}
-	return &fetches
+	return &spawns
 }
 
-// runUpdateNotice drives one invocation and returns stderr. It waits for a
-// started fetch to deliver, so finish sees the result deterministically.
+// runUpdateNotice drives one invocation's parent side and returns stderr.
 func runUpdateNotice(t *testing.T, version string) string {
 	t.Helper()
 	n := startUpdateCheck([]string{"video", "list"}, version)
-	if n != nil && n.result != nil {
-		deadline := time.Now().Add(2 * time.Second)
-		for len(n.result) == 0 && time.Now().Before(deadline) {
-			time.Sleep(time.Millisecond)
-		}
-	}
 	var stderr bytes.Buffer
 	n.finish(output.NewJSONFormatter(io.Discard, &stderr))
 	return stderr.String()
@@ -146,40 +143,39 @@ func TestUpdateCheckEnabled(t *testing.T) {
 func TestStartUpdateCheck_OnlyStableReleaseBuildsCheck(t *testing.T) {
 	for _, version := range []string{"dev", "v0.9.0-6-gabc1234-dirty", "v0.9.0-dev.202610070000"} {
 		t.Run(version, func(t *testing.T) {
-			fetches := setupUpdateNotice(t)
+			spawns := setupUpdateNotice(t)
 			if n := startUpdateCheck([]string{"video", "list"}, version); n != nil {
 				t.Errorf("startUpdateCheck(%q) returned a notifier, want nil", version)
 			}
-			if fetches.Load() != 0 {
-				t.Errorf("fetched %d times, want 0", fetches.Load())
+			if spawns.Load() != 0 {
+				t.Errorf("spawned %d workers, want 0", spawns.Load())
 			}
 		})
 	}
 }
 
-func TestUpdateCheck_DueCheckFetchesCachesAndNotifies(t *testing.T) {
-	fetches := setupUpdateNotice(t)
+func TestUpdateCheck_DueCheckRecordsAttemptAndSpawnsWorker(t *testing.T) {
+	spawns := setupUpdateNotice(t)
 
-	stderr := runUpdateNotice(t, "v0.9.0")
-
-	if fetches.Load() != 1 {
-		t.Fatalf("fetched %d times, want 1", fetches.Load())
+	if stderr := runUpdateNotice(t, "v0.9.0"); stderr != "" {
+		t.Errorf("stderr = %q, want nothing before any check has succeeded", stderr)
 	}
-	assertUpdateNotice(t, stderr, "v0.9.1", "v0.9.0")
-	c := readUpdateCache()
-	if c.Latest != "v0.9.1" || !c.CheckedAt.Equal(updateTestNow) || !c.NotifiedAt.Equal(updateTestNow) {
-		t.Errorf("cache = %+v, want latest v0.9.1 checked and notified at %v", c, updateTestNow)
+	if spawns.Load() != 1 {
+		t.Errorf("spawned %d workers, want 1", spawns.Load())
+	}
+	if c := readUpdateCache(); !c.LastAttempt.Equal(updateTestNow) {
+		t.Errorf("last_attempt = %v, want %v recorded before spawning", c.LastAttempt, updateTestNow)
 	}
 }
 
-func TestUpdateCheck_FreshCacheNotifiesWithoutFetching(t *testing.T) {
-	fetches := setupUpdateNotice(t)
+func TestUpdateCheck_FreshCacheNotifiesWithoutSpawning(t *testing.T) {
+	spawns := setupUpdateNotice(t)
 	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow.Add(-time.Hour)})
 
 	stderr := runUpdateNotice(t, "v0.9.0")
 
-	if fetches.Load() != 0 {
-		t.Errorf("fetched %d times, want 0 while the cache is fresh", fetches.Load())
+	if spawns.Load() != 0 {
+		t.Errorf("spawned %d workers, want 0 while the cache is fresh", spawns.Load())
 	}
 	assertUpdateNotice(t, stderr, "v0.9.1", "v0.9.0")
 }
@@ -230,44 +226,58 @@ func TestCheckDue(t *testing.T) {
 	}
 }
 
-func TestUpdateCheck_FailureIsRecordedForBackoff(t *testing.T) {
-	setupUpdateNotice(t)
-	updateFetchLatest = func(context.Context) (string, error) { return "", errors.New("offline") }
-
-	if stderr := runUpdateNotice(t, "v0.9.0"); stderr != "" {
-		t.Errorf("a failed check must be silent, got %q", stderr)
+// The worker records its outcome on top of what the parent left: a success
+// resets the backoff, a failure extends it, and the parent's attempt stays.
+func TestUpdateCheckWorker_RecordsOutcome(t *testing.T) {
+	attempt := updateTestNow.Add(-time.Minute)
+	cases := []struct {
+		name  string
+		fetch func(context.Context) (string, error)
+		want  updateCheckCache
+	}{
+		{
+			name:  "success",
+			fetch: func(context.Context) (string, error) { return "v0.9.1", nil },
+			want:  updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow, LastAttempt: attempt},
+		},
+		{
+			name:  "failure",
+			fetch: func(context.Context) (string, error) { return "", errors.New("offline") },
+			want:  updateCheckCache{Latest: "v0.9.0", LastAttempt: attempt, Failures: 3},
+		},
 	}
-	c := readUpdateCache()
-	if c.Failures != 1 || !c.LastAttempt.Equal(updateTestNow) {
-		t.Errorf("cache = %+v, want one failure attempted at %v", c, updateTestNow)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUpdateNotice(t)
+			seedUpdateCache(t, updateCheckCache{Latest: "v0.9.0", LastAttempt: attempt, Failures: 2})
+			updateFetchLatest = tc.fetch
+
+			runUpdateCheckWorker()
+
+			got := readUpdateCache()
+			got.Schema = 0
+			if got != tc.want {
+				t.Errorf("cache = %+v, want %+v", got, tc.want)
+			}
+		})
 	}
 }
 
-// The check must never delay the command: finish abandons a fetch that has
-// not delivered and decides from the cache alone.
-func TestUpdateCheck_FinishDoesNotWaitForInFlightFetch(t *testing.T) {
+// A parent holds the lock only briefly, so the worker waits rather than drop
+// a result it already paid for.
+func TestUpdateCheckWorker_WaitsForBusyLock(t *testing.T) {
 	setupUpdateNotice(t)
-	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow.Add(-updateCheckInterval)})
-	release := make(chan struct{})
-	defer close(release)
-	updateFetchLatest = func(context.Context) (string, error) {
-		<-release
-		return "v0.9.2", nil
+	unlock, err := lockUpdateCache()
+	if err != nil {
+		t.Fatalf("lockUpdateCache: %v", err)
 	}
+	time.AfterFunc(200*time.Millisecond, unlock)
 
-	n := startUpdateCheck([]string{"video", "list"}, "v0.9.0")
-	var stderr bytes.Buffer
-	done := make(chan struct{})
-	go func() {
-		n.finish(output.NewJSONFormatter(io.Discard, &stderr))
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("finish blocked on an in-flight fetch")
+	runUpdateCheckWorker()
+
+	if c := readUpdateCache(); c.Latest != "v0.9.1" {
+		t.Errorf("cache = %+v, want the worker's result recorded once the lock freed", c)
 	}
-	assertUpdateNotice(t, stderr.String(), "v0.9.1", "v0.9.0")
 }
 
 func TestReadUpdateCache_UnusableFileIsAbsent(t *testing.T) {
@@ -293,7 +303,7 @@ func TestReadUpdateCache_UnusableFileIsAbsent(t *testing.T) {
 // Without a writable cache nothing records attempts or notices, so checking
 // would fetch, and notify, on every invocation.
 func TestUpdateCheck_UnwritableConfigDirStaysOff(t *testing.T) {
-	fetches := setupUpdateNotice(t)
+	spawns := setupUpdateNotice(t)
 	notADir := filepath.Join(t.TempDir(), "file")
 	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -303,8 +313,23 @@ func TestUpdateCheck_UnwritableConfigDirStaysOff(t *testing.T) {
 	if stderr := runUpdateNotice(t, "v0.9.0"); stderr != "" {
 		t.Errorf("stderr = %q, want nothing", stderr)
 	}
-	if fetches.Load() != 0 {
-		t.Errorf("fetched %d times, want 0", fetches.Load())
+	if spawns.Load() != 0 {
+		t.Errorf("spawned %d workers, want 0", spawns.Load())
+	}
+}
+
+// The attempt is what stops the next invocation spawning again, so a worker
+// must not start unless it was recorded. A directory at the cache path lets
+// the lock succeed while the write's rename fails.
+func TestUpdateCheck_UnrecordedAttemptDoesNotSpawn(t *testing.T) {
+	spawns := setupUpdateNotice(t)
+	if err := os.Mkdir(updateCachePath(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	runUpdateNotice(t, "v0.9.0")
+	if spawns.Load() != 0 {
+		t.Errorf("spawned %d workers, want 0 when the attempt could not be recorded", spawns.Load())
 	}
 }
 
@@ -337,7 +362,7 @@ func TestUpdateCheck_BusyLockSkipsCacheWork(t *testing.T) {
 	}
 	for name, seed := range cases {
 		t.Run(name, func(t *testing.T) {
-			fetches := setupUpdateNotice(t)
+			spawns := setupUpdateNotice(t)
 			if seed != (updateCheckCache{}) {
 				seedUpdateCache(t, seed)
 			}
@@ -350,8 +375,8 @@ func TestUpdateCheck_BusyLockSkipsCacheWork(t *testing.T) {
 			if stderr := runUpdateNotice(t, "v0.9.0"); stderr != "" {
 				t.Errorf("stderr = %q, want nothing while the lock is held", stderr)
 			}
-			if fetches.Load() != 0 {
-				t.Errorf("fetched %d times, want 0 while the lock is held", fetches.Load())
+			if spawns.Load() != 0 {
+				t.Errorf("spawned %d workers, want 0 while the lock is held", spawns.Load())
 			}
 		})
 	}
@@ -361,6 +386,7 @@ func TestUpdateCheck_BusyLockSkipsCacheWork(t *testing.T) {
 // left behind blocks nothing, and finish releases what it took.
 func TestUpdateCheck_LockFileWithoutHolderDoesNotBlock(t *testing.T) {
 	setupUpdateNotice(t)
+	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow})
 	if err := os.WriteFile(updateCachePath()+".lock", nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -373,26 +399,114 @@ func TestUpdateCheck_LockFileWithoutHolderDoesNotBlock(t *testing.T) {
 	unlock()
 }
 
-// finish applies its result to the cache as it is on disk, so a notice another
-// invocation recorded meanwhile is neither repeated nor erased.
-func TestUpdateCheck_FinishMergesWithConcurrentWrites(t *testing.T) {
-	setupUpdateNotice(t)
-	n := startUpdateCheck([]string{"video", "list"}, "v0.9.0")
-	for len(n.result) == 0 {
-		time.Sleep(time.Millisecond)
-	}
-	seedUpdateCache(t, updateCheckCache{LastAttempt: updateTestNow, NotifiedAt: updateTestNow})
+const (
+	detachTestRun     = "-test.run=^TestStartDetached_DoesNotHoldCallerStreams$"
+	detachHelperEnv   = "HEYGEN_TEST_DETACH_HELPER"
+	detachExitArg     = "detach-exit"
+	detachCallerLimit = 5 * time.Second
+)
 
-	var stderr bytes.Buffer
-	n.finish(output.NewJSONFormatter(io.Discard, &stderr))
+// Pins startDetached's descriptor contract. This test is the caller, the test
+// binary rerun as a helper starts a ~10 s child and exits at once. The child
+// is a system command rather than the test binary because Windows cannot
+// delete a running executable, which fails go test's cleanup. exec.Cmd.Wait returns only once
+// the helper's stdout and stderr reach EOF, and on Unix the helper also gets
+// an extra pipe as fd 3 that is not close-on-exec, the way a harness's IPC
+// channel arrives. Both reach EOF promptly only if the child holds neither.
+func TestStartDetached_DoesNotHoldCallerStreams(t *testing.T) {
+	if os.Getenv(detachHelperEnv) != "" {
+		name, args := "sleep", []string{"10"}
+		if runtime.GOOS == "windows" {
+			name, args = "ping", []string{"-n", "11", "127.0.0.1"}
+		}
+		if err := startDetached(name, args...); err != nil {
+			os.Exit(3)
+		}
+		os.Exit(0)
+	}
 
-	if stderr.Len() != 0 {
-		t.Errorf("stderr = %q, want no repeat of the other invocation's notice", stderr.String())
+	cmd := exec.Command(os.Args[0], detachTestRun)
+	cmd.Env = append(os.Environ(), detachHelperEnv+"=1")
+	var out bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &out
+	extraEOF := make(chan struct{})
+	if runtime.GOOS != "windows" {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Close()
+		cmd.ExtraFiles = []*os.File{w}
+		go func() {
+			_, _ = io.Copy(io.Discard, r)
+			close(extraEOF)
+		}()
+		defer w.Close()
+	} else {
+		close(extraEOF)
 	}
-	c := readUpdateCache()
-	if c.Latest != "v0.9.1" || !c.NotifiedAt.Equal(updateTestNow) {
-		t.Errorf("cache = %+v, want this check's result and the other invocation's notice", c)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
 	}
+	for _, f := range cmd.ExtraFiles {
+		_ = f.Close()
+	}
+	waited := make(chan error, 1)
+	go func() { waited <- cmd.Wait() }()
+	deadline := time.After(detachCallerLimit)
+	select {
+	case err := <-waited:
+		if err != nil {
+			t.Fatalf("helper failed to start the detached child: %v\n%s", err, out.String())
+		}
+	case <-deadline:
+		t.Fatal("caller's stdout or stderr stayed open: the detached child inherited them")
+	}
+	select {
+	case <-extraEOF:
+	case <-deadline:
+		t.Fatal("caller's extra descriptor stayed open: the detached child inherited it")
+	}
+}
+
+// A finished worker must not linger as a zombie under a parent that is still
+// running, such as a long `video create --wait`.
+func TestStartDetached_ReapsChild(t *testing.T) {
+	if slices.Contains(os.Args, detachExitArg) {
+		os.Exit(0)
+	}
+	if runtime.GOOS != "linux" {
+		t.Skip("reads process state from /proc")
+	}
+	if err := startDetached(os.Args[0], "-test.run=^TestStartDetached_ReapsChild$", "--", detachExitArg); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Second)
+	if zombies := zombieChildren(t); len(zombies) > 0 {
+		t.Errorf("zombie children %v remain after the worker exited", zombies)
+	}
+}
+
+func zombieChildren(t *testing.T) []string {
+	t.Helper()
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	self := strconv.Itoa(os.Getpid())
+	var zombies []string
+	for _, e := range entries {
+		stat, err := os.ReadFile(filepath.Join("/proc", e.Name(), "stat"))
+		if err != nil {
+			continue
+		}
+		// pid (comm) state ppid ...; comm may contain spaces, so split after it.
+		fields := strings.Fields(string(stat[bytes.LastIndexByte(stat, ')')+1:]))
+		if len(fields) > 1 && fields[0] == "Z" && fields[1] == self {
+			zombies = append(zombies, e.Name())
+		}
+	}
+	return zombies
 }
 
 func TestWriteUpdateCache_OwnerOnly(t *testing.T) {
