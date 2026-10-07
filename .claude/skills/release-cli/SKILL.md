@@ -22,7 +22,10 @@ checklist shows and keep it for the whole run.
 ## Stop points
 
 Stop and ask the user before each of these, with what you found and a
-recommendation. Never proceed on a guess.
+recommendation. Never proceed on a guess. Each stop needs an explicit yes for
+that specific action, in this session: the original request, a yes at an earlier
+stop, or silence does not count. If the action changes after the yes (a new head
+after a rebase, a different commit on `main`), ask again.
 
 1. **Changing any open PR** before the release (step 2): pushing to it (examples
    for a sync PR, a rebase onto `main`), approving it, or merging it.
@@ -30,14 +33,21 @@ recommendation. Never proceed on a guess.
    which key to use; do not go looking for one.
 3. **The version** (step 6), whenever step 4 found anything breaking or you are
    unsure between patch and minor.
-4. **Triggering the release workflow.** It tags `main` and publishes; show the
-   version, the commit, and the changelog first.
+4. **Triggering the release workflow.** Show the version, the `origin/main`
+   commit, and the changelog first. The workflow cannot be pinned to that commit:
+   it tags whatever `main` is when its job starts, so tell the user that a merge
+   in between would ship instead.
 5. **Replacing the published release notes** (step 9): show the final notes.
 6. **Any recovery action** (step 8) that changes the repository or a release:
    deleting a tag or release, dispatching again, or re-running a job. Say which
    job failed, what RELEASE.md prescribes, and what the action will change.
 
-Reading, checking, building, and local edits need no approval.
+Reading, checking, building, and local edits need no approval. Anything else
+visible outside this machine is a stop too, even if it is not listed above:
+pushing any branch, opening, closing, commenting on or labelling PRs or issues,
+re-running or cancelling workflow runs, and changing variables, secrets, caches
+or repository settings. Never bypass branch protection: no `--admin`, no direct
+push to `main`.
 
 ## Stable release
 
@@ -96,7 +106,12 @@ Save the notes to a file; you will publish them after the release.
 
 ### 8. Trigger (stop point 4)
 
-Follow RELEASE.md's "Trigger the release" and wait for the run to finish. If any
+Re-fetch right before dispatching and confirm `origin/main` is still the commit
+you showed at stop 4; if it moved, stop again. This narrows the window but cannot
+close it. Follow RELEASE.md's "Trigger the release" and wait for the run to
+finish, then compare the tag's commit (`git rev-parse <version>^{commit}`) with
+the one you showed. If they differ, that commit has already been released: stop
+and tell the user before step 9. Do the same before and after any re-dispatch. If any
 job fails, read [If the release fails](../../../RELEASE.md#if-the-release-fails)
 to find the prescribed recovery, then stop (stop point 6) before acting on it.
 Do not delete tags or releases by hand unless that section says to.
@@ -105,9 +120,10 @@ Do not delete tags or releases by hand unless that section says to.
 
 Follow RELEASE.md's "Post-release": confirm the release is published, replace its
 body with the saved notes once the user approves them (stop point 5) and read it
-back, and verify the installer. Install into
-a scratch directory (`INSTALL_DIR=<dir>`) rather than over the user's own
-`heygen`, and run the installed binary's `--version`.
+back, and verify the installer into a scratch directory rather than over the
+user's own `heygen`. `install.sh` reads `INSTALL_DIR`, so it goes on `bash`, not
+`curl`: `d=$(mktemp -d); curl -fsSL https://static.heygen.ai/cli/install.sh | INSTALL_DIR="$d" bash`,
+then run `"$d/heygen" --version`.
 
 ## Dev release
 
