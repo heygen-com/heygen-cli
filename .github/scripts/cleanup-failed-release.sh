@@ -2,8 +2,9 @@
 # Usage: cleanup-failed-release.sh <tag> <commit> <run-id>
 #
 # Undoes a release run that pushed <tag> but did not finish publishing, so the
-# version can be dispatched again. Only draft releases are deleted; GoReleaser
-# creates drafts and a later job publishes them, so this never races a publish.
+# version can be dispatched again. Only drafts made by the workflow are deleted;
+# GoReleaser creates drafts and a later job publishes them, so this never races
+# a publish. A draft made by a person stops it.
 # A published release (someone else published it) is never touched:
 # the script stops for a person instead, because users may already have it.
 # Any API answer other than a clear 404 stops it too, so nothing is deleted on
@@ -42,15 +43,26 @@ fi
 # Lists every release for the tag, drafts included; the releases/tags/<tag>
 # endpoint cannot see drafts. A failing call aborts the script.
 releases="$(gh api --paginate "repos/${repo}/releases" \
-  --jq ".[] | select(.tag_name == \"${tag}\") | \"\(.id) \(.draft)\"")"
+  --jq ".[] | select(.tag_name == \"${tag}\") | \"\(.id) \(.draft) \(.author.login)\"")"
 
-while read -r id draft; do
+while read -r id draft author; do
   [[ -z "$id" ]] && continue
   if [[ "$draft" != "true" ]]; then
     echo "::error::${tag} already has a published release; leaving it and the tag in place. See RELEASE.md, 'If the release fails'."
     exit 1
   fi
+  # GoReleaser's drafts are made by the workflow token; anything else is a person's.
+  if [[ "$author" != "github-actions[bot]" ]]; then
+    echo "::error::draft release ${id} for ${tag} was made by ${author}, not a workflow; leaving it and the tag in place"
+    exit 1
+  fi
 done <<<"$releases"
+
+# GoReleaser runs only after the push, so with no tag no draft can be this run's.
+if [[ "$tag_exists" != "true" ]]; then
+  echo "tag ${tag} was never pushed; nothing to delete"
+  exit 0
+fi
 
 while read -r id _; do
   [[ -z "$id" ]] && continue
@@ -58,10 +70,6 @@ while read -r id _; do
   gh api -X DELETE "repos/${repo}/releases/${id}"
 done <<<"$releases"
 
-if [[ "$tag_exists" == "true" ]]; then
-  echo "deleting tag ${tag}"
-  # Leased, so it deletes the tag only if it is still the object checked above.
-  git push --force-with-lease="refs/tags/${tag}:${tag_object}" origin ":refs/tags/${tag}"
-else
-  echo "tag ${tag} was never pushed; nothing to delete"
-fi
+echo "deleting tag ${tag}"
+# Leased, so it deletes the tag only if it is still the object checked above.
+git push --force-with-lease="refs/tags/${tag}:${tag_object}" origin ":refs/tags/${tag}"
