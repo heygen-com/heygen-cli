@@ -2,9 +2,10 @@
 # Usage: cleanup-failed-release.sh <tag> <commit> <run-id>
 #
 # Undoes a release run that pushed <tag> but did not finish publishing, so the
-# version can be dispatched again. Only drafts made by the workflow are deleted;
-# GoReleaser creates drafts and a later job publishes them, so this never races
-# a publish. A draft made by a person stops it.
+# version can be dispatched again. Only drafts carrying this run's release-run
+# marker (written by .goreleaser.yaml) are deleted; GoReleaser creates drafts
+# and a later job publishes them, so this never races the pipeline's own
+# publish. Any other release for the tag stops it.
 # A published release (someone else published it) is never touched:
 # the script stops for a person instead, because users may already have it.
 # Any API answer other than a clear 404 stops it too, so nothing is deleted on
@@ -42,18 +43,18 @@ fi
 
 # Lists every release for the tag, drafts included; the releases/tags/<tag>
 # endpoint cannot see drafts. A failing call aborts the script.
+marker="<!-- release-run: ${run_id} -->"
 releases="$(gh api --paginate "repos/${repo}/releases" \
-  --jq ".[] | select(.tag_name == \"${tag}\") | \"\(.id) \(.draft) \(.author.login)\"")"
+  --jq ".[] | select(.tag_name == \"${tag}\") | \"\(.id) \(.draft) \((.body // \"\") | contains(\"${marker}\"))\"")"
 
-while read -r id draft author; do
+while read -r id draft ours; do
   [[ -z "$id" ]] && continue
   if [[ "$draft" != "true" ]]; then
     echo "::error::${tag} already has a published release; leaving it and the tag in place. See RELEASE.md, 'If the release fails'."
     exit 1
   fi
-  # GoReleaser's drafts are made by the workflow token; anything else is a person's.
-  if [[ "$author" != "github-actions[bot]" ]]; then
-    echo "::error::draft release ${id} for ${tag} was made by ${author}, not a workflow; leaving it and the tag in place"
+  if [[ "$ours" != "true" ]]; then
+    echo "::error::draft release ${id} for ${tag} is not from run ${run_id}; leaving it and the tag in place"
     exit 1
   fi
 done <<<"$releases"

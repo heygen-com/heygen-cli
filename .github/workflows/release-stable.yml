@@ -25,6 +25,7 @@ jobs:
       tag: ${{ github.event.inputs.version }}
       tag_push_attempted: ${{ steps.tag.outputs.push_attempted }}
       commit: ${{ steps.tag.outputs.commit }}
+      release_id: ${{ steps.draft.outputs.id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -80,7 +81,8 @@ jobs:
           # Annotated with this run's ID: cleanup-failed-release.sh deletes a tag
           # only when its message names the run that is cleaning up.
           git tag -a "$version" -m "Release ${version} by GitHub Actions run ${GITHUB_RUN_ID}"
-          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          commit="$(git rev-parse HEAD)"
+          echo "commit=${commit}" >> "$GITHUB_OUTPUT"
           echo "push_attempted=true" >> "$GITHUB_OUTPUT"
           git push origin "$version"
 
@@ -117,6 +119,18 @@ jobs:
           # GORELEASER_PREVIOUS_TAG is exported by the step above, and only when a
           # previous stable tag exists.
 
+      - name: Record this run's draft release
+        id: draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Assigned first: a failed command substitution inside echo would not
+          # fail the step.
+          release_id="$(.github/scripts/find-run-draft.sh "${{ github.event.inputs.version }}" "$GITHUB_RUN_ID")"
+          echo "id=${release_id}" >> "$GITHUB_OUTPUT"
+
   # A job rather than a step: a cancelled job skips its remaining steps, but a
   # dependent job with always() still runs. The script decides from the repo's
   # actual state what, if anything, to delete.
@@ -142,11 +156,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      # By the ID the release job recorded, never by tag, so only this run's
+      # draft can be published.
       - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.release.outputs.tag }}
-        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          RELEASE_ID: ${{ needs.release.outputs.release_id }}
+        run: gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F draft=false --jq '"published \(.tag_name) (draft=\(.draft), prerelease=\(.prerelease))"'
 
   # A separate job so that, once the GitHub release is public, a failed CDN
   # publish is retried with "Re-run failed jobs" rather than by deleting a

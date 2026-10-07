@@ -5,3 +5,6 @@ bin/
 # IDE / editor config
 .idea/
 .vscode/
+
+# GoReleaser output
+dist/
