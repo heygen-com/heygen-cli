@@ -63,6 +63,19 @@ func (f *JSONFormatter) Warn(message string) {
 	_, _ = f.errOut.Write([]byte("\n"))
 }
 
+// Notice writes a {"notice": {...}} envelope to stderr, mirroring the warning
+// and error envelopes so one parser handles all three.
+func (f *JSONFormatter) Notice(code, message string) {
+	envelope := map[string]map[string]string{"notice": {"code": code, "message": message}}
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		_, _ = f.errOut.Write([]byte(message + "\n"))
+		return
+	}
+	_, _ = f.errOut.Write(data)
+	_, _ = f.errOut.Write([]byte("\n"))
+}
+
 // Error writes a CLIError as a JSON envelope to stderr.
 func (f *JSONFormatter) Error(err *clierrors.CLIError) {
 	envelope := err.ToErrorEnvelope()

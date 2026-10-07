@@ -2,8 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +10,7 @@ import (
 	"github.com/heygen-com/heygen-cli/internal/analytics"
 	"github.com/heygen-com/heygen-cli/internal/config"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
+	"github.com/heygen-com/heygen-cli/internal/output"
 	"github.com/heygen-com/heygen-cli/internal/paths"
 )
 
@@ -23,7 +22,7 @@ func main() {
 	// for errors returned from command execution, including in --human mode.
 	formatter := formatterForArgs(os.Args[1:], os.Stdout, os.Stderr)
 	enabled := analyticsEnabled()
-	maybeShowTelemetryNotice(enabled, os.Stderr)
+	maybeShowTelemetryNotice(enabled, formatter)
 	analyticsClient := analytics.New(version, enabled)
 	loginAnalytics = analyticsClient
 
@@ -110,9 +109,12 @@ func telemetryNoticePath() string {
 // or username, mirroring hyperframes-oss's existing notice. Gated the same
 // way analyticsEnabled() already gates the analytics client itself:
 // nothing to disclose when analytics is disabled, and shown at most once
-// per install. stderr is injectable so tests can assert on it without
-// redirecting the process's real os.Stderr.
-func maybeShowTelemetryNotice(enabled bool, stderr io.Writer) {
+// per install.
+//
+// It goes through the formatter, so in JSON mode it is an envelope like every
+// other diagnostic. Interactive flows (auth login, the confirmation prompt)
+// write prose to stderr by design.
+func maybeShowTelemetryNotice(enabled bool, formatter output.Formatter) {
 	if !enabled {
 		return
 	}
@@ -120,7 +122,7 @@ func maybeShowTelemetryNotice(enabled bool, stderr io.Writer) {
 	if _, err := os.Stat(path); err == nil {
 		return
 	}
-	fmt.Fprintln(stderr,
+	formatter.Notice("cli_telemetry_notice",
 		"heygen-cli sends anonymous usage telemetry (command, os/arch, outcome). "+
 			"Signing in via `heygen auth login` links this usage to your account email or username. "+
 			"Opt out with HEYGEN_NO_ANALYTICS=1.")

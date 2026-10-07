@@ -135,6 +135,17 @@ heygen video get --response-schema
 
 - The CLI automatically retries 429 and selected transient 5xx (500/502/503/504) on
   retry-eligible requests.
+- Diagnostics the CLI emits through its formatter go to stderr as **one compact JSON
+  envelope per line** (JSON Lines, so parse line by line rather than as one document):
+  `{"error": {...}}` on failure, `{"warning": {"message"}}` when the invocation was
+  degraded or used a deprecated flag, and `{"notice": {"code", "message"}}` for
+  informational messages. Only `error` affects the exit code, and stdout is unaffected by
+  all three. Branch on `notice.code`, never on the prose. Dispatch on the top-level key
+  you recognize and ignore kinds you do not, so a future diagnostic kind cannot break you.
+  A single run can emit more than one line, for example a first-run notice followed by an
+  error. Not everything on stderr is an envelope: interactive commands (`auth login`,
+  destructive confirmations) write human prose there by design, so do not assume every
+  stderr line parses.
 - Use `heygen update` to install a newer CLI release, or `heygen update --check` to
   report whether one exists without installing it. `--check` answers on stdout with
   `update_available`, `current`, `latest`, `channel`, `install_method`, and

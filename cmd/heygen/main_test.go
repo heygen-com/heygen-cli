@@ -1,10 +1,14 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/heygen-com/heygen-cli/internal/output"
 )
 
 func TestAnalyticsEnabled_Default(t *testing.T) {
@@ -49,10 +53,22 @@ func TestMaybeShowTelemetryNotice_FirstRun(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
 	var stderr strings.Builder
-	maybeShowTelemetryNotice(true, &stderr)
+	maybeShowTelemetryNotice(true, output.NewJSONFormatter(io.Discard, &stderr))
 
-	if !strings.Contains(stderr.String(), "telemetry") {
-		t.Fatalf("stderr = %q, want a telemetry disclosure", stderr.String())
+	// A substring check would also pass for bare prose that bypassed the
+	// formatter; the envelope and its code are what a consumer parses.
+	var envelope map[string]map[string]string
+	if err := json.Unmarshal([]byte(stderr.String()), &envelope); err != nil {
+		t.Fatalf("stderr is not a JSON envelope: %v (%q)", err, stderr.String())
+	}
+	if got := envelope["notice"]["code"]; got != "cli_telemetry_notice" {
+		t.Errorf("notice.code = %q, want %q", got, "cli_telemetry_notice")
+	}
+	if !strings.Contains(envelope["notice"]["message"], "telemetry") {
+		t.Errorf("notice.message = %q, want a telemetry disclosure", envelope["notice"]["message"])
+	}
+	if _, isWarning := envelope["warning"]; isWarning {
+		t.Error("the disclosure is informational and must not render as a warning")
 	}
 	if _, err := os.Stat(telemetryNoticePath()); err != nil {
 		t.Fatalf("notice-shown flag not persisted: %v", err)
@@ -67,7 +83,7 @@ func TestMaybeShowTelemetryNotice_AlreadyShown(t *testing.T) {
 	}
 
 	var stderr strings.Builder
-	maybeShowTelemetryNotice(true, &stderr)
+	maybeShowTelemetryNotice(true, output.NewJSONFormatter(io.Discard, &stderr))
 
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty (notice already shown)", stderr.String())
@@ -79,7 +95,7 @@ func TestMaybeShowTelemetryNotice_AnalyticsDisabled(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", dir)
 
 	var stderr strings.Builder
-	maybeShowTelemetryNotice(false, &stderr)
+	maybeShowTelemetryNotice(false, output.NewJSONFormatter(io.Discard, &stderr))
 
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty (analytics disabled)", stderr.String())
