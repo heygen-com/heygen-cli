@@ -29,7 +29,7 @@ add --force confirmation for destructive commands
 
 # Infrastructure
 ci: add golangci-lint
-docs: update CLAUDE.md
+docs: update AGENTS.md
 ```
 
 ### Scopes
