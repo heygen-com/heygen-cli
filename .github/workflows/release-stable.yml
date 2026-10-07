@@ -55,6 +55,9 @@ jobs:
             exit 1
           fi
 
+      - name: Install GoReleaser
+        run: .github/scripts/install-goreleaser.sh
+
       - name: Create git tag
         shell: bash
         run: |
@@ -90,9 +93,6 @@ jobs:
             echo "changelog baseline: $prev"
             echo "GORELEASER_PREVIOUS_TAG=$prev" >> "$GITHUB_ENV"
           fi
-
-      - name: Install GoReleaser
-        run: .github/scripts/install-goreleaser.sh
 
       - name: Run GoReleaser
         run: goreleaser release --clean --skip=validate
