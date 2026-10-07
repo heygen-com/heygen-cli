@@ -19,6 +19,10 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.compute.outputs.version }}
+      tag_push_attempted: ${{ steps.tag.outputs.push_attempted }}
+      commit: ${{ steps.tag.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,6 +57,7 @@ jobs:
         run: .github/scripts/install-goreleaser.sh
 
       - name: Create git tag
+        id: tag
         shell: bash
         run: |
           set -euo pipefail
@@ -60,9 +65,45 @@ jobs:
           version="${{ steps.compute.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "$version"
+          # Annotated with this run's ID: cleanup-failed-release.sh deletes a tag
+          # only when its message names the run that is cleaning up.
+          git tag -a "$version" -m "Release ${version} by GitHub Actions run ${GITHUB_RUN_ID}"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "push_attempted=true" >> "$GITHUB_OUTPUT"
           git push origin "$version"
+
       - name: Run GoReleaser
         run: goreleaser release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # A job rather than a step: a cancelled job skips its remaining steps, but a
+  # dependent job with always() still runs. The script decides from the repo's
+  # actual state what, if anything, to delete.
+  cleanup-failed-release:
+    needs: release
+    if: always() && needs.release.result != 'success' && needs.release.outputs.tag_push_attempted == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release.outputs.commit }}
+
+      - name: Remove the tag and any draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/scripts/cleanup-failed-release.sh "${{ needs.release.outputs.tag }}" "${{ needs.release.outputs.commit }}" "${{ github.run_id }}"
+
+  publish-release:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
