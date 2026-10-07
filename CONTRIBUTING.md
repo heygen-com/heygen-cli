@@ -37,7 +37,8 @@ gen/               GENERATED — do not hand-edit
 codegen/           OpenAPI → Go codegen pipeline
 codegen/examples/  Per-group example YAML files
 scripts/           Install script, CI helpers
-.claude/skills/    Maintainer skills for Claude Code (release, E2E, changelog)
+.agents/skills/    Maintainer skills for coding agents (release, E2E, changelog)
+.claude/skills/    Symlinks to .agents/skills for Claude Code
 ```
 
 ### Key separation
@@ -148,8 +149,8 @@ Command tests use `runCommand()` from `cmd/heygen/testutil_test.go`, which creat
 
 ## Release Process
 
-See [RELEASE.md](./RELEASE.md) for how to cut dev and stable releases. In Claude Code, `/release-cli` runs that process and stops for you at each decision.
+See [RELEASE.md](./RELEASE.md) for how to cut dev and stable releases. With a coding agent, the `release-cli` skill runs that process and stops for you at each decision.
 
 ## Maintainer Skills
 
-Claude Code skills for releasing and testing this repo live in `.claude/skills/`. [.claude/skills/README.md](.claude/skills/README.md) lists what each does and when to use it.
+Skills for releasing and testing this repo live in `.agents/skills/`, in the open Agent Skills format that Claude Code, Codex and other agents read. [.agents/skills/README.md](.agents/skills/README.md) lists what each does and how to run it.
