@@ -7,6 +7,10 @@ on:
         description: "Version tag (e.g., v0.1.0)"
         required: true
         type: string
+      commit:
+        description: "Full commit SHA on main to release (empty: main as it is when the job starts)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -30,7 +34,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: main
+          ref: ${{ github.event.inputs.commit || 'main' }}
+
+      # A pinned commit is what was reviewed; refusing anything not on main keeps
+      # a typo or a branch-only commit from being released.
+      - name: Validate commit
+        if: github.event.inputs.commit != ''
+        shell: bash
+        env:
+          COMMIT: ${{ github.event.inputs.commit }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "commit must be a full 40-character SHA: $COMMIT" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$COMMIT" origin/main; then
+            echo "commit $COMMIT is not on main" >&2
+            exit 1
+          fi
 
       # Go version comes from go.mod's `go` directive; see ci.yml for why it lives there.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

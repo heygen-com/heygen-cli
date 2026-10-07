@@ -34,9 +34,8 @@ after a rebase, a different commit on `main`), ask again.
 3. **The version** (step 6), whenever step 4 found anything breaking or you are
    unsure between patch and minor.
 4. **Triggering the release workflow.** Show the version, the `origin/main`
-   commit, and the changelog first. The workflow cannot be pinned to that commit:
-   it tags whatever `main` is when its job starts, so tell the user that a merge
-   in between would ship instead.
+   commit, and the changelog first. Dispatch with `-f commit=<that SHA>` so the
+   workflow releases exactly that commit.
 5. **Replacing the published release notes** (step 9): show the final notes.
 6. **Any recovery action** (step 8) that changes the repository or a release:
    deleting a tag or release, dispatching again, or re-running a job. Say which
@@ -44,7 +43,7 @@ after a rebase, a different commit on `main`), ask again.
 
 Reading, checking, building, and local edits need no approval. Anything else
 visible outside this machine is a stop too, even if it is not listed above:
-pushing any branch, opening, closing, commenting on or labelling PRs or issues,
+pushing any branch or tag, opening, closing, commenting on or labelling PRs or issues,
 re-running or cancelling workflow runs, and changing variables, secrets, caches
 or repository settings. Never bypass branch protection: no `--admin`, no direct
 push to `main`.
@@ -106,12 +105,11 @@ Save the notes to a file; you will publish them after the release.
 
 ### 8. Trigger (stop point 4)
 
-Re-fetch right before dispatching and confirm `origin/main` is still the commit
-you showed at stop 4; if it moved, stop again. This narrows the window but cannot
-close it. Follow RELEASE.md's "Trigger the release" and wait for the run to
-finish, then compare the tag's commit (`git rev-parse <version>^{commit}`) with
-the one you showed. If they differ, that commit has already been released: stop
-and tell the user before step 9. Do the same before and after any re-dispatch. If any
+Follow RELEASE.md's "Trigger the release", passing `-f commit=<SHA>` with the
+commit the user approved at stop 4, and wait for the run to finish. Then fetch the
+tag (`git fetch origin tag <version>`) and confirm `git rev-parse <version>^{commit}`
+is that commit; if not, stop and tell the user before step 9. A re-dispatch under
+stop 6 passes the same commit. If any
 job fails, read [If the release fails](../../../RELEASE.md#if-the-release-fails)
 to find the prescribed recovery, then stop (stop point 6) before acting on it.
 Do not delete tags or releases by hand unless that section says to.
@@ -127,8 +125,9 @@ then run `"$d/heygen" --version`.
 
 ## Dev release
 
-Follow RELEASE.md's "How to Cut a Dev Release". There is no checklist; confirm
-the user wants one before triggering it. If it fails, "If the release fails"
+Follow RELEASE.md's "How to Cut a Dev Release". There is no checklist, but
+triggering it is stop point 4: confirm the user wants one, show the commit, and
+dispatch with `-f commit=<SHA>` as for a stable release. If it fails, "If the release fails"
 applies, except that dev releases have no `publish-cdn` job. Give the release
 link to the user; sharing it with anyone else is theirs to do.
 

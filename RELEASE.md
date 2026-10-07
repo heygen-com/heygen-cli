@@ -52,8 +52,10 @@ Every third-party GitHub Action and every tool these workflows download is fixed
 2. Trigger the GitHub Actions workflow:
 
 ```bash
-gh workflow run dev-release.yml
+gh workflow run dev-release.yml -f commit="$(git rev-parse origin/main)"
 ```
+
+`commit` is optional here too, with the same meaning as for stable releases.
 
 3. Wait for the workflow to finish.
 4. Verify a new prerelease was published for the computed dev tag.
@@ -96,17 +98,19 @@ Keep `$LAST_STABLE` set for the rest of the checklist; steps 4 and 6 reuse it. I
 From the CLI:
 
 ```bash
-gh workflow run release-stable.yml -f version=v0.0.5
+gh workflow run release-stable.yml -f version=v0.0.5 -f commit="$(git rev-parse origin/main)"
 ```
 
 Or from the GitHub Actions UI: go to **Actions > Stable Release > Run workflow**, enter the version tag, and click **Run workflow**.
+
+`commit` pins the release to the commit you checked, which must be on `main`. Without it the workflow releases `main` as it is when the job starts, which can include anything merged after you looked.
 
 ### If the release fails
 
 The workflow runs `release` (tag, then GoReleaser, which creates the GitHub release as a draft), then `publish-release` (publishes it), then `publish-cdn`, with `cleanup-failed-release` only when `release` fails. Where it fails decides the recovery:
 
-- **`release` fails or is cancelled** after pushing the tag: the `cleanup-failed-release` job deletes the tag and any draft release GoReleaser left, so dispatch the workflow again once the cause is fixed. A re-dispatch builds `main` as it is then. If the cleanup job itself fails partway, re-run that job alone (not "Re-run failed jobs", which reruns `release` and stops at the existing tag); it reuses the original run's tag and commit and is safe to repeat.
-- **The cleanup refuses** because a release for the tag is published or is a draft from another run, the tag is not the one that run created, or the API gave an unclear answer: it deletes nothing. Each run marks its draft with its run ID, and only that run's drafts are ever deleted or published. Check the release. If it is incomplete, delete it and its tag with `gh release delete <version> --cleanup-tag` and dispatch again; if it is complete, the CDN still needs publishing, so ask someone with access to the release bucket.
+- **`release` fails or is cancelled** after pushing the tag: the `cleanup-failed-release` job deletes the tag and any draft release GoReleaser left, so dispatch the workflow again once the cause is fixed, with the same `commit` the failed run used. Without it, a re-dispatch releases `main` as it is then, which may include commits nobody checked. If the cleanup job itself fails partway, re-run that job alone (not "Re-run failed jobs", which reruns `release` and stops at the existing tag); it reuses the original run's tag and commit and is safe to repeat.
+- **The cleanup refuses** because a release for the tag is published or is a draft from another run, the tag is not the one that run created, or the API gave an unclear answer: it deletes nothing. Each run marks its draft with its run ID, and only that run's drafts are ever deleted or published. Check the release. If it is incomplete, delete it and its tag with `gh release delete <version> --cleanup-tag` and dispatch again with the original `commit`; if it is complete, the CDN still needs publishing, so ask someone with access to the release bucket.
 - **`publish-release` fails or is cancelled**: the draft stays a draft, and nobody can see it yet. Re-run `publish-release` (and `publish-cdn` after it) rather than dispatching again; publishing an already-published release is a no-op.
 - **`publish-cdn` fails** (AWS credentials or the S3 upload): the GitHub release is already public and stays. Use **Re-run failed jobs**; the job downloads that release's assets, checks them against its `checksums.txt`, and publishes them. The stable pointer is written last, so until it succeeds the CDN keeps serving the previous version.
 
