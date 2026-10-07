@@ -20,7 +20,6 @@ commit="$2"
 run_id="$3"
 repo="$GITHUB_REPOSITORY"
 
-tag_exists=false
 if out="$(gh api "repos/${repo}/git/ref/tags/${tag}" --jq '.object.type + " " + .object.sha' 2>&1)"; then
   read -r type sha <<<"$out"
   if [[ "$type" != "tag" ]]; then
@@ -33,9 +32,14 @@ if out="$(gh api "repos/${repo}/git/ref/tags/${tag}" --jq '.object.type + " " + 
     echo "::error::${tag} was not created by run ${run_id} at ${commit}; leaving it in place"
     exit 1
   fi
-  tag_exists=true
   tag_object="$sha"
-elif ! grep -q 'HTTP 404' <<<"$out"; then
+elif grep -q 'HTTP 404' <<<"$out" && gh api "repos/${repo}" --jq '.id' >/dev/null; then
+  # A 404 means "no such tag" only once the repository itself answers; GitHub
+  # also returns 404 for a repository the token cannot see. GoReleaser runs only
+  # after the push, so with no tag nothing for this tag can be this run's.
+  echo "tag ${tag} was never pushed; nothing to delete"
+  exit 0
+else
   echo "$out" >&2
   echo "::error::could not tell whether ${tag} exists; leaving it in place"
   exit 1
@@ -58,12 +62,6 @@ while read -r id draft ours; do
     exit 1
   fi
 done <<<"$releases"
-
-# GoReleaser runs only after the push, so with no tag no draft can be this run's.
-if [[ "$tag_exists" != "true" ]]; then
-  echo "tag ${tag} was never pushed; nothing to delete"
-  exit 0
-fi
 
 while read -r id _; do
   [[ -z "$id" ]] && continue
