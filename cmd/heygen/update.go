@@ -175,11 +175,17 @@ func runUpdateCheck(ctx *cmdContext) error {
 	resp.Latest = rel.Version
 	resp.UpdateAvailable = isVersionGreater(rel.Version, current)
 	if resp.UpdateAvailable {
-		resp.Message = fmt.Sprintf("heygen %s is available; you have %s", rel.Version, current)
+		resp.Message = updateAvailableMessage(rel.Version, current)
 	} else {
 		resp.Message = fmt.Sprintf("heygen is up to date at %s", current)
 	}
 	return emitUpdateCheck(ctx, resp)
+}
+
+// updateAvailableMessage is shared by update --check and the staleness notice
+// so the two never word the same fact differently.
+func updateAvailableMessage(latest, current string) string {
+	return fmt.Sprintf("heygen %s is available; you have %s", latest, current)
 }
 
 func emitUpdateCheck(ctx *cmdContext, resp updateCheckResponse) error {

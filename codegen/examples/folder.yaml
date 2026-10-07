@@ -1,0 +1,6 @@
+"POST /v3/folders":
+  - desc: "Create a folder in the workspace"
+    cmd: "heygen folder create --name 'Campaign'"
+"GET /v3/folders/{folder_id}":
+  - desc: "Get a folder by its id"
+    cmd: "heygen folder get <folder-id>"

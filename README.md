@@ -175,7 +175,7 @@ Every command supports `--help`.
 | Aspect | Behavior |
 |--------|----------|
 | **stdout** | Always JSON. Even `video download` — binary writes to disk; stdout emits `{"asset", "message", "path"}` so you can chain on `.path`. |
-| **stderr** | Structured envelope on error: `{"error": {"code", "message", "hint", "param", "doc_url", "request_id"}}`. `code`/`message` are always present; `hint`/`param`/`doc_url`/`request_id` appear when applicable (`param`/`doc_url` are surfaced from the API for validation and documented errors). Stable `code` values for programmatic branching. A code prefixed `cli_` is originated by the CLI itself (client/transport/local conditions, e.g. `cli_download_url_expired`). A bare code is either an API code (or a CLI mirror of one) or one of a small frozen set of legacy CLI codes that predate the prefix. The `cli_` prefix is reserved for the CLI, so a new CLI code can never collide with an API code. |
+| **stderr** | Structured envelope on error: `{"error": {"code", "message", "hint", "param", "doc_url", "request_id"}}`. `code`/`message` are always present; `hint`/`param`/`doc_url`/`request_id` appear when applicable (`param`/`doc_url` are surfaced from the API for validation and documented errors). Stable `code` values for programmatic branching. A code prefixed `cli_` is originated by the CLI itself (client/transport/local conditions, e.g. `cli_download_url_expired`). A bare code is either an API code (or a CLI mirror of one) or one of a small frozen set of legacy CLI codes that predate the prefix. The `cli_` prefix is reserved for the CLI, so a new CLI code can never collide with an API code. Non-fatal diagnostics share stderr in the same envelope style and never affect the exit code: `{"warning": {"message"}}` when an invocation was degraded or used something deprecated, and `{"notice": {"code", "message"}}` for something you may want to know rather than act on. One compact envelope per line, so a single run can emit several. In `--human` mode all three render as styled `Error:`/`Warning:`/`Note:` lines instead. This covers diagnostics the CLI emits through its formatter; interactive commands (`auth login`, destructive confirmations) also write human prose to stderr by design. |
 | **Exit codes** | `0` ok · `1` API or network · `2` usage · `3` auth / not permitted · `4` timeout — a request exceeded its per-operation timeout, or the `--wait` poll window elapsed (stdout contains partial resource for resume) |
 | **Request bodies** | Flags for simple inputs; `-d` for nested JSON (inline, file path, or `-` for stdin). Flags override matching fields. |
 | **Idempotency** | Endpoints that accept `Idempotency-Key` expose `--idempotency-key`; `--help` on the command is the authority. The CLI never generates one, so a retry is deduplicated only if you pass the same key you sent originally. Replay is limited to 24 hours, and a key reused after that window creates a second resource, so reconcile a stale operation with its `get`/`list` instead of retrying it. Keys are 1-255 characters from `[A-Za-z0-9_:.-]`, and a UUID is a safe default. Scope is per-endpoint and per-resource. |
@@ -196,6 +196,8 @@ Example error envelope:
 
 `HEYGEN_API_KEY` and `HEYGEN_OUTPUT` env vars override the respective files.
 
+**Update notice.** A release build checks for a newer stable release at most once a day, in the background, without delaying the command. When one exists it prints `{"notice": {"code": "cli_update_available", ...}}` on stderr (a `Note:` line with `--human`), at most once a day, and never changes the exit code. It is off in CI (`CI`, `GITHUB_ACTIONS`, `HEYGEN_NONINTERACTIVE`) and skipped for `help`, `completion`, `update`, `--version`, and the schema flags. Turn it off with `HEYGEN_NO_UPDATE_CHECK=1` or `heygen config set update_check false`.
+
 ```bash
 heygen config list       # show all settings with sources
 ```
@@ -209,7 +211,7 @@ heygen config list       # show all settings with sources
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md).
+See [CONTRIBUTING.md](./CONTRIBUTING.md). Maintainers using Claude Code can run the release, E2E, and changelog workflows as skills; see [.claude/skills/README.md](.claude/skills/README.md).
 
 ## License
 

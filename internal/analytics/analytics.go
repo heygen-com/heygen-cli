@@ -19,7 +19,11 @@ import (
 // same PostHog project and become queryable against the shared install
 // identity (see distinctID / sharedConfigPath below).
 const posthogAPIKey = "phc_zjjbX0PnWxERXrMHhkEJWj9A9BhGVLRReICgsfTMmpx"
-const posthogEndpoint = "https://us.i.posthog.com"
+
+// posthogEndpoint is a var rather than a const so a test can point it at a
+// server that always rejects and exercise the SDK's upload-failure path, which
+// is the only way to prove discardLogger is actually wired in.
+var posthogEndpoint = "https://us.i.posthog.com"
 
 // legacyPosthogAPIKey is heygen-cli's own pre-existing PostHog project,
 // predating this identity/destination unification. Every event is
@@ -87,6 +91,7 @@ func New(version string, enabled bool) *Client {
 		ph, err := posthog.NewWithConfig(key, posthog.Config{
 			BatchSize: 1,
 			Endpoint:  posthogEndpoint,
+			Logger:    discardLogger{},
 		})
 		if err == nil {
 			clients = append(clients, ph)
@@ -166,6 +171,17 @@ func (c *Client) Feedback(rating int, comment string) bool {
 	})
 	return true
 }
+
+// discardLogger silences the PostHog SDK. Left unset, its Logger defaults to
+// log.New(os.Stderr, ...) and prints transport failures as bare prose among the
+// formatter's JSON envelopes. Telemetry is opt-in and best-effort, and its
+// enqueue errors are swallowed, so its transport failures are silenced too.
+type discardLogger struct{}
+
+func (discardLogger) Debugf(string, ...any) {}
+func (discardLogger) Logf(string, ...any)   {}
+func (discardLogger) Warnf(string, ...any)  {}
+func (discardLogger) Errorf(string, ...any) {}
 
 // baseProperties is the per-event property bundle every CLI event carries.
 // Kept in one place so client_origin / cli_version / os / arch can't drift

@@ -571,7 +571,7 @@ func TestHumanFormatter_Error(t *testing.T) {
 	}
 }
 
-// Even in --human mode the notice belongs on stderr: stdout carries the
+// Even in --human mode the warning belongs on stderr: stdout carries the
 // rendered table or key-value block, and piping it must stay clean.
 func TestHumanFormatter_Warn(t *testing.T) {
 	var out, errOut bytes.Buffer
@@ -583,6 +583,28 @@ func TestHumanFormatter_Warn(t *testing.T) {
 		t.Errorf("warning must not touch stdout, got %q", out.String())
 	}
 	if !strings.Contains(errOut.String(), "--brand-voice-id is deprecated") {
-		t.Errorf("stderr should carry the notice, got %q", errOut.String())
+		t.Errorf("stderr should carry the warning, got %q", errOut.String())
+	}
+}
+
+// Pins the human rendering: the message, without the machine code, and not
+// dressed as a warning.
+func TestHumanFormatter_Notice(t *testing.T) {
+	var out, errOut bytes.Buffer
+	f := NewHumanFormatter(&out, &errOut)
+
+	f.Notice("cli_update_available", "heygen v0.9.0 is available")
+
+	if out.Len() != 0 {
+		t.Errorf("notice must not touch stdout, got %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "heygen v0.9.0 is available") {
+		t.Errorf("stderr should carry the message, got %q", errOut.String())
+	}
+	if strings.Contains(errOut.String(), "cli_update_available") {
+		t.Errorf("human output should not carry the machine code, got %q", errOut.String())
+	}
+	if strings.Contains(errOut.String(), "Warning") {
+		t.Errorf("a notice should not read as a warning, got %q", errOut.String())
 	}
 }

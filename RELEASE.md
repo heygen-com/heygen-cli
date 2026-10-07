@@ -1,5 +1,7 @@
 # Release Process
 
+In Claude Code, `/release-cli` ([.claude/skills/release-cli/SKILL.md](.claude/skills/release-cli/SKILL.md)) runs this whole process and stops for a person at each decision.
+
 For install instructions, see [README.md](./README.md).
 
 ## Release Types
@@ -35,6 +37,14 @@ enforces both:
   tooling adds that line on its own sometimes; remove it and bump `go` instead.
 
 A patch bump is therefore a one-line change to `go.mod`, and no workflow needs editing.
+
+## Pinned CI tools
+
+Every third-party GitHub Action and every tool these workflows download is fixed to an exact version and content. The runner image and the tools preinstalled on it (such as the AWS CLI) are GitHub's, and are not pinned here.
+
+- **GitHub Actions** are pinned to a full commit SHA, with the release in a trailing comment (`uses: actions/checkout@<sha> # v7.0.1`). Dependabot proposes weekly `github-actions` updates; when reviewing one, check that the SHA and the comment moved together.
+- **GoReleaser** is installed by `.github/scripts/install-goreleaser.sh`, and **gitleaks** by the `secrets` job in `ci.yml`. Each fixes a version and the sha256 of its Linux x86_64 archive, and refuses to install on a mismatch. To bump one, change the version and take the new hash from that release's `checksums.txt`, in the same commit.
+- **golangci-lint** is built with `go install` at the version `ci.yml` names, so the Go checksum database verifies it.
 
 ## How to Cut a Dev Release
 
@@ -90,6 +100,15 @@ gh workflow run release-stable.yml -f version=v0.0.5
 ```
 
 Or from the GitHub Actions UI: go to **Actions > Stable Release > Run workflow**, enter the version tag, and click **Run workflow**.
+
+### If the release fails
+
+The workflow runs `release` (tag, then GoReleaser, which creates the GitHub release as a draft), then `publish-release` (publishes it), then `publish-cdn`, with `cleanup-failed-release` only when `release` fails. Where it fails decides the recovery:
+
+- **`release` fails or is cancelled** after pushing the tag: the `cleanup-failed-release` job deletes the tag and any draft release GoReleaser left, so dispatch the workflow again once the cause is fixed. A re-dispatch builds `main` as it is then. If the cleanup job itself fails partway, re-run that job alone (not "Re-run failed jobs", which reruns `release` and stops at the existing tag); it reuses the original run's tag and commit and is safe to repeat.
+- **The cleanup refuses** because a release for the tag is published or is a draft from another run, the tag is not the one that run created, or the API gave an unclear answer: it deletes nothing. Each run marks its draft with its run ID, and only that run's drafts are ever deleted or published. Check the release. If it is incomplete, delete it and its tag with `gh release delete <version> --cleanup-tag` and dispatch again; if it is complete, the CDN still needs publishing, so ask someone with access to the release bucket.
+- **`publish-release` fails or is cancelled**: the draft stays a draft, and nobody can see it yet. Re-run `publish-release` (and `publish-cdn` after it) rather than dispatching again; publishing an already-published release is a no-op.
+- **`publish-cdn` fails** (AWS credentials or the S3 upload): the GitHub release is already public and stays. Use **Re-run failed jobs**; the job downloads that release's assets, checks them against its `checksums.txt`, and publishes them. The stable pointer is written last, so until it succeeds the CDN keeps serving the previous version.
 
 ### Post-release
 

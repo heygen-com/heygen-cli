@@ -135,6 +135,17 @@ heygen video get --response-schema
 
 - The CLI automatically retries 429 and selected transient 5xx (500/502/503/504) on
   retry-eligible requests.
+- Diagnostics the CLI emits through its formatter go to stderr as **one compact JSON
+  envelope per line** (JSON Lines, so parse line by line rather than as one document):
+  `{"error": {...}}` on failure, `{"warning": {"message"}}` when the invocation was
+  degraded or used a deprecated flag, and `{"notice": {"code", "message"}}` for
+  informational messages. Only `error` affects the exit code, and stdout is unaffected by
+  all three. Branch on `notice.code`, never on the prose. Dispatch on the top-level key
+  you recognize and ignore kinds you do not, so a future diagnostic kind cannot break you.
+  A single run can emit more than one line, for example a first-run notice followed by an
+  error. Not everything on stderr is an envelope: interactive commands (`auth login`,
+  destructive confirmations) write human prose there by design, so do not assume every
+  stderr line parses.
 - Use `heygen update` to install a newer CLI release, or `heygen update --check` to
   report whether one exists without installing it. `--check` answers on stdout with
   `update_available`, `current`, `latest`, `channel`, `install_method`, and
@@ -145,5 +156,9 @@ heygen video get --response-schema
   local and no update can be offered. Neither command needs an API key.
   If `update_available` is true, tell the user rather than updating unprompted:
   a new CLI version can change command output mid-task.
+- A release build may print `{"notice": {"code": "cli_update_available", ...}}` on stderr,
+  at most once a day, when a newer stable release exists. Treat it like
+  `update_available`: tell the user, do not update unprompted. It is off in CI and
+  with `HEYGEN_NO_UPDATE_CHECK=1`.
 - Video download writes to `{video-id}.mp4` by default. Override with `--output-path`. Errors if the file already exists; use `--force` to overwrite.
 - For the full API reference (concepts, limits, pricing), see https://developers.heygen.com

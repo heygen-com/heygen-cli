@@ -28,9 +28,10 @@ type WritableProvider interface {
 }
 
 const (
-	KeyOutput   = "output"
-	KeyAnalytics = "analytics"
+	KeyOutput      = "output"
+	KeyAnalytics   = "analytics"
+	KeyUpdateCheck = "update_check"
 )
 
 // ValidKeys lists config keys exposed by config set/get/list.
-var ValidKeys = []string{KeyAnalytics, KeyOutput}
+var ValidKeys = []string{KeyAnalytics, KeyOutput, KeyUpdateCheck}

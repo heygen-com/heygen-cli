@@ -3,16 +3,18 @@ package config
 import "os"
 
 const (
-	envOutput      = "HEYGEN_OUTPUT"
-	envNoAnalytics = "HEYGEN_NO_ANALYTICS"
+	envOutput        = "HEYGEN_OUTPUT"
+	envNoAnalytics   = "HEYGEN_NO_ANALYTICS"
+	envNoUpdateCheck = "HEYGEN_NO_UPDATE_CHECK"
 
 	DefaultBaseURL = "https://api.heygen.com"
 	DefaultOutput  = "json"
 )
 
 var envVarByKey = map[string]string{
-	KeyOutput:    envOutput,
-	KeyAnalytics: envNoAnalytics,
+	KeyOutput:      envOutput,
+	KeyAnalytics:   envNoAnalytics,
+	KeyUpdateCheck: envNoUpdateCheck,
 }
 
 // EnvProvider implements Provider by reading from environment variables.

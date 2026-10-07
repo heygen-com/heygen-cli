@@ -3,14 +3,40 @@ package analytics
 import (
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/posthog/posthog-go"
 )
+
+// TestMain sandboxes HOME for the whole package: newWithCapture resolves
+// distinctID(), which reads and writes ~/.hyperframes/config.json through
+// os.UserHomeDir, so any test constructing a client would otherwise write an
+// anonymousId into the developer's real shared config.
+func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "heygen-analytics-home-*")
+	if err != nil {
+		panic("sandboxing HOME for analytics tests: " + err.Error())
+	}
+	if err := os.Setenv("HOME", home); err != nil {
+		panic("setting HOME: " + err.Error())
+	}
+	if runtime.GOOS == "windows" {
+		if err := os.Setenv("USERPROFILE", home); err != nil {
+			panic("setting USERPROFILE: " + err.Error())
+		}
+	}
+	code := m.Run()
+	_ = os.RemoveAll(home)
+	os.Exit(code)
+}
 
 // setHomeDirForTest sandboxes the home directory os.UserHomeDir resolves,
 // which on Windows reads USERPROFILE rather than HOME.
@@ -645,4 +671,47 @@ func TestAuthLoginEvents_DisabledClientNoop(t *testing.T) {
 	client.AuthLoginStarted("oauth")
 	client.AuthLoginCompleted("oauth")
 	client.AuthLoginFailed("oauth", "oauth_timeout")
+}
+
+// Pins discardLogger: a failed upload prints nothing to stderr. os.Stderr is
+// redirected rather than injected because the SDK writes to it directly.
+func TestNew_AnalyticsTransportFailureIsSilent(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = orig })
+
+	// A server that always rejects, not a closed port: whether a port is closed
+	// depends on the machine, and an upload that never ran would pass vacuously.
+	var uploads atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		uploads.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	origEndpoint := posthogEndpoint
+	posthogEndpoint = srv.URL
+	t.Cleanup(func() { posthogEndpoint = origEndpoint })
+
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	c := New("v0.0.0-test", true)
+	c.CommandRun("video list")
+	c.Close()
+
+	if uploads.Load() == 0 {
+		t.Fatal("no upload was attempted, so this proves nothing about the logger")
+	}
+
+	_ = w.Close()
+	captured, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("reading captured stderr: %v", err)
+	}
+	if len(captured) != 0 {
+		t.Errorf("analytics wrote to stderr: %q", captured)
+	}
 }

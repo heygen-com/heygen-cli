@@ -25,6 +25,11 @@ var cliPrefixedCodes = []string{
 	"cli_download_failed",
 	"cli_download_interrupted",
 	"cli_file_io_error",
+	// Not an error code: the key on a {"notice": {...}} envelope. Registered
+	// here anyway because the reservation guarantee is about the identifier,
+	// not the severity, and a notice code reaches a consumer the same way.
+	"cli_telemetry_notice",
+	"cli_update_available",
 }
 
 // grandfatheredBareCodes are CLI-originated codes that shipped bare in a stable

@@ -9,6 +9,8 @@ description: |
 
 # E2E CLI Test
 
+Step 5 of the release; `/release-cli` runs it for you. It also works on its own.
+
 Pre-release validation that exercises `./bin/heygen` against the live HeyGen API.
 
 ## Prerequisites

@@ -37,6 +37,7 @@ gen/               GENERATED — do not hand-edit
 codegen/           OpenAPI → Go codegen pipeline
 codegen/examples/  Per-group example YAML files
 scripts/           Install script, CI helpers
+.claude/skills/    Maintainer skills for Claude Code (release, E2E, changelog)
 ```
 
 ### Key separation
@@ -87,7 +88,7 @@ Generated commands are pure data. To add behavior on top:
 
 **Custom commands** (not in the API spec) — add a new file in `cmd/heygen/` and register in `root.go`. See `video_download.go` for an example. Commands that don't hit the API (e.g. `feedback`, which emits an anonymous analytics event via `internal/analytics`) annotate with `skipAuth: true` so `initContext` doesn't require credentials, and call `ctx.formatter.Data(data, "", nil)` for JSON output. Register in **both** `newRootCmd` and `newRootCmdWithSpecs`.
 
-**Deprecated aliases** (backward compatibility after a spec-driven rename) — register in `cmd/heygen/aliases.go`. Command names are derived from the upstream OpenAPI spec, so an upstream tag or path change can rename a command that already shipped in a stable release. An `Alias` re-registers the canonical `Spec` at its old path, hidden from help and marked deprecated, so the old invocation still resolves to the same handler while a stderr notice points to the new name:
+**Deprecated aliases** (backward compatibility after a spec-driven rename) — register in `cmd/heygen/aliases.go`. Command names are derived from the upstream OpenAPI spec, so an upstream tag or path change can rename a command that already shipped in a stable release. An `Alias` re-registers the canonical `Spec` at its old path, hidden from help and marked deprecated, so the old invocation still resolves to the same handler while a stderr warning points to the new name:
 
 ```go
 var DeprecatedAliases = []Alias{
@@ -100,15 +101,29 @@ var DeprecatedAliases = []Alias{
 }
 ```
 
-**Deprecated flags** (a superseded request field) — nothing to register; this one is spec-driven. When an EF author marks a Pydantic field with `json_schema_extra={"deprecated": True}`, the OpenAPI property carries `deprecated: true`, codegen sets `FlagSpec.Deprecated`, and the builder hides the flag from `--help` while still registering it and still sending its value. Supplying it prints a notice on stderr.
+**Deprecated flags** (a superseded request field) — nothing to register; this one is spec-driven. When an EF author marks a Pydantic field with `json_schema_extra={"deprecated": True}`, the OpenAPI property carries `deprecated: true`, codegen sets `FlagSpec.Deprecated`, and the builder hides the flag from `--help` while still registering it and still sending its value. Supplying it prints a warning on stderr.
 
 Three things not to "fix" here:
 
-- The flag is hidden with `MarkHidden`, **not** pflag's `MarkDeprecated`. `MarkDeprecated` looks like the right call and does hide the flag, but it also prints its own notice from inside `Set()` to the flag set's output. Cobra buffers that and flushes it through `c.Print` → `OutOrStderr()`, which reads `c.outWriter`: stderr when nobody set one, but **stdout for any in-process caller that has called `SetOut`** — which our own test harness does. Rather than depend on a destination the code inherits, the notice goes through `formatter.Warn`, which always writes to stderr, carries the same envelope as an error, and fires only when the caller actually supplied the field.
-- Deprecated never means removed. Dropping the flag would break every script already passing it, so it stays registered and its value still reaches the API. A flag that is both deprecated *and* required stays visible, since hiding it would report a missing required flag the user cannot find.
-- The notice also fires for a deprecated field supplied through `-d/--data`, matched on `JSONName`. That caller never reads `--help`, so hiding the flag tells it nothing.
+- The flag is hidden with `MarkHidden`, **not** pflag's `MarkDeprecated`. `MarkDeprecated` looks like the right call and does hide the flag, but it also prints its own notice from inside `Set()` to the flag set's output. Cobra buffers that and flushes it through `c.Print` → `OutOrStderr()`, which reads `c.outWriter`: stderr when nobody set one, but **stdout for any in-process caller that has called `SetOut`** — which our own test harness does. Rather than depend on a destination the code inherits, the deprecation warning goes through `formatter.Warn`, which always writes to stderr, carries the same envelope as an error, and fires only when the caller actually supplied the field.
 
-`deprecated` says only "don't use this", never why: some deprecated fields are live aliases (`brand_voice_id` resolves to `brand_glossary_id`), others are no-ops the API ignores (`enable_caption`). The notice is generic for that reason, and the field's own description carries the specifics via `--request-schema`.
+### Picking a non-fatal output level
+
+`formatter.Warn` and `formatter.Notice` both write to stderr (a JSON envelope by default, a prose line
+under `--human`) and neither affects the exit code. Choose by whether the caller should act:
+
+- **`Warn(message)`** for an invocation that was degraded or used something deprecated, i.e. the
+  caller should change something. Keeping it to that meaning is what makes the severity useful.
+- **`Notice(code, message)`** for something informational the caller may want to know. The `code` is
+  a stable branch key, so it must be registered in `cliPrefixedCodes` (`internal/errors/codes.go`);
+  `TestAllCliLiteralsRegistered` fails the build otherwise, including for notice codes, since the
+  `cli_` reservation is about the identifier rather than the severity.
+
+Neither may touch stdout. Anything landing there corrupts the JSON response an agent parses.
+- Deprecated never means removed. Dropping the flag would break every script already passing it, so it stays registered and its value still reaches the API. A flag that is both deprecated *and* required stays visible, since hiding it would report a missing required flag the user cannot find.
+- The warning also fires for a deprecated field supplied through `-d/--data`, matched on `JSONName`. That caller never reads `--help`, so hiding the flag tells it nothing.
+
+`deprecated` says only "don't use this", never why: some deprecated fields are live aliases (`brand_voice_id` resolves to `brand_glossary_id`), others are no-ops the API ignores (`enable_caption`). The warning is generic for that reason, and the field's own description carries the specifics via `--request-schema`.
 
 ## Git Conventions
 
@@ -133,4 +148,8 @@ Command tests use `runCommand()` from `cmd/heygen/testutil_test.go`, which creat
 
 ## Release Process
 
-See [RELEASE.md](./RELEASE.md) for how to cut dev and stable releases.
+See [RELEASE.md](./RELEASE.md) for how to cut dev and stable releases. In Claude Code, `/release-cli` runs that process and stops for you at each decision.
+
+## Maintainer Skills
+
+Claude Code skills for releasing and testing this repo live in `.claude/skills/`. [.claude/skills/README.md](.claude/skills/README.md) lists what each does and when to use it.

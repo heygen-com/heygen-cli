@@ -20,8 +20,16 @@ type Formatter interface {
 	Data(v json.RawMessage, dataField string, columns []command.Column) error
 	// Error writes a CLIError as a JSON envelope to stderr.
 	Error(err *clierrors.CLIError)
-	// Warn writes a non-fatal notice to stderr. Unlike Error it does not
+	// Warn writes a non-fatal warning to stderr. Unlike Error it does not
 	// affect the exit code, and unlike Data it must never touch stdout —
 	// a warning that lands on stdout corrupts the response an agent parses.
 	Warn(message string)
+	// Notice writes an informational message to stderr, for something the
+	// caller may want to know rather than something they should change.
+	//
+	// Warn means the invocation was degraded or used something deprecated, and
+	// routing informational messages such as "a newer version exists" through
+	// it would dilute that. code is a stable key a machine consumer branches
+	// on, since the prose is not a contract.
+	Notice(code, message string)
 }

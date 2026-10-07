@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/heygen-com/heygen-cli/internal/command"
@@ -143,6 +144,68 @@ func TestJSONFormatter_Warn(t *testing.T) {
 		t.Fatalf("warning on stderr is not valid JSON: %v (%q)", err, errOut.String())
 	}
 	if got := envelope["warning"]["message"]; got != "--brand-voice-id is deprecated" {
-		t.Errorf(`warning.message = %q, want the notice`, got)
+		t.Errorf(`warning.message = %q, want the supplied message`, got)
 	}
+}
+
+// Pins the envelope a consumer parses, and the rule it shares with warnings:
+// stdout stays untouched, since anything landing there corrupts the response.
+func TestJSONFormatter_Notice(t *testing.T) {
+	var out, errOut bytes.Buffer
+	f := NewJSONFormatter(&out, &errOut)
+
+	f.Notice("cli_update_available", "heygen v0.9.0 is available; you have v0.8.1")
+
+	if out.Len() != 0 {
+		t.Errorf("notice must not touch stdout, got %q", out.String())
+	}
+	var envelope map[string]map[string]string
+	if err := json.Unmarshal(errOut.Bytes(), &envelope); err != nil {
+		t.Fatalf("notice on stderr is not valid JSON: %v (%q)", err, errOut.String())
+	}
+	if got := envelope["notice"]["code"]; got != "cli_update_available" {
+		t.Errorf("notice.code = %q, want the supplied code", got)
+	}
+	if got := envelope["notice"]["message"]; got != "heygen v0.9.0 is available; you have v0.8.1" {
+		t.Errorf("notice.message = %q, want the supplied message", got)
+	}
+}
+
+// Pins the documented stderr framing, one compact envelope per line: a single
+// run can emit several, such as a first-run notice followed by an error.
+func TestJSONFormatter_DiagnosticsAreOnePerLine(t *testing.T) {
+	var out, errOut bytes.Buffer
+	f := NewJSONFormatter(&out, &errOut)
+
+	f.Notice("cli_telemetry_notice", "first run disclosure")
+	f.Warn("--brand-voice-id is deprecated")
+	f.Error(&clierrors.CLIError{Code: "usage_error", Message: "accepts 1 arg(s), received 0"})
+
+	if out.Len() != 0 {
+		t.Errorf("diagnostics must not touch stdout, got %q", out.String())
+	}
+
+	lines := strings.Split(strings.TrimSuffix(errOut.String(), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("got %d lines, want one per diagnostic:\n%s", len(lines), errOut.String())
+	}
+	wantKeys := []string{"notice", "warning", "error"}
+	for i, line := range lines {
+		var envelope map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(line), &envelope); err != nil {
+			t.Errorf("line %d is not independently parseable: %v (%q)", i, err, line)
+			continue
+		}
+		if _, ok := envelope[wantKeys[i]]; !ok {
+			t.Errorf("line %d has keys %v, want %q", i, keysOf(envelope), wantKeys[i])
+		}
+	}
+}
+
+func keysOf(m map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

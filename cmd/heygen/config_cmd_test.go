@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/heygen-com/heygen-cli/internal/config"
 )
 
 func TestConfigSet_Success(t *testing.T) {
@@ -133,8 +136,8 @@ func TestConfigList_AllDefaults(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if len(parsed) != 2 {
-		t.Fatalf("len(parsed) = %d, want 4", len(parsed))
+	if len(parsed) != len(config.ValidKeys) {
+		t.Fatalf("len(parsed) = %d, want one entry per key in %v", len(parsed), config.ValidKeys)
 	}
 }
 
@@ -154,7 +157,34 @@ func TestConfigList_MixedSources(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.Stdout), &parsed); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if len(parsed) != 2 {
-		t.Fatalf("len(parsed) = %d, want 4", len(parsed))
+	if len(parsed) != len(config.ValidKeys) {
+		t.Fatalf("len(parsed) = %d, want one entry per key in %v", len(parsed), config.ValidKeys)
+	}
+}
+
+// update_check is stored as a TOML bool like analytics, and the env opt-out
+// outranks the file.
+func TestConfig_UpdateCheckKey(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HEYGEN_CONFIG_DIR", dir)
+	if res := runCommand(t, "http://example.invalid", "", "config", "set", "update_check", "false"); res.ExitCode != 0 {
+		t.Fatalf("config set: exit %d, stderr %s", res.ExitCode, res.Stderr)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "config.toml"))
+	if err != nil || !strings.Contains(string(data), "update_check = false") {
+		t.Fatalf("config.toml = %q (%v), want a TOML bool", data, err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("update_check = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HEYGEN_NO_UPDATE_CHECK", "1")
+	res := runCommand(t, "http://example.invalid", "", "config", "get", "update_check")
+	var got configResponse
+	if err := json.Unmarshal([]byte(res.Stdout), &got); err != nil {
+		t.Fatalf("Unmarshal: %v (%s)", err, res.Stdout)
+	}
+	if got.Value != "false" || got.Source != "env" {
+		t.Errorf("config get update_check = %+v, want false from env", got)
 	}
 }
