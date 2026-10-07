@@ -9,6 +9,8 @@ argument-hint: "[version, e.g. v0.0.6]"
 
 # Changelog Generator
 
+Step 7 of the release; `/release-cli` runs it for you. It also works on its own.
+
 Generate release notes for a stable release by summarizing git commits since
 the last stable tag.
 

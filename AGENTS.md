@@ -76,7 +76,10 @@ Data(v json.RawMessage, dataField string, columns []command.Column) error
 - Command tests: use `runCommand()` in `cmd/heygen/testutil_test.go`. It creates a fresh Cobra tree, captures stdout/stderr/exit code, and renders errors through the formatter.
 - Use `t.Setenv()` for env vars (auto-restored).
 - Assert on exit codes (0/1/2/3/4) **and** stderr envelope shape, not just error presence.
-- **Pre-release E2E**: Run `/e2e-cli-test` in Claude Code before cutting a stable release. It exercises the built binary against the live API. Requires `HEYGEN_API_KEY` and spends a small number of credits. See SKILL.md for details.
+- **Pre-release E2E**: Run `/e2e-cli-test` in Claude Code before cutting a stable release. It exercises the built binary against the live API. Requires `HEYGEN_API_KEY` and spends a small number of credits. See `.claude/skills/e2e-cli-test/SKILL.md` for details.
+
+### Releasing
+To cut a release, run `/release-cli` (`.claude/skills/release-cli/SKILL.md`). It follows [RELEASE.md](./RELEASE.md) step by step and stops for the user before merging PRs, spending E2E credits, settling a breaking version, and triggering the workflow. Never trigger `release-stable.yml` or `dev-release.yml` without that confirmation. All maintainer skills are listed in [.claude/skills/README.md](.claude/skills/README.md).
 
 ### Documentation
 When a change affects user-facing behavior, update the relevant doc:
