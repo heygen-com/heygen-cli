@@ -8,8 +8,8 @@
 # publish. Any other release for the tag stops it.
 # A published release (someone else published it) is never touched:
 # the script stops for a person instead, because users may already have it.
-# Any API answer other than a clear 404 stops it too, so nothing is deleted on
-# a guess. The tag is deleted only if it is the one this run made: annotated,
+# A missing tag means nothing to do; any other unclear answer stops it, so
+# nothing is deleted on a guess. The tag is deleted only if it is the one this run made: annotated,
 # its message naming <run-id>, and pointing at <commit>. Anything else stops it
 # as well. Safe to re-run.
 # Needs GH_TOKEN with contents: write, and GITHUB_REPOSITORY.
@@ -41,7 +41,7 @@ elif grep -q 'HTTP 404' <<<"$out" && gh api "repos/${repo}" --jq '.id' >/dev/nul
   exit 0
 else
   echo "$out" >&2
-  echo "::error::could not tell whether ${tag} exists; leaving it in place"
+  echo "::error::could not tell whether ${tag} exists (the tag lookup failed, or the repository did not answer); leaving it in place"
   exit 1
 fi
 
