@@ -36,6 +36,14 @@ enforces both:
 
 A patch bump is therefore a one-line change to `go.mod`, and no workflow needs editing.
 
+## Pinned CI tools
+
+Every third-party GitHub Action and every tool these workflows download is fixed to an exact version and content. The runner image and the tools preinstalled on it (such as the AWS CLI) are GitHub's, and are not pinned here.
+
+- **GitHub Actions** are pinned to a full commit SHA, with the release in a trailing comment (`uses: actions/checkout@<sha> # v7.0.1`). Dependabot proposes weekly `github-actions` updates; when reviewing one, check that the SHA and the comment moved together.
+- **GoReleaser** is installed by `.github/scripts/install-goreleaser.sh`, and **gitleaks** by the `secrets` job in `ci.yml`. Each fixes a version and the sha256 of its Linux x86_64 archive, and refuses to install on a mismatch. To bump one, change the version and take the new hash from that release's `checksums.txt`, in the same commit.
+- **golangci-lint** is built with `go install` at the version `ci.yml` names, so the Go checksum database verifies it.
+
 ## How to Cut a Dev Release
 
 1. Make sure `main` is in a good state.
