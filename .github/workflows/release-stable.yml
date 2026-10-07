@@ -10,11 +10,22 @@ on:
 
 permissions:
   contents: write
-  id-token: write
+
+# One stable release at a time, so a failed run's cleanup never overlaps another
+# run. A run dispatched while one is in progress waits, but GitHub keeps only
+# the newest waiting run and cancels any older one.
+concurrency:
+  group: stable-release
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ github.event.inputs.version }}
+      tag_push_attempted: ${{ steps.tag.outputs.push_attempted }}
+      commit: ${{ steps.tag.outputs.commit }}
+      release_id: ${{ steps.draft.outputs.id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,6 +70,7 @@ jobs:
         run: .github/scripts/install-goreleaser.sh
 
       - name: Create git tag
+        id: tag
         shell: bash
         run: |
           set -euo pipefail
@@ -66,7 +78,12 @@ jobs:
           version="${{ github.event.inputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "$version"
+          # Annotated with this run's ID: cleanup-failed-release.sh deletes a tag
+          # only when its message names the run that is cleaning up.
+          git tag -a "$version" -m "Release ${version} by GitHub Actions run ${GITHUB_RUN_ID}"
+          commit="$(git rev-parse HEAD)"
+          echo "commit=${commit}" >> "$GITHUB_OUTPUT"
+          echo "push_attempted=true" >> "$GITHUB_OUTPUT"
           git push origin "$version"
 
       - name: Resolve previous stable tag
@@ -101,6 +118,76 @@ jobs:
           GORELEASER_CURRENT_TAG: ${{ github.event.inputs.version }}
           # GORELEASER_PREVIOUS_TAG is exported by the step above, and only when a
           # previous stable tag exists.
+
+      - name: Record this run's draft release
+        id: draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Assigned first: a failed command substitution inside echo would not
+          # fail the step.
+          release_id="$(.github/scripts/find-run-draft.sh "${{ github.event.inputs.version }}" "$GITHUB_RUN_ID")"
+          echo "id=${release_id}" >> "$GITHUB_OUTPUT"
+
+  # A job rather than a step: a cancelled job skips its remaining steps, but a
+  # dependent job with always() still runs. The script decides from the repo's
+  # actual state what, if anything, to delete.
+  cleanup-failed-release:
+    needs: release
+    if: always() && needs.release.result != 'success' && needs.release.outputs.tag_push_attempted == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release.outputs.commit }}
+
+      - name: Remove the tag and any draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/scripts/cleanup-failed-release.sh "${{ needs.release.outputs.tag }}" "${{ needs.release.outputs.commit }}" "${{ github.run_id }}"
+
+  publish-release:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # By the ID the release job recorded, never by tag, so only this run's
+      # draft can be published.
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.release.outputs.release_id }}
+        run: gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F draft=false --jq '"published \(.tag_name) (draft=\(.draft), prerelease=\(.prerelease))"'
+
+  # A separate job so that, once the GitHub release is public, a failed CDN
+  # publish is retried with "Re-run failed jobs" rather than by deleting a
+  # release users can already see. It publishes the release's own assets.
+  publish-cdn:
+    needs: [release, publish-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.inputs.version }}
+
+      - name: Download and verify the release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+
+          gh release download "$TAG" --dir dist --pattern 'heygen_*' --pattern checksums.txt
+          (cd dist && sha256sum -c checksums.txt)
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0

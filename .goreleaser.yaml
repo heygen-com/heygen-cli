@@ -29,5 +29,11 @@ snapshot:
   version_template: "{{ .Tag }}-next"
 release:
   prerelease: auto
+  # The workflow's publish-release job publishes it, so a failed run only ever
+  # leaves a draft for cleanup-failed-release.sh to delete.
+  draft: true
+  # Marks the draft as this run's; publish and cleanup act only on drafts that
+  # carry it. Replacing the notes after publishing drops it, which is fine.
+  header: "<!-- release-run: {{ envOrDefault \"GITHUB_RUN_ID\" \"local\" }} -->"
 checksum:
   name_template: checksums.txt
