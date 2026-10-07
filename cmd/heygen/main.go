@@ -27,6 +27,7 @@ func main() {
 	loginAnalytics = analyticsClient
 
 	cmd := newRootCmd(version, formatter, analyticsClient)
+	updateNotifier := startUpdateCheck(os.Args[1:], version)
 	start := time.Now()
 	executedCmd, err := cmd.ExecuteC()
 
@@ -57,6 +58,8 @@ func main() {
 		}
 	}
 
+	updateNotifier.finish(formatter)
+
 	if analyticsClient.Started() && executedCmd != nil {
 		analyticsClient.CommandRunComplete(executedCmd.CommandPath(), exitCode, time.Since(start), errorCode, source, httpStatus)
 	}
@@ -82,6 +85,11 @@ func classifyError(err error) *clierrors.CLIError {
 	}
 	wrapped.Source = "cli" // Cobra-wrapped errors are always CLI-origin.
 	return wrapped
+}
+
+func envTruthy(name string) bool {
+	v := strings.TrimSpace(os.Getenv(name))
+	return v != "" && v != "0" && !strings.EqualFold(v, "false")
 }
 
 func analyticsEnabled() bool {

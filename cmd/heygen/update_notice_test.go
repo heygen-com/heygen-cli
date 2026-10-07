@@ -1,0 +1,458 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/heygen-com/heygen-cli/internal/output"
+)
+
+var updateTestNow = time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+
+// setupUpdateNotice isolates a test from the real environment: CI runners set
+// CI and GITHUB_ACTIONS, which would turn the check off for every case.
+func setupUpdateNotice(t *testing.T) *atomic.Int32 {
+	t.Helper()
+	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
+	for _, name := range []string{"CI", "GITHUB_ACTIONS", "HEYGEN_NONINTERACTIVE", "HEYGEN_NO_UPDATE_CHECK"} {
+		t.Setenv(name, "")
+	}
+	origNow, origFetch := updateNow, updateFetchLatest
+	origExe, origEval := updateExecutablePath, updateEvalSymlinks
+	t.Cleanup(func() {
+		updateNow, updateFetchLatest = origNow, origFetch
+		updateExecutablePath, updateEvalSymlinks = origExe, origEval
+	})
+	updateNow = func() time.Time { return updateTestNow }
+	updateExecutablePath = func() (string, error) { return "/usr/local/bin/heygen", nil }
+	updateEvalSymlinks = func(path string) (string, error) { return path, nil }
+	var fetches atomic.Int32
+	updateFetchLatest = func(context.Context) (string, error) {
+		fetches.Add(1)
+		return "v0.9.1", nil
+	}
+	return &fetches
+}
+
+// runUpdateNotice drives one invocation and returns stderr. It waits for a
+// started fetch to deliver, so finish sees the result deterministically.
+func runUpdateNotice(t *testing.T, version string) string {
+	t.Helper()
+	n := startUpdateCheck([]string{"video", "list"}, version)
+	if n != nil && n.result != nil {
+		deadline := time.Now().Add(2 * time.Second)
+		for len(n.result) == 0 && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+	}
+	var stderr bytes.Buffer
+	n.finish(output.NewJSONFormatter(io.Discard, &stderr))
+	return stderr.String()
+}
+
+func seedUpdateCache(t *testing.T, c updateCheckCache) {
+	t.Helper()
+	if err := writeUpdateCache(c); err != nil {
+		t.Fatalf("writeUpdateCache: %v", err)
+	}
+}
+
+func assertUpdateNotice(t *testing.T, stderr, latest, current string) {
+	t.Helper()
+	var envelope map[string]map[string]string
+	if err := json.Unmarshal([]byte(stderr), &envelope); err != nil {
+		t.Fatalf("stderr is not a single notice envelope: %v (%q)", err, stderr)
+	}
+	if got := envelope["notice"]["code"]; got != updateNoticeCode {
+		t.Errorf("notice.code = %q, want %q", got, updateNoticeCode)
+	}
+	if msg := envelope["notice"]["message"]; !strings.Contains(msg, latest) || !strings.Contains(msg, current) {
+		t.Errorf("notice.message = %q, want both %s and %s", msg, latest, current)
+	}
+}
+
+func TestSkipsUpdateCheck(t *testing.T) {
+	cases := []struct {
+		args []string
+		skip bool
+	}{
+		{nil, true},
+		{[]string{"__complete", "video", ""}, true},
+		{[]string{"completion", "zsh"}, true},
+		{[]string{"help", "video"}, true},
+		{[]string{"update", "--check"}, true},
+		{[]string{"--version"}, true},
+		{[]string{"video", "list", "--help"}, true},
+		{[]string{"video", "create", "--request-schema=true"}, true},
+		{[]string{"video", "get", "--response-schema"}, true},
+		{[]string{"video", "list"}, false},
+		{[]string{"--human", "video", "list"}, false},
+		// --headers consumes the next arg, so "update" here is its value.
+		{[]string{"--headers", "update", "video", "list"}, false},
+	}
+	for _, tc := range cases {
+		if got := skipsUpdateCheck(tc.args); got != tc.skip {
+			t.Errorf("skipsUpdateCheck(%q) = %v, want %v", tc.args, got, tc.skip)
+		}
+	}
+}
+
+func TestUpdateCheckEnabled(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     map[string]string
+		config  string
+		enabled bool
+	}{
+		{name: "default", enabled: true},
+		{name: "CI=false is not CI", env: map[string]string{"CI": "false"}, enabled: true},
+		{name: "CI", env: map[string]string{"CI": "true"}},
+		{name: "GitHub Actions", env: map[string]string{"GITHUB_ACTIONS": "true"}},
+		{name: "noninteractive", env: map[string]string{"HEYGEN_NONINTERACTIVE": "1"}},
+		{name: "env opt-out", env: map[string]string{"HEYGEN_NO_UPDATE_CHECK": "1"}},
+		{name: "config opt-out", config: "update_check = false\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUpdateNotice(t)
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			if tc.config != "" {
+				path := filepath.Join(os.Getenv("HEYGEN_CONFIG_DIR"), "config.toml")
+				if err := os.WriteFile(path, []byte(tc.config), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := updateCheckEnabled(); got != tc.enabled {
+				t.Errorf("updateCheckEnabled() = %v, want %v", got, tc.enabled)
+			}
+		})
+	}
+}
+
+func TestStartUpdateCheck_OnlyStableReleaseBuildsCheck(t *testing.T) {
+	for _, version := range []string{"dev", "v0.9.0-6-gabc1234-dirty", "v0.9.0-dev.202610070000"} {
+		t.Run(version, func(t *testing.T) {
+			fetches := setupUpdateNotice(t)
+			if n := startUpdateCheck([]string{"video", "list"}, version); n != nil {
+				t.Errorf("startUpdateCheck(%q) returned a notifier, want nil", version)
+			}
+			if fetches.Load() != 0 {
+				t.Errorf("fetched %d times, want 0", fetches.Load())
+			}
+		})
+	}
+}
+
+func TestUpdateCheck_DueCheckFetchesCachesAndNotifies(t *testing.T) {
+	fetches := setupUpdateNotice(t)
+
+	stderr := runUpdateNotice(t, "v0.9.0")
+
+	if fetches.Load() != 1 {
+		t.Fatalf("fetched %d times, want 1", fetches.Load())
+	}
+	assertUpdateNotice(t, stderr, "v0.9.1", "v0.9.0")
+	c := readUpdateCache()
+	if c.Latest != "v0.9.1" || !c.CheckedAt.Equal(updateTestNow) || !c.NotifiedAt.Equal(updateTestNow) {
+		t.Errorf("cache = %+v, want latest v0.9.1 checked and notified at %v", c, updateTestNow)
+	}
+}
+
+func TestUpdateCheck_FreshCacheNotifiesWithoutFetching(t *testing.T) {
+	fetches := setupUpdateNotice(t)
+	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow.Add(-time.Hour)})
+
+	stderr := runUpdateNotice(t, "v0.9.0")
+
+	if fetches.Load() != 0 {
+		t.Errorf("fetched %d times, want 0 while the cache is fresh", fetches.Load())
+	}
+	assertUpdateNotice(t, stderr, "v0.9.1", "v0.9.0")
+}
+
+func TestUpdateCheck_NoticeInterval(t *testing.T) {
+	cases := []struct {
+		name       string
+		latest     string
+		notifiedAt time.Time
+		want       bool
+	}{
+		{"newer, never notified", "v0.9.1", time.Time{}, true},
+		{"newer, notified just inside the interval", "v0.9.1", updateTestNow.Add(-updateNoticeInterval + time.Second), false},
+		{"newer, notified a full interval ago", "v0.9.1", updateTestNow.Add(-updateNoticeInterval), true},
+		{"same version", "v0.9.0", time.Time{}, false},
+		{"unknown latest", "", time.Time{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUpdateNotice(t)
+			seedUpdateCache(t, updateCheckCache{Latest: tc.latest, CheckedAt: updateTestNow, NotifiedAt: tc.notifiedAt})
+			stderr := runUpdateNotice(t, "v0.9.0")
+			if got := stderr != ""; got != tc.want {
+				t.Errorf("notice emitted = %v, want %v (stderr %q)", got, tc.want, stderr)
+			}
+		})
+	}
+}
+
+func TestCheckDue(t *testing.T) {
+	cases := []struct {
+		name string
+		c    updateCheckCache
+		want bool
+	}{
+		{"never checked", updateCheckCache{}, true},
+		{"checked just inside the interval", updateCheckCache{CheckedAt: updateTestNow.Add(-updateCheckInterval + time.Second)}, false},
+		{"checked a full interval ago", updateCheckCache{CheckedAt: updateTestNow.Add(-updateCheckInterval)}, true},
+		{"one failure, inside its backoff", updateCheckCache{Failures: 1, LastAttempt: updateTestNow.Add(-2*updateRetryBase + time.Second)}, false},
+		{"one failure, backoff elapsed", updateCheckCache{Failures: 1, LastAttempt: updateTestNow.Add(-2 * updateRetryBase)}, true},
+		{"many failures cap at the check interval", updateCheckCache{Failures: 40, LastAttempt: updateTestNow.Add(-updateCheckInterval)}, true},
+		{"timestamps in the future count as elapsed", updateCheckCache{CheckedAt: updateTestNow.Add(time.Hour), LastAttempt: updateTestNow.Add(time.Hour)}, true},
+	}
+	for _, tc := range cases {
+		if got := tc.c.checkDue(updateTestNow); got != tc.want {
+			t.Errorf("%s: checkDue = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestUpdateCheck_FailureIsRecordedForBackoff(t *testing.T) {
+	setupUpdateNotice(t)
+	updateFetchLatest = func(context.Context) (string, error) { return "", errors.New("offline") }
+
+	if stderr := runUpdateNotice(t, "v0.9.0"); stderr != "" {
+		t.Errorf("a failed check must be silent, got %q", stderr)
+	}
+	c := readUpdateCache()
+	if c.Failures != 1 || !c.LastAttempt.Equal(updateTestNow) {
+		t.Errorf("cache = %+v, want one failure attempted at %v", c, updateTestNow)
+	}
+}
+
+// The check must never delay the command: finish abandons a fetch that has
+// not delivered and decides from the cache alone.
+func TestUpdateCheck_FinishDoesNotWaitForInFlightFetch(t *testing.T) {
+	setupUpdateNotice(t)
+	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow.Add(-updateCheckInterval)})
+	release := make(chan struct{})
+	defer close(release)
+	updateFetchLatest = func(context.Context) (string, error) {
+		<-release
+		return "v0.9.2", nil
+	}
+
+	n := startUpdateCheck([]string{"video", "list"}, "v0.9.0")
+	var stderr bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		n.finish(output.NewJSONFormatter(io.Discard, &stderr))
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("finish blocked on an in-flight fetch")
+	}
+	assertUpdateNotice(t, stderr.String(), "v0.9.1", "v0.9.0")
+}
+
+func TestReadUpdateCache_UnusableFileIsAbsent(t *testing.T) {
+	cases := map[string][]byte{
+		"not json":     []byte("{"),
+		"other schema": []byte(`{"schema": 99, "latest": "v9.9.9"}`),
+		// Valid JSON once truncated to the read limit, so only the size bound rejects it.
+		"oversized": append([]byte(`{"schema": 1, "latest": "v9.9.9"}`), bytes.Repeat([]byte(" "), updateCacheMaxBytes)...),
+	}
+	for name, data := range cases {
+		t.Run(name, func(t *testing.T) {
+			setupUpdateNotice(t)
+			if err := os.WriteFile(updateCachePath(), data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if c := readUpdateCache(); c != (updateCheckCache{}) {
+				t.Errorf("readUpdateCache() = %+v, want the zero cache", c)
+			}
+		})
+	}
+}
+
+// Without a writable cache nothing records attempts or notices, so checking
+// would fetch, and notify, on every invocation.
+func TestUpdateCheck_UnwritableConfigDirStaysOff(t *testing.T) {
+	fetches := setupUpdateNotice(t)
+	notADir := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HEYGEN_CONFIG_DIR", notADir)
+
+	if stderr := runUpdateNotice(t, "v0.9.0"); stderr != "" {
+		t.Errorf("stderr = %q, want nothing", stderr)
+	}
+	if fetches.Load() != 0 {
+		t.Errorf("fetched %d times, want 0", fetches.Load())
+	}
+}
+
+// A notice whose timestamp cannot be saved would repeat on every invocation.
+func TestUpdateCheck_NoticeRequiresRecordedTimestamp(t *testing.T) {
+	setupUpdateNotice(t)
+	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow})
+	n := startUpdateCheck([]string{"video", "list"}, "v0.9.0")
+	notADir := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HEYGEN_CONFIG_DIR", notADir)
+
+	var stderr bytes.Buffer
+	n.finish(output.NewJSONFormatter(io.Discard, &stderr))
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want no notice when it cannot be recorded", stderr.String())
+	}
+}
+
+// Another invocation holding the lock means this one neither checks nor
+// notifies; waiting for it would delay the command. The cases reach the lock
+// from each side: a due check takes it in startUpdateCheck, a due notice in
+// finish.
+func TestUpdateCheck_BusyLockSkipsCacheWork(t *testing.T) {
+	cases := map[string]updateCheckCache{
+		"check due":  {},
+		"notice due": {Latest: "v0.9.1", CheckedAt: updateTestNow},
+	}
+	for name, seed := range cases {
+		t.Run(name, func(t *testing.T) {
+			fetches := setupUpdateNotice(t)
+			if seed != (updateCheckCache{}) {
+				seedUpdateCache(t, seed)
+			}
+			unlock, err := lockUpdateCache()
+			if err != nil {
+				t.Fatalf("lockUpdateCache: %v", err)
+			}
+			defer unlock()
+
+			if stderr := runUpdateNotice(t, "v0.9.0"); stderr != "" {
+				t.Errorf("stderr = %q, want nothing while the lock is held", stderr)
+			}
+			if fetches.Load() != 0 {
+				t.Errorf("fetched %d times, want 0 while the lock is held", fetches.Load())
+			}
+		})
+	}
+}
+
+// The lock is held by an open file, not by the file existing, so a lock file
+// left behind blocks nothing, and finish releases what it took.
+func TestUpdateCheck_LockFileWithoutHolderDoesNotBlock(t *testing.T) {
+	setupUpdateNotice(t)
+	if err := os.WriteFile(updateCachePath()+".lock", nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	assertUpdateNotice(t, runUpdateNotice(t, "v0.9.0"), "v0.9.1", "v0.9.0")
+	unlock, err := lockUpdateCache()
+	if err != nil {
+		t.Fatalf("lock still held after finish: %v", err)
+	}
+	unlock()
+}
+
+// finish applies its result to the cache as it is on disk, so a notice another
+// invocation recorded meanwhile is neither repeated nor erased.
+func TestUpdateCheck_FinishMergesWithConcurrentWrites(t *testing.T) {
+	setupUpdateNotice(t)
+	n := startUpdateCheck([]string{"video", "list"}, "v0.9.0")
+	for len(n.result) == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	seedUpdateCache(t, updateCheckCache{LastAttempt: updateTestNow, NotifiedAt: updateTestNow})
+
+	var stderr bytes.Buffer
+	n.finish(output.NewJSONFormatter(io.Discard, &stderr))
+
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want no repeat of the other invocation's notice", stderr.String())
+	}
+	c := readUpdateCache()
+	if c.Latest != "v0.9.1" || !c.NotifiedAt.Equal(updateTestNow) {
+		t.Errorf("cache = %+v, want this check's result and the other invocation's notice", c)
+	}
+}
+
+func TestWriteUpdateCache_OwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits")
+	}
+	setupUpdateNotice(t)
+	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1"})
+	info, err := os.Stat(updateCachePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Errorf("cache mode = %o, want 600", mode)
+	}
+}
+
+func TestUpdateNoticeMessage_PackageManagerInstall(t *testing.T) {
+	setupUpdateNotice(t)
+	updateExecutablePath = func() (string, error) { return "/opt/homebrew/bin/heygen", nil }
+
+	if msg := updateNoticeMessage("v0.9.1", "v0.9.0"); !strings.Contains(msg, "brew upgrade heygen") {
+		t.Errorf("message = %q, want the homebrew upgrade command", msg)
+	}
+}
+
+func TestFetchStablePointer(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   string
+	}{
+		{"stable tag", http.StatusOK, "v0.9.1\n", "v0.9.1"},
+		{"dev tag", http.StatusOK, "v0.9.1-dev.202610070000", ""},
+		{"not a tag", http.StatusOK, "<html>", ""},
+		{"oversized", http.StatusOK, "v0.9.1" + strings.Repeat(" ", updatePointerMaxBytes), ""},
+		{"server error", http.StatusInternalServerError, "v0.9.1", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			defer srv.Close()
+			orig := updateStablePointerURL
+			t.Cleanup(func() { updateStablePointerURL = orig })
+			updateStablePointerURL = srv.URL
+
+			got, err := fetchStablePointer(context.Background())
+			if tc.want == "" {
+				if err == nil {
+					t.Errorf("fetchStablePointer() = %q, want an error", got)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Errorf("fetchStablePointer() = %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}

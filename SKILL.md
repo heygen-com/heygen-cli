@@ -156,5 +156,9 @@ heygen video get --response-schema
   local and no update can be offered. Neither command needs an API key.
   If `update_available` is true, tell the user rather than updating unprompted:
   a new CLI version can change command output mid-task.
+- A release build may print `{"notice": {"code": "cli_update_available", ...}}` on stderr,
+  at most once a day, when a newer stable release exists. Treat it like
+  `update_available`: tell the user, do not update unprompted. It is off in CI and
+  with `HEYGEN_NO_UPDATE_CHECK=1`.
 - Video download writes to `{video-id}.mp4` by default. Override with `--output-path`. Errors if the file already exists; use `--force` to overwrite.
 - For the full API reference (concepts, limits, pricing), see https://developers.heygen.com

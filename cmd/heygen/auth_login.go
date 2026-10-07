@@ -114,13 +114,7 @@ var (
 	// us to skip the picker even on a TTY (CI runners, agent shells
 	// that wrap our stdin but still expose a tty, etc).
 	nonInteractiveEnvFunc = func() bool {
-		if v := strings.TrimSpace(os.Getenv("HEYGEN_NONINTERACTIVE")); v != "" && v != "0" && !strings.EqualFold(v, "false") {
-			return true
-		}
-		if v := strings.TrimSpace(os.Getenv("CI")); v != "" && v != "0" && !strings.EqualFold(v, "false") {
-			return true
-		}
-		return false
+		return envTruthy("HEYGEN_NONINTERACTIVE") || envTruthy("CI")
 	}
 )
 

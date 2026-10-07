@@ -10,7 +10,7 @@ func defaultFor(key string) string {
 	switch key {
 	case KeyOutput:
 		return DefaultOutput
-	case KeyAnalytics:
+	case KeyAnalytics, KeyUpdateCheck:
 		return "true"
 	default:
 		return ""
@@ -23,7 +23,7 @@ func (p *LayeredProvider) envSource(key string) (Source, bool) {
 	}
 
 	switch key {
-	case KeyAnalytics:
+	case KeyAnalytics, KeyUpdateCheck:
 		return Source{Value: "false", Origin: "env"}, true
 	case KeyOutput:
 		return Source{Value: p.Env.Output(), Origin: "env"}, true

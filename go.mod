@@ -20,6 +20,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/posthog/posthog-go v1.11.2
 	github.com/spf13/pflag v1.0.9
+	golang.org/x/sys v0.45.0
 	golang.org/x/term v0.43.0
 )
 
@@ -66,7 +67,6 @@ require (
 	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/oauth2 v0.29.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 )
