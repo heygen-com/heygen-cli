@@ -41,9 +41,10 @@ after a rebase, a different commit on `main`, edited notes), ask again.
    its `shasum -a 256`. Dispatch with `-f commit=<that SHA>` so the workflow
    releases exactly that commit. A yes here also covers publishing that file at
    step 9 for this version.
-5. **Replacing the published release notes** (step 9), unless the file's hash
-   still matches one recorded at a stop 4 yes in this session for this version:
-   show the final notes. A lost hash means asking.
+5. **Replacing the published release notes** (step 9), unless re-running
+   `shasum -a 256` on the file then matches the hash recorded at the most recent
+   stop 4 yes in this session for this version: show the final notes. A lost
+   hash means asking.
 6. **Any recovery action** (step 8) that changes the repository or a release:
    deleting a tag or release, dispatching again, or re-running a job. Say which
    job failed, what RELEASE.md prescribes, and what the action will change.
