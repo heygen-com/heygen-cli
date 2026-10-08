@@ -15,9 +15,11 @@ argument-hint: "[stable | dev] (default: stable)"
 skill runs it in order and adds where to stop and what tends to go wrong. When the
 two disagree, RELEASE.md wins, and fix this file.
 
-Work from a fresh fetch of `origin/main`, never from the local `main` checkout,
-which may be behind. Set `LAST_STABLE` exactly as RELEASE.md's pre-release
-checklist shows and keep it for the whole run.
+Work from a fresh fetch, never from the local `main` checkout, which may be
+behind. Set `LAST_STABLE` and `RELEASE_COMMIT` exactly as RELEASE.md's pre-release
+checklist shows and keep them for the whole run: `RELEASE_COMMIT` is what every
+step checks and what stop 4 releases. If a merge at step 2 moves `origin/main`,
+fetch, set `RELEASE_COMMIT` again, and redo from step 1.
 
 ## Stop points
 
@@ -33,8 +35,8 @@ after a rebase, a different commit on `main`), ask again.
    which key to use; do not go looking for one.
 3. **The version** (step 6), whenever step 4 found anything breaking or you are
    unsure between patch and minor.
-4. **Triggering the release workflow.** Show the version, the `origin/main`
-   commit, and the changelog first. Dispatch with `-f commit=<that SHA>` so the
+4. **Triggering the release workflow.** Show the version, `RELEASE_COMMIT`,
+   and the changelog first. Dispatch with `-f commit=<that SHA>` so the
    workflow releases exactly that commit.
 5. **Replacing the published release notes** (step 9): show the final notes.
 6. **Any recovery action** (step 8) that changes the repository or a release:
@@ -80,7 +82,7 @@ Follow RELEASE.md step 3, after any merges from step 2.
 ### 4. Command-surface regressions
 
 Follow RELEASE.md step 4 and its [Checking for Regressions](../../../RELEASE.md#checking-for-regressions)
-section, against `origin/main` after the merges. Read every `<` line with the
+section, against `RELEASE_COMMIT`. Read every `<` line with the
 table there. The `deprecated` check matches loosely: a hit whose help text only
 mentions a deprecated *value* (for example an enum alias) is a false positive;
 say so rather than putting it in the notes.

@@ -53,6 +53,22 @@ jobs:
             echo "commit $COMMIT is not on main" >&2
             exit 1
           fi
+          if [[ "$(git rev-parse HEAD)" != "$COMMIT" ]]; then
+            echo "checked out $(git rev-parse HEAD), not $COMMIT" >&2
+            exit 1
+          fi
+          # An older commit would ship older code under a newer version.
+          last_stable="$(git tag --list 'v*' --sort=-v:refname | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | head -n 1)"
+          if [[ -n "$last_stable" ]] && ! git merge-base --is-ancestor "$last_stable" "$COMMIT"; then
+            echo "commit $COMMIT is older than the last stable release $last_stable" >&2
+            exit 1
+          fi
+          # The rest of this job and the cleanup job run the pinned commit's release
+          # scripts and GoReleaser config under this workflow file, so they must match it.
+          if ! git diff --quiet "$COMMIT" "$GITHUB_SHA" -- .github/scripts .goreleaser.yaml; then
+            echo "commit $COMMIT has different release scripts or GoReleaser config than this workflow ($GITHUB_SHA); release a newer commit" >&2
+            exit 1
+          fi
 
       # Go version comes from go.mod's `go` directive; see ci.yml for why it lives there.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
