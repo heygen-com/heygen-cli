@@ -6,7 +6,7 @@ description: |
   pick the version, write the changelog, trigger the release workflow, publish
   the notes, and verify the installer. Stops for the user at every decision.
   Use when asked to "cut a release", "ship a new version", or "release the CLI".
-argument-hint: "[stable | dev] (default: stable)"
+  Takes "stable" (the default) or "dev" as an optional argument.
 ---
 
 # Release the heygen CLI
@@ -89,7 +89,7 @@ say so rather than putting it in the notes.
 
 ### 5. E2E smoke test (stop point 2)
 
-With the user's key, run `/e2e-cli-test` (see its skill). All phases must pass; a
+With the user's key, run the `e2e-cli-test` skill. All phases must pass; a
 Phase 3 WARN means the account lacks data, so check that the skipped commands'
 lists really are empty before calling it fine.
 
@@ -100,7 +100,7 @@ capability mean a minor bump; anything breaking from step 4 is at least a minor.
 
 ### 7. Changelog
 
-Run `/changelog-cli <version>` (see its skill). Then check every flag and command
+Run the `changelog-cli` skill with the version. Then check every flag and command
 it names against `gen/`: a flag that already existed in `LAST_STABLE` is not new.
 Put step 4's breaking or deprecated findings at the top, as RELEASE.md says.
 Save the notes to a file; you will publish them after the release.
