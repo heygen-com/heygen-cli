@@ -26,8 +26,9 @@ fetch, set `RELEASE_COMMIT` again, and redo from step 1.
 Stop and ask the user before each of these, with what you found and a
 recommendation. Never proceed on a guess. Each stop needs an explicit yes for
 that specific action, in this session: the original request, a yes at an earlier
-stop, or silence does not count. If the action changes after the yes (a new head
-after a rebase, a different commit on `main`), ask again.
+stop, or silence does not count. The one exception is stop 4, whose yes also
+covers publishing its notes. If the action changes after the yes (a new head
+after a rebase, a different commit on `main`, edited notes), ask again.
 
 1. **Changing any open PR** before the release (step 2): pushing to it (examples
    for a sync PR, a rebase onto `main`), approving it, or merging it.
@@ -36,9 +37,14 @@ after a rebase, a different commit on `main`), ask again.
 3. **The version** (step 6), whenever step 4 found anything breaking or you are
    unsure between patch and minor.
 4. **Triggering the release workflow.** Show the version, `RELEASE_COMMIT`,
-   and the changelog first. Dispatch with `-f commit=<that SHA>` so the
-   workflow releases exactly that commit.
-5. **Replacing the published release notes** (step 9): show the final notes.
+   and the notes file step 9 will publish (a dev release has none), and record
+   its `shasum -a 256`. Dispatch with `-f commit=<that SHA>` so the workflow
+   releases exactly that commit. A yes here also covers publishing that file at
+   step 9 for this version.
+5. **Replacing the published release notes** (step 9), unless re-running
+   `shasum -a 256` on the file then matches the hash recorded at the most recent
+   stop 4 yes in this session for this version: show the final notes. A lost
+   hash means asking.
 6. **Any recovery action** (step 8) that changes the repository or a release:
    deleting a tag or release, dispatching again, or re-running a job. Say which
    job failed, what RELEASE.md prescribes, and what the action will change.
@@ -119,10 +125,10 @@ Do not delete tags or releases by hand unless that section says to.
 ### 9. After the release
 
 Follow RELEASE.md's "Post-release": confirm the release is published, replace its
-body with the saved notes once the user approves them (stop point 5) and read it
-back, and verify the installer into a scratch directory rather than over the
-user's own `heygen`. `install.sh` reads `INSTALL_DIR`, so it goes on `bash`, not
-`curl`: `d=$(mktemp -d); curl -fsSL https://static.heygen.ai/cli/install.sh | INSTALL_DIR="$d" bash`,
+body with the notes file from stop 4 (`gh release edit <version> --notes-file
+<file>`; stop point 5 unless its hash still matches) and read it back, and verify
+the installer into a scratch directory rather than over the user's own `heygen`.
+`install.sh` reads `INSTALL_DIR`, so it goes on `bash`, not `curl`: `d=$(mktemp -d); curl -fsSL https://static.heygen.ai/cli/install.sh | INSTALL_DIR="$d" bash`,
 then run `"$d/heygen" --version`.
 
 ## Dev release
