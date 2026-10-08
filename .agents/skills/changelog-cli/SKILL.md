@@ -3,13 +3,13 @@ name: changelog-cli
 description: |
   Generate a user-facing changelog for the next stable release. Reads git log
   between the last stable tag and HEAD, categorizes changes, and outputs
-  formatted release notes. Use before triggering a stable release.
-argument-hint: "[version, e.g. v0.0.6]"
+  formatted release notes. Use before triggering a stable release. Takes the
+  version as an optional argument (for example v0.0.6).
 ---
 
 # Changelog Generator
 
-Step 7 of the release; `/release-cli` runs it for you. It also works on its own.
+Step 7 of the release; the `release-cli` skill runs it for you. It also works on its own.
 
 Generate release notes for a stable release by summarizing git commits since
 the last stable tag.
@@ -32,7 +32,7 @@ git log "${LAST_STABLE}..origin/main" --oneline
 git log origin/main --oneline
 ```
 
-If a version argument was provided (e.g., `/changelog-cli v0.0.6`), use it as
+If a version argument was provided (e.g. `v0.0.6`), use it as
 the heading. Otherwise, infer the next version by bumping the patch of
 `$LAST_STABLE` (or use `v0.1.0` if no stable tag exists).
 

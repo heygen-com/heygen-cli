@@ -211,7 +211,7 @@ heygen config list       # show all settings with sources
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md). Maintainers using Claude Code can run the release, E2E, and changelog workflows as skills; see [.claude/skills/README.md](.claude/skills/README.md).
+See [CONTRIBUTING.md](./CONTRIBUTING.md). Maintainers using a coding agent such as Claude Code or Codex can run the release, E2E, and changelog workflows as skills; see [.agents/skills/README.md](.agents/skills/README.md).
 
 ## License
 

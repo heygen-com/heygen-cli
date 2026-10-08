@@ -41,7 +41,7 @@ Codegen hard-fails, rather than emitting a plausible-but-wrong name, on four spe
 Reach for `nameOverrides` in `codegen/grouper.go` only when the derived *verb* is semantically wrong (`POST /v3/templates/{template_id}` is `generate`, not `create`), never to tell two resources apart. An override replaces the terminal verb; derived sub-groups are preserved. When two endpoints still produce the same name, codegen fails with a clear error.
 
 ### New list commands
-When adding a list endpoint, verify: verb is `list` not `get` (use `nameOverrides` if the heuristic gets it wrong), `Paginated` is set if the API supports `limit`/`token`, add curated `--human` columns in `cmd/heygen/columns.go`, and add the new command to `.claude/skills/e2e-cli-test/SKILL.md` (Phase 2 for list, Phase 3 for get/detail).
+When adding a list endpoint, verify: verb is `list` not `get` (use `nameOverrides` if the heuristic gets it wrong), `Paginated` is set if the API supports `limit`/`token`, add curated `--human` columns in `cmd/heygen/columns.go`, and add the new command to `.agents/skills/e2e-cli-test/SKILL.md` (Phase 2 for list, Phase 3 for get/detail).
 
 ### Errors
 - All command errors must be `*CLIError`. Use `clierrors.New()` (exit 1), `clierrors.NewAuth()` (exit 3), `clierrors.NewUsage()` (exit 2).
@@ -76,10 +76,10 @@ Data(v json.RawMessage, dataField string, columns []command.Column) error
 - Command tests: use `runCommand()` in `cmd/heygen/testutil_test.go`. It creates a fresh Cobra tree, captures stdout/stderr/exit code, and renders errors through the formatter.
 - Use `t.Setenv()` for env vars (auto-restored).
 - Assert on exit codes (0/1/2/3/4) **and** stderr envelope shape, not just error presence.
-- **Pre-release E2E**: Run `/e2e-cli-test` in Claude Code before cutting a stable release. It exercises the built binary against the live API. Requires `HEYGEN_API_KEY` and spends a small number of credits. See `.claude/skills/e2e-cli-test/SKILL.md` for details.
+- **Pre-release E2E**: Run the `e2e-cli-test` skill before cutting a stable release. It exercises the built binary against the live API. Requires `HEYGEN_API_KEY` and spends a small number of credits. See `.agents/skills/e2e-cli-test/SKILL.md` for details.
 
 ### Releasing
-To cut a release, run `/release-cli` (`.claude/skills/release-cli/SKILL.md`). It follows [RELEASE.md](./RELEASE.md) step by step and stops for an explicit yes at each of its six stop points (changing a PR, running E2E, a breaking version, triggering a release, publishing notes, and any recovery action) and before anything else visible outside the machine. Never trigger `release-stable.yml` or `dev-release.yml` without that confirmation, and never bypass branch protection. All maintainer skills are listed in [.claude/skills/README.md](.claude/skills/README.md).
+To cut a release, run the `release-cli` skill (`.agents/skills/release-cli/SKILL.md`). It follows [RELEASE.md](./RELEASE.md) step by step and stops for an explicit yes at each of its six stop points (changing a PR, running E2E, a breaking version, triggering a release, publishing notes, and any recovery action) and before anything else visible outside the machine. Never trigger `release-stable.yml` or `dev-release.yml` without that confirmation, and never bypass branch protection. All maintainer skills are listed in [.agents/skills/README.md](.agents/skills/README.md); they use the open Agent Skills format, so they work in Claude Code and Codex alike.
 
 ### Documentation
 When a change affects user-facing behavior, update the relevant doc:
