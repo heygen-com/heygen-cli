@@ -52,8 +52,11 @@ Every third-party GitHub Action and every tool these workflows download is fixed
 2. Trigger the GitHub Actions workflow:
 
 ```bash
-gh workflow run dev-release.yml
+git fetch --tags origin
+gh workflow run dev-release.yml -f commit="$(git rev-parse origin/main)"
 ```
+
+`commit` is optional here too, with the same meaning and limits as for stable releases.
 
 3. Wait for the workflow to finish.
 4. Verify a new prerelease was published for the computed dev tag.
@@ -63,50 +66,53 @@ gh workflow run dev-release.yml
 
 ### Pre-release checklist
 
-Every step compares against `origin/main` and the last stable tag, so start from a fetched checkout:
+Every step compares the commit you will release against the last stable tag, so start from a fetched checkout:
 
 ```bash
 git fetch --tags origin
 LAST_STABLE=$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+RELEASE_COMMIT=$(git rev-parse origin/main)
 ```
 
-Keep `$LAST_STABLE` set for the rest of the checklist; steps 4 and 6 reuse it. It filters to release tags, so a run of `-dev.*` prereleases can't shadow the stable one.
+Keep both set for the rest of the checklist. `$LAST_STABLE` filters to release tags, so a run of `-dev.*` prereleases can't shadow the stable one. `$RELEASE_COMMIT` is the commit every step checks and the trigger releases; if a PR merges during the checklist, fetch, set it again, and redo the steps before that point.
 
 1. **Review commits since last stable.** Check what's new and confirm nothing is half-finished:
    ```bash
-   git log "$LAST_STABLE"..origin/main --oneline
+   git log "$LAST_STABLE".."$RELEASE_COMMIT" --oneline
    ```
 2. **Check open PRs.** Decide if any should merge first (e.g. pending codegen resyncs, small fixes):
    ```bash
    gh pr list --state open
    ```
-3. **Confirm CI is green on main.** All checks should pass on the latest commit.
+3. **Confirm CI is green on main.** All checks should pass on `$RELEASE_COMMIT`.
 4. **Diff the generated command surface for regressions.** See [Checking for Regressions](#checking-for-regressions) below. Required on every stable release, not just ones that look risky — a resync that breaks the CLI looks identical in `git log` to one that doesn't. It covers `gen/` only; hand-written commands in `cmd/heygen/` are reviewed the normal way, through their PRs.
-5. **Run E2E smoke test.** With `HEYGEN_API_KEY` set, run `/e2e-cli-test` in Claude Code from the repo root. Confirm all phases pass (no FAIL). WARN on Phase 3 means the account lacks data for some get/detail commands and should be investigated. This builds the binary and exercises it against the live API (costs a small number of credits).
+5. **Run E2E smoke test.** With `HEYGEN_API_KEY` set, run `/e2e-cli-test` in Claude Code from the repo root. Confirm all phases pass (no FAIL). WARN on Phase 3 means the account lacks data for some get/detail commands and should be investigated. This builds the binary and exercises it against the live API (costs a small number of credits), so run it from a checkout of `$RELEASE_COMMIT` (`git switch --detach "$RELEASE_COMMIT"`).
 6. **Pick the version number.** Check the last stable tag and bump according to the rules below:
    - Patch (`v0.0.x`) for bug fixes, UX polish, codegen resyncs, and additive schema changes.
    - Minor (`v0.x.0`) for new command groups, significant new capabilities, or **any breaking surface change found in step 4** — a resync is only a patch when it is purely additive.
    ```bash
    echo "$LAST_STABLE"
    ```
-7. **Generate changelog.** Run `/changelog-cli v0.x.y` in Claude Code. Review the output and save it for the release notes. The skill reads `git log`, so it cannot see the step 4 findings — add those to the release notes yourself, at the top, under **Breaking changes** if any was breaking and **Deprecated** otherwise.
+7. **Generate changelog.** Run `/changelog-cli v0.x.y` in Claude Code. It reads `origin/main`, so first confirm `git rev-parse origin/main` still prints `$RELEASE_COMMIT`. Review the output and save it for the release notes. The skill reads `git log`, so it cannot see the step 4 findings — add those to the release notes yourself, at the top, under **Breaking changes** if any was breaking and **Deprecated** otherwise.
 
 ### Trigger the release
 
 From the CLI:
 
 ```bash
-gh workflow run release-stable.yml -f version=v0.0.5
+gh workflow run release-stable.yml -f version=v0.0.5 -f commit="$RELEASE_COMMIT"
 ```
 
-Or from the GitHub Actions UI: go to **Actions > Stable Release > Run workflow**, enter the version tag, and click **Run workflow**.
+Or from the GitHub Actions UI: go to **Actions > Stable Release > Run workflow**, enter the version tag and the commit, and click **Run workflow**.
+
+`commit` pins the release to the commit you checked. Without it the workflow releases `main` as it is when the job starts, which can include anything merged after you looked. The workflow refuses a commit that is not on `main`, that is older than the last stable release, or whose `.github/scripts` or `.goreleaser.yaml` differ from `main`'s, since the workflow runs those files from the pinned commit.
 
 ### If the release fails
 
 The workflow runs `release` (tag, then GoReleaser, which creates the GitHub release as a draft), then `publish-release` (publishes it), then `publish-cdn`, with `cleanup-failed-release` only when `release` fails. Where it fails decides the recovery:
 
-- **`release` fails or is cancelled** after pushing the tag: the `cleanup-failed-release` job deletes the tag and any draft release GoReleaser left, so dispatch the workflow again once the cause is fixed. A re-dispatch builds `main` as it is then. If the cleanup job itself fails partway, re-run that job alone (not "Re-run failed jobs", which reruns `release` and stops at the existing tag); it reuses the original run's tag and commit and is safe to repeat.
-- **The cleanup refuses** because a release for the tag is published or is a draft from another run, the tag is not the one that run created, or the API gave an unclear answer: it deletes nothing. Each run marks its draft with its run ID, and only that run's drafts are ever deleted or published. Check the release. If it is incomplete, delete it and its tag with `gh release delete <version> --cleanup-tag` and dispatch again; if it is complete, the CDN still needs publishing, so ask someone with access to the release bucket.
+- **`release` fails or is cancelled** after pushing the tag: the `cleanup-failed-release` job deletes the tag and any draft release GoReleaser left, so dispatch the workflow again once the cause is fixed, with the same `commit` the failed run used. Without it, a re-dispatch releases `main` as it is then, which may include commits nobody checked. If the cleanup job itself fails partway, re-run that job alone (not "Re-run failed jobs", which reruns `release` and stops at the existing tag); it reuses the original run's tag and commit and is safe to repeat.
+- **The cleanup refuses** because a release for the tag is published or is a draft from another run, the tag is not the one that run created, or the API gave an unclear answer: it deletes nothing. Each run marks its draft with its run ID, and only that run's drafts are ever deleted or published. Check the release. If it is incomplete, delete it and its tag with `gh release delete <version> --cleanup-tag` and dispatch again with the original `commit`; if it is complete, the CDN still needs publishing, so ask someone with access to the release bucket.
 - **`publish-release` fails or is cancelled**: the draft stays a draft, and nobody can see it yet. Re-run `publish-release` (and `publish-cdn` after it) rather than dispatching again; publishing an already-published release is a no-op.
 - **`publish-cdn` fails** (AWS credentials or the S3 upload): the GitHub release is already public and stays. Use **Re-run failed jobs**; the job downloads that release's assets, checks them against its `checksums.txt`, and publishes them. The stable pointer is written last, so until it succeeds the CDN keeps serving the previous version.
 
@@ -139,7 +145,7 @@ for the install script.
 `gen/` is generated from HeyGen's OpenAPI spec, which lives upstream. A resync lands as one `codegen: resync gen/ from EF <sha>` commit and `/changelog-cli` files it under Internal — so the commit log and the changelog, the two things a releaser reads, are exactly where a breaking change is invisible. Diff the generated surface instead. This covers `gen/` only; hand-written commands in `cmd/heygen/` and the hidden-endpoint list in `internal/command/hidden.go` are reviewed through their own PRs.
 
 ```bash
-scripts/release-surface.sh diff "$LAST_STABLE" origin/main
+scripts/release-surface.sh diff "$LAST_STABLE" "$RELEASE_COMMIT"
 ```
 
 The script reduces `gen/` at both refs to the fields that decide what a user can type, then diffs the two. It filters with an allowlist, since a field left out is invisible forever; `codegen/surface_allowlist_test.go` fails the build if codegen gains a field the allowlist misses, so the list cannot rot. Request and response schemas are compared by presence rather than content: their bodies churn on every resync, but whether a command *has* one decides whether `--request-schema` and `--response-schema` exist. gofmt's alignment padding is stripped before the comparison too, so re-padding a struct — which happens whenever a field with a longer name is added — is invisible rather than reported as every field being removed.
@@ -163,7 +169,7 @@ Additions are usually safe, with two exceptions that show up only as `>` lines: 
 Finally, a flag can stop doing anything without changing shape at all, which the diff above cannot see because it excludes help text:
 
 ```bash
-scripts/release-surface.sh deprecated "$LAST_STABLE" origin/main
+scripts/release-surface.sh deprecated "$LAST_STABLE" "$RELEASE_COMMIT"
 ```
 
 Each line names a command and the flag that went quiet, e.g. `video-translate create --enable-caption`. It matches loosely on purpose; a false positive is obvious once you can see which flag it named. A real hit belongs in the release notes, because a user whose script sets that flag gets no error and no warning — just different output than they asked for.
