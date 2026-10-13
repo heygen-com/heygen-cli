@@ -87,6 +87,10 @@ var nameOverrides = map[string]string{
 	// endpoint in the API (templates are authored in the HeyGen app), so "create"
 	// would imply a capability that doesn't exist.
 	"POST /v3/templates/{template_id}": "generate",
+	// POST /v3/videos/{video_id} edits an existing video's scenes and re-renders
+	// it under the same id; it does not create a video. Without this, it
+	// conflicts with POST /v3/videos (create).
+	"POST /v3/videos/{video_id}": "edit",
 }
 
 // groupPrimaryRoots pins the path root that restates a group, for the groups
