@@ -23,3 +23,10 @@
     cmd: "heygen video get <video-id>"
   - desc: "See the full scene shape. A whole-frame image or clip is the scene's background, not one of its elements, so reading only elements misses it"
     cmd: "heygen video scenes get --response-schema"
+"POST /v3/videos/{video_id}":
+  - desc: "Change one line of narration and re-render under the same video id. Take edit_version and the scene and line ids from 'video scenes get'"
+    cmd: "heygen video edit <video-id> --idempotency-key <uuid> -d '{\"edit_version\":\"<edit-version>\",\"scenes\":[{\"id\":\"<scene-id>\",\"script\":[{\"id\":\"<line-id>\",\"type\":\"text\",\"text\":\"Hello again\"}]}]}'"
+  - desc: "Remove a scene. Reuse the same --idempotency-key only to retry this exact request"
+    cmd: "heygen video edit <video-id> --idempotency-key <uuid> -d '{\"edit_version\":\"<edit-version>\",\"actions\":[{\"type\":\"delete_scene\",\"scene_id\":\"<scene-id>\"}]}'"
+  - desc: "See all available request fields"
+    cmd: "heygen video edit --request-schema"

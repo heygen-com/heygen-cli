@@ -670,6 +670,40 @@ func TestDeriveCommandName_OverrideNested(t *testing.T) {
 	}
 }
 
+const videoCreateAndEditSpec = `
+openapi: 3.0.0
+info: {title: t, version: "1"}
+paths:
+  /v3/videos:
+    post: {tags: [Videos], summary: Create a video, responses: {"200": {description: OK}}}
+  /v3/videos/{video_id}:
+    post:
+      tags: [Videos]
+      summary: Edit a video
+      parameters:
+        - {name: video_id, in: path, required: true, schema: {type: string}}
+      responses: {"200": {description: OK}}
+`
+
+// Both POSTs derive "create", so codegen fails on the edit endpoint without its override.
+func TestGroupEndpoints_VideoEditDoesNotCollideWithCreate(t *testing.T) {
+	doc, err := openapi3.NewLoader().LoadFromData([]byte(videoCreateAndEditSpec))
+	if err != nil {
+		t.Fatalf("loading inline spec: %v", err)
+	}
+	groups, _, err := GroupEndpoints(doc, Examples{})
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	names := map[string]string{}
+	for _, s := range groups["video"] {
+		names[s.Method+" "+s.Endpoint] = s.Name
+	}
+	if names["POST /v3/videos/{video_id}"] != "edit" || names["POST /v3/videos"] != "create" {
+		t.Fatalf("video commands = %v, want edit and create", names)
+	}
+}
+
 func TestValidateCommandNames_DetectsConflict(t *testing.T) {
 	groups := command.Groups{
 		"widget": {
