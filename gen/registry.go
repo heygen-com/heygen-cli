@@ -87,6 +87,8 @@ var Groups = map[string][]*command.Spec{
 		ModelAudioVoicesDelete,
 		ModelAudioVoicesGet,
 		ModelAudioVoicesList,
+		ModelImagesCreate,
+		ModelImagesGet,
 		ModelVideosCreate,
 		ModelVideosGet,
 	},
