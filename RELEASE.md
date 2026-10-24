@@ -29,8 +29,8 @@ Two properties of the directive are load-bearing for releases, and `cmd/heygen/g
 enforces both:
 
 - **It must carry a patch component.** `setup-go` matches its input as a semver range, so
-  `go 1.25.13` installs exactly that patch while a two-component `go 1.26` installs the latest
-  `1.26.x` available at build time. The second form makes a release non-reproducible: rebuilding the
+  `go 1.26.10` installs exactly that patch while a two-component `go 1.27` installs the latest
+  `1.27.x` available at build time. The second form makes a release non-reproducible: rebuilding the
   same tag later can link a different stdlib.
 - **`go.mod` must not contain a `toolchain` directive.** `setup-go` prefers it over the `go`
   directive, so a `toolchain` line silently decides what ships while `go` still appears to. Go
