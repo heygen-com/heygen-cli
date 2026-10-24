@@ -3,11 +3,18 @@
     cmd: "heygen model audio tts create --voice-id <voice-id> --text 'Hello from HeyGen.' --language en"
   - desc: "Reuse a seed for best-effort consistency across runs"
     cmd: "heygen model audio tts create --voice-id <voice-id> --text 'Hello from HeyGen.' --language en --seed 42"
+"POST /v3/models/audio/sts":
+  - desc: "Re-speak a recording in one of your instant voices, keeping its words and timing"
+    cmd: "heygen model audio sts create --voice-id <voice-id> -d '{\"audio\":{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}}'"
+  - desc: "Clean background noise from a URL source first, with an idempotency key for retries"
+    cmd: "heygen model audio sts create --voice-id <voice-id> --remove-background-noise --idempotency-key <unique-key> -d '{\"audio\":{\"type\":\"url\",\"url\":\"https://example.com/speech.mp3\"}}'"
 "POST /v3/models/audio/voices":
+  - desc: "Create an instant voice from one recording"
+    cmd: "heygen model audio voices create -d '{\"mode\":\"instant\",\"name\":\"Narrator\",\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'"
   - desc: "Train a professional voice from uploaded recordings (at least 20 minutes of audio)"
-    cmd: "heygen model audio voices create --name 'Narrator' --language en --mode professional -d '{\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'"
-  - desc: "Retrain an existing voice, keeping its id, name, language, and mode"
-    cmd: "heygen model audio voices create --voice-id <voice-id> -d '{\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'"
+    cmd: "heygen model audio voices create -d '{\"mode\":\"professional\",\"name\":\"Narrator\",\"language\":\"en\",\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'"
+  - desc: "Retrain an existing professional voice, keeping its id, name, and language"
+    cmd: "heygen model audio voices create -d '{\"mode\":\"professional\",\"voice_id\":\"<voice-id>\",\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'"
 "GET /v3/models/audio/voices":
   - desc: "List the workspace's audio voices, newest first"
     cmd: "heygen model audio voices list --limit 10"
@@ -17,6 +24,14 @@
 "DELETE /v3/models/audio/voices/{voice_id}":
   - desc: "Delete a voice (rejected while its status is PENDING)"
     cmd: "heygen model audio voices delete <voice-id>"
+"POST /v3/models/images":
+  - desc: "Generate a portrait that keeps one person's identity and follows a reference image's pose, clothing, and background"
+    cmd: "heygen model images create --model heygen-image-1 -d '{\"identity_images\":[{\"type\":\"asset_id\",\"asset_id\":\"<identity-asset-id>\"}],\"reference_images\":[{\"type\":\"asset_id\",\"asset_id\":\"<reference-asset-id>\"}]}'"
+  - desc: "Generate four variations at 9:16 with a fixed starting seed"
+    cmd: "heygen model images create --model heygen-image-1 --num-images 4 --aspect-ratio 9:16 --seed 42 -d '{\"identity_images\":[{\"type\":\"asset_id\",\"asset_id\":\"<identity-asset-id>\"}],\"reference_images\":[{\"type\":\"asset_id\",\"asset_id\":\"<reference-asset-id>\"}]}'"
+"GET /v3/models/images/{generation_id}":
+  - desc: "Poll a generation until completed, failed, or cancelled"
+    cmd: "heygen model images get <generation-id>"
 "POST /v3/models/videos":
   - desc: "Generate an Instant Video from a text prompt"
     cmd: "heygen model videos create -d '{\"model\":\"heygen-video-1\",\"mode\":\"text_to_video\",\"prompt\":\"A person walking through a garden\",\"duration\":5,\"resolution\":\"768p\"}'"

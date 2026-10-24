@@ -14,6 +14,10 @@ var ModelAudioStsCreate = &command.Spec{
 	Endpoint:       "/v3/models/audio/sts",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Re-speak a recording in one of your instant voices, keeping its words and timing\n  heygen model audio sts create --voice-id <voice-id> -d '{\"audio\":{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}}'",
+		"# Clean background noise from a URL source first, with an idempotency key for retries\n  heygen model audio sts create --voice-id <voice-id> --remove-background-noise --idempotency-key <unique-key> -d '{\"audio\":{\"type\":\"url\",\"url\":\"https://example.com/speech.mp3\"}}'",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "idempotency-key",
@@ -238,8 +242,9 @@ var ModelAudioVoicesCreate = &command.Spec{
 	Method:        "POST",
 	BodyEncoding:  "json",
 	Examples: []string{
-		"# Train a professional voice from uploaded recordings (at least 20 minutes of audio)\n  heygen model audio voices create --name 'Narrator' --language en --mode professional -d '{\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'",
-		"# Retrain an existing voice, keeping its id, name, language, and mode\n  heygen model audio voices create --voice-id <voice-id> -d '{\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'",
+		"# Create an instant voice from one recording\n  heygen model audio voices create -d '{\"mode\":\"instant\",\"name\":\"Narrator\",\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'",
+		"# Train a professional voice from uploaded recordings (at least 20 minutes of audio)\n  heygen model audio voices create -d '{\"mode\":\"professional\",\"name\":\"Narrator\",\"language\":\"en\",\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'",
+		"# Retrain an existing professional voice, keeping its id, name, and language\n  heygen model audio voices create -d '{\"mode\":\"professional\",\"voice_id\":\"<voice-id>\",\"audio\":[{\"type\":\"asset_id\",\"asset_id\":\"<asset-id>\"}]}'",
 	},
 	Flags: []command.FlagSpec{
 		{
@@ -354,6 +359,10 @@ var ModelImagesCreate = &command.Spec{
 	Endpoint:      "/v3/models/images",
 	Method:        "POST",
 	BodyEncoding:  "json",
+	Examples: []string{
+		"# Generate a portrait that keeps one person's identity and follows a reference image's pose, clothing, and background\n  heygen model images create --model heygen-image-1 -d '{\"identity_images\":[{\"type\":\"asset_id\",\"asset_id\":\"<identity-asset-id>\"}],\"reference_images\":[{\"type\":\"asset_id\",\"asset_id\":\"<reference-asset-id>\"}]}'",
+		"# Generate four variations at 9:16 with a fixed starting seed\n  heygen model images create --model heygen-image-1 --num-images 4 --aspect-ratio 9:16 --seed 42 -d '{\"identity_images\":[{\"type\":\"asset_id\",\"asset_id\":\"<identity-asset-id>\"}],\"reference_images\":[{\"type\":\"asset_id\",\"asset_id\":\"<reference-asset-id>\"}]}'",
+	},
 	Flags: []command.FlagSpec{
 		{
 			Name:     "idempotency-key",
@@ -439,6 +448,9 @@ var ModelImagesGet = &command.Spec{
 	Endpoint:       "/v3/models/images/{generation_id}",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# Poll a generation until completed, failed, or cancelled\n  heygen model images get <generation-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "generation-id", Param: "generation_id", Help: ""},
 	},

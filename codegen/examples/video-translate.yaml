@@ -15,9 +15,6 @@
 "DELETE /v3/video-translations/{video_translation_id}":
   - desc: "Delete a translation"
     cmd: "heygen video-translate delete <video-translation-id>"
-"GET /v3/video-translations/{video_translation_id}/caption":
-  - desc: "Download caption as SRT"
-    cmd: "heygen video-translate caption get <video-translation-id> --format srt"
 "GET /v3/video-translations/languages":
   - desc: "List supported languages"
     cmd: "heygen video-translate languages list"
