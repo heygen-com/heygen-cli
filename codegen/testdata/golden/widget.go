@@ -117,6 +117,7 @@ var WidgetDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Deprecated:     true,
 	Args: []command.ArgSpec{
 		{Name: "widget-id", Param: "widget_id", Help: ""},
 	},

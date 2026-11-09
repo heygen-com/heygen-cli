@@ -17,6 +17,10 @@ func TestIsHiddenCommand(t *testing.T) {
 	if !lower.IsHidden() {
 		t.Error("method match should be case-insensitive")
 	}
+	deprecated := &command.Spec{Group: "video", Name: "list", Method: "GET", Endpoint: "/v3/videos", Deprecated: true}
+	if !deprecated.IsHidden() {
+		t.Error("a deprecated command should be hidden")
+	}
 	visible := &command.Spec{Group: "video", Name: "list", Method: "GET", Endpoint: "/v3/videos"}
 	if visible.IsHidden() {
 		t.Error("GET /v3/videos should not be hidden")

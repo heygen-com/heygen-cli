@@ -52,6 +52,12 @@ type Spec struct {
 	RequestSchema  string     // underlying API request body JSON schema for --request-schema
 	ResponseSchema string     // underlying API response JSON schema for --response-schema
 
+	// Deprecated mirrors OpenAPI `deprecated` on the operation. The command
+	// stays registered and runnable, since removing it would break scripts
+	// that already call it, but it is hidden from help and running it prints
+	// a warning on stderr.
+	Deprecated bool
+
 	// HTTP identity (used by executor)
 	Endpoint     string // "/v3/videos/{video_id}" — template with placeholders
 	Method       string // "GET", "POST", "PUT", "PATCH", "DELETE"

@@ -204,6 +204,7 @@ paths:
     get:
       tags: [Video Translate]
       summary: List dubs
+      deprecated: true
       responses:
         "200":
           description: OK
