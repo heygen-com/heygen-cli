@@ -126,6 +126,10 @@ Neither may touch stdout. Anything landing there corrupts the JSON response an a
 
 `deprecated` says only "don't use this", never why: some deprecated fields are live aliases (`brand_voice_id` resolves to `brand_glossary_id`), others are no-ops the API ignores (`enable_caption`). The warning is generic for that reason, and the field's own description carries the specifics via `--request-schema`.
 
+**Deprecated commands** (an operation the API still serves but no longer advertises): spec-driven, like deprecated flags. When the operation carries `deprecated: true`, codegen sets `Spec.Deprecated`, and the command stays registered and runnable but is hidden from help (`Spec.IsHidden`), its own `--help` leads with the notice, and running it prints a warning on stderr. A group whose commands are all deprecated hides too. To point users at a successor, add the operation to `deprecatedCommandReplacements` in `cmd/heygen/deprecated_commands.go`; the spec has no field for it.
+
+This is the non-breaking way to retire a command. Marking the operation `x-cli-visible: false` instead stops codegen from generating it at all, so it disappears and every script calling it exits 2.
+
 ## Git Conventions
 
 See [.github/GIT_CONVENTIONS.md](.github/GIT_CONVENTIONS.md) for branch names, commit messages, and PR title format.

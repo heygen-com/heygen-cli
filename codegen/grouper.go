@@ -433,6 +433,7 @@ func buildSpec(
 		Examples:       examples[method+" "+path],
 		RequestSchema:  schemaJSON(bodySchemaRef(op, contentType)),
 		ResponseSchema: schemaJSON(successResponseSchemaRef(op)),
+		Deprecated:     op.Deprecated,
 	}
 
 	// Body encoding

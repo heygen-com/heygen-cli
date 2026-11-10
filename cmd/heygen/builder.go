@@ -31,6 +31,9 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 	if spec.BodyEncoding == "json" && !hasBodyFlags(spec) {
 		description += "\n\nUse --request-schema to see all available request fields."
 	}
+	if spec.Deprecated {
+		description = "Deprecated: " + deprecatedCommandNotice(spec) + ".\n\n" + description
+	}
 
 	cmd := &cobra.Command{
 		Use:     buildUseLine(spec),
@@ -79,6 +82,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 			// After the schema short-circuit, and after -d is parsed so the raw
 			// body is covered too: --request-schema is introspection, not a
 			// call, so it should not warn about fields it never sends.
+			warnDeprecatedCommand(spec, ctx.formatter)
 			warnDeprecatedFlags(cmd, spec, parsedData, ctx.formatter)
 
 			inv, err := spec.BuildInvocation(cmd, args, parsedData)

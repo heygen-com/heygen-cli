@@ -1,6 +1,7 @@
 package main
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -915,6 +916,25 @@ func TestGroupEndpoints_BodyFlagsCarryDeprecated(t *testing.T) {
 	}
 	if !sawControl {
 		t.Error("fps control flag not found on video create")
+	}
+}
+
+// An operation-level `deprecated` reaches the Spec, which is what hides the
+// command and makes it warn. `create` in the same group is the control, so a
+// marker applied to the whole group rather than the tagged operation goes red.
+func TestGroupEndpoints_OperationCarriesDeprecated(t *testing.T) {
+	doc := loadGroupTestSpec(t)
+	groups, _, err := GroupEndpoints(doc, loadTestExamples(t))
+	if err != nil {
+		t.Fatalf("GroupEndpoints: %v", err)
+	}
+	got := map[string]bool{}
+	for _, s := range groups["video-translate"] {
+		got[s.Name] = s.Deprecated
+	}
+	want := map[string]bool{"dubs list": true, "create": false}
+	if !maps.Equal(got, want) {
+		t.Errorf("video-translate Deprecated by command = %v, want %v", got, want)
 	}
 }
 

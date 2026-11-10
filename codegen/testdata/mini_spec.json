@@ -136,6 +136,7 @@
       "delete": {
         "tags": ["Widgets"],
         "summary": "Delete a widget",
+        "deprecated": true,
         "operationId": "deleteWidget",
         "parameters": [
           {

@@ -156,7 +156,7 @@ Empty output means the surface is unchanged. The script exits non-zero and says 
 
 | A `<` line showing... | Effect | Action |
 |---|---|---|
-| a command or flag `Name` gone | `unknown command` / `unknown flag`, exit 2 | For a command, re-register the old path in `cmd/heygen/aliases.go`. There is no flag equivalent, so call it out. |
+| a command or flag `Name` gone | `unknown command` / `unknown flag`, exit 2 | For a renamed command, re-register the old path in `cmd/heygen/aliases.go`. For a command dropped because its operation went `x-cli-visible: false`, ask the API owner to mark the operation `deprecated` instead, which keeps it working. There is no flag equivalent, so call it out. |
 | a stricter input: `Required` false→true, a dropped `Enum` value, narrowed `Min`/`Max`, changed `Type` | previously valid invocations now rejected before the request is sent | Breaking. Name the command, the flag, and the old vs new constraint. |
 | `Args` losing an entry, or a changed `Param` | positional arity changed, or the same argument now fills a different URL slot | Breaking. Show the old and new call shape. |
 | a changed `Source`, `JSONName`, `Default`, or `SendDefaultWhenOmitted` | same input, different request — routing, wire key, or whether a value is sent at all | Confirm it is intended; none of these change the help text, so nothing else will surface them. |
@@ -164,7 +164,7 @@ Empty output means the surface is unchanged. The script exits non-zero and says 
 | a `RequestSchema`/`ResponseSchema` `<present>` line gone | `--request-schema` / `--response-schema` no longer exist there | Breaking for agents that introspect before calling. |
 | `Destructive`, `Endpoint`, or `Method` changing | `--force` and the confirmation prompt appear or disappear; or the command now calls something else | Rarely intended. Confirm before releasing. |
 
-Additions are usually safe, with two exceptions that show up only as `>` lines: a new flag that is already `Required: true`, and a new `Args` entry. Both make every prior invocation of that command exit 2. (`Deprecated: true` appearing is not a break — the flag still works and still sends its value — but it is worth a release note.)
+Additions are usually safe, with two exceptions that show up only as `>` lines: a new flag that is already `Required: true`, and a new `Args` entry. Both make every prior invocation of that command exit 2. (`Deprecated: true` appearing is not a break — the flag or command still works and still sends its value — but it is worth a release note.)
 
 Finally, a flag can stop doing anything without changing shape at all, which the diff above cannot see because it excludes help text:
 

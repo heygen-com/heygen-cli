@@ -19,7 +19,13 @@ var hiddenEndpoints = map[string]bool{
 }
 
 // IsHidden reports whether the command for this spec should be omitted from help listings and
-// generated docs.
+// generated docs: either it is listed in hiddenEndpoints or its operation is deprecated.
 func (s Spec) IsHidden() bool {
-	return hiddenEndpoints[strings.ToUpper(s.Method)+" "+s.Endpoint]
+	return s.Deprecated || hiddenEndpoints[s.EndpointKey()]
+}
+
+// EndpointKey identifies the spec's operation as "METHOD /path", the key used by hand-maintained
+// per-endpoint lookups.
+func (s Spec) EndpointKey() string {
+	return strings.ToUpper(s.Method) + " " + s.Endpoint
 }
