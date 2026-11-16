@@ -114,8 +114,12 @@ func analyticsEnabled() bool {
 // disclosure notice has already been shown — heygen-cli's own config
 // directory, not the shared ~/.hyperframes/config.json (that file's write
 // surface is kept to the anonymousId field alone; see internal/analytics).
-func telemetryNoticePath() string {
-	return filepath.Join(paths.ConfigDir(), "telemetry_notice_shown")
+func telemetryNoticePath() (string, error) {
+	dir, err := paths.ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "telemetry_notice_shown"), nil
 }
 
 // maybeShowTelemetryNotice prints a one-time disclosure that heygen-cli
@@ -132,14 +136,19 @@ func maybeShowTelemetryNotice(enabled bool, formatter output.Formatter) {
 	if !enabled {
 		return
 	}
-	path := telemetryNoticePath()
-	if _, err := os.Stat(path); err == nil {
-		return
+	path, pathErr := telemetryNoticePath()
+	if pathErr == nil {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
 	}
 	formatter.Notice("cli_telemetry_notice",
 		"heygen-cli sends anonymous usage telemetry (command, os/arch, outcome). "+
 			"Signing in via `heygen auth login` links this usage to your account email or username. "+
 			"Opt out with HEYGEN_NO_ANALYTICS=1.")
+	if pathErr != nil {
+		return
+	}
 	_ = os.MkdirAll(filepath.Dir(path), 0o700)
 	_ = os.WriteFile(path, []byte("1"), 0o600)
 }

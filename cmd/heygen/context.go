@@ -88,7 +88,7 @@ func enrichAuthHint(cliErr *clierrors.CLIError, source auth.CredentialSource) {
 	if cliErr.Hint != "" {
 		return
 	}
-	credPath := filepath.Join(paths.ConfigDir(), "credentials")
+	credPath := auth.CredentialsFileShown()
 	switch source {
 	case auth.SourceEnv:
 		cliErr.Hint = "The HEYGEN_API_KEY environment variable contains an invalid or expired key.\nGenerate a new key: " + clierrors.APIKeySettingsURL

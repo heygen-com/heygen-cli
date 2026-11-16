@@ -7,13 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/heygen-com/heygen-cli/internal/paths"
 )
 
 func writeCredentials(t *testing.T, contents string) string {
 	t.Helper()
-	dir := paths.ConfigDir()
+	dir := mustConfigDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}

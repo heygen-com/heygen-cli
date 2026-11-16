@@ -6,12 +6,11 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	"github.com/heygen-com/heygen-cli/internal/paths"
 )
 
 func TestFileProvider_GetExists(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
-	path := filepath.Join(paths.ConfigDir(), "config.toml")
+	path := filepath.Join(mustConfigDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("output = \"human\"\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -28,7 +27,7 @@ func TestFileProvider_GetExists(t *testing.T) {
 
 func TestFileProvider_GetMissing(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
-	path := filepath.Join(paths.ConfigDir(), "config.toml")
+	path := filepath.Join(mustConfigDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("output = \"human\"\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -58,7 +57,7 @@ func TestFileProvider_GetNoFile(t *testing.T) {
 
 func TestFileProvider_GetCorruptFile(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
-	path := filepath.Join(paths.ConfigDir(), "config.toml")
+	path := filepath.Join(mustConfigDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("not = [valid\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -77,14 +76,14 @@ func TestFileProvider_SetNewFile(t *testing.T) {
 		t.Fatalf("Set: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(paths.ConfigDir(), "config.toml")); err != nil {
+	if _, err := os.Stat(filepath.Join(mustConfigDir(), "config.toml")); err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
 }
 
 func TestFileProvider_SetUpdateExisting(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
-	path := filepath.Join(paths.ConfigDir(), "config.toml")
+	path := filepath.Join(mustConfigDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("output = \"json\"\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -142,7 +141,7 @@ func TestFileProvider_SetBooleanType(t *testing.T) {
 	}
 
 	var data map[string]any
-	path := filepath.Join(paths.ConfigDir(), "config.toml")
+	path := filepath.Join(mustConfigDir(), "config.toml")
 	if _, err := toml.DecodeFile(path, &data); err != nil {
 		t.Fatalf("DecodeFile: %v", err)
 	}
@@ -160,7 +159,7 @@ func TestFileProvider_SetStringType(t *testing.T) {
 	}
 
 	var data map[string]any
-	path := filepath.Join(paths.ConfigDir(), "config.toml")
+	path := filepath.Join(mustConfigDir(), "config.toml")
 	if _, err := toml.DecodeFile(path, &data); err != nil {
 		t.Fatalf("DecodeFile: %v", err)
 	}

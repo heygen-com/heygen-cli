@@ -424,7 +424,7 @@ func runAPIKeyLogin(cmd *cobra.Command, ctx *cmdContext) (err error) {
 		fmt.Fprintf(cmd.ErrOrStderr(), "(warning: could not clear stale user info: %v)\n", clearErr)
 	}
 
-	credPath := filepath.Join(paths.ConfigDir(), "credentials")
+	credPath := auth.CredentialsFileShown()
 	message := "API key saved to " + credPath
 	if clearedOAuth {
 		message += " (cleared previously-stored OAuth session)"
@@ -664,7 +664,7 @@ func runDeviceLogin(cmd *cobra.Command, ctx *cmdContext, cfg deviceLoginConfig) 
 	if id := identityKey(userInfo); id != "" {
 		loginAnalytics.IdentifyAccount(id)
 	}
-	credPath := filepath.Join(paths.ConfigDir(), "credentials")
+	credPath := auth.CredentialsFileShown()
 	message := "Signed in via device authorization; credentials saved to " + credPath
 	if clearedAPIKey {
 		message += " (cleared previously-stored API key)"
@@ -913,7 +913,7 @@ func runOAuthLogin(cmd *cobra.Command, ctx *cmdContext, cfg oauthLoginConfig) (e
 		fmt.Fprintf(cmd.ErrOrStderr(), "(warning: could not clear stale user info: %v)\n", clearErr)
 	}
 
-	credPath := filepath.Join(paths.ConfigDir(), "credentials")
+	credPath := auth.CredentialsFileShown()
 	message := "Signed in via OAuth; credentials saved to " + credPath
 	if clearedAPIKey {
 		message += " (cleared previously-stored API key)"

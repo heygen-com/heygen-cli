@@ -24,7 +24,10 @@ func SaveVerifiedOAuthSession(tok OAuthTokens, user UserInfo) (clearedAPIKey boo
 	if tok.AccessToken == "" {
 		return false, fmt.Errorf("auth: verified OAuth session has no access token")
 	}
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return false, err
+	}
 	existing, format, err := loadCredentialsFile(path)
 	if err != nil {
 		if format != formatAbsent {
@@ -70,7 +73,10 @@ func SaveOAuthTokens(tok OAuthTokens) error {
 	if tok.AccessToken == "" && tok.RefreshToken == "" {
 		return fmt.Errorf("auth: SaveOAuthTokens called with no tokens")
 	}
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return err
+	}
 	existing, format, err := loadCredentialsFile(path)
 	if err != nil {
 		if format != formatAbsent {
@@ -100,7 +106,10 @@ func SaveOAuthTokens(tok OAuthTokens) error {
 // used by auth logout to detect whether an api_key was present on
 // disk before clearing.
 func LoadAPIKeyFromFile() (string, error) {
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return "", nil
+	}
 	parsed, format, err := loadCredentialsFile(path)
 	if format == formatAbsent {
 		return "", nil
@@ -117,7 +126,10 @@ func LoadAPIKeyFromFile() (string, error) {
 // present but no oauth section"; we collapse both into ErrNotConfigured
 // because the resulting UX is the same: "run heygen auth login").
 func LoadOAuthTokens() (OAuthTokens, error) {
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return OAuthTokens{}, &ErrNotConfigured{Msg: err.Error()}
+	}
 	parsed, format, err := loadCredentialsFile(path)
 	if format == formatAbsent && err == nil {
 		return OAuthTokens{}, &ErrNotConfigured{Msg: "no credentials file"}
@@ -151,7 +163,10 @@ func LoadOAuthTokens() (OAuthTokens, error) {
 // post-condition the caller wants is "no oauth session on disk", which
 // is already true.
 func ClearOAuthTokens(alsoAPIKey bool) error {
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return nil
+	}
 	parsed, format, err := loadCredentialsFile(path)
 	if format == formatAbsent {
 		// File is already gone — same effective state.
@@ -184,7 +199,10 @@ func ClearOAuthTokens(alsoAPIKey bool) error {
 // empty resulting file is removed, and a malformed file is refused
 // (we can't see whether there's a recoverable block underneath).
 func ClearAPIKey() (cleared bool, err error) {
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return false, nil
+	}
 	parsed, format, err := loadCredentialsFile(path)
 	if format == formatAbsent {
 		return false, nil
