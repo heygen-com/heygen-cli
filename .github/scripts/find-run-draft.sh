@@ -9,6 +9,13 @@ set -euo pipefail
 
 tag="$1"
 run_id="$2"
+
+# Both values go into a jq filter, so refuse anything but a stable or dev
+# release tag and a numeric run ID.
+if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-dev\.[0-9]{12})?$ || ! "$run_id" =~ ^[0-9]+$ ]]; then
+  printf '::error::bad tag or run ID: %q %q\n' "$tag" "$run_id"
+  exit 1
+fi
 marker="<!-- release-run: ${run_id} -->"
 
 ids="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \

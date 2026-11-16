@@ -26,7 +26,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ github.event.inputs.version }}
+      tag: ${{ steps.version.outputs.version }}
       tag_push_attempted: ${{ steps.tag.outputs.push_attempted }}
       commit: ${{ steps.tag.outputs.commit }}
       release_id: ${{ steps.draft.outputs.id }}
@@ -74,32 +74,42 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A release builds from a clean module and build cache, never one that
+          # another run on main could have written.
+          cache: false
 
+      # The input reaches scripts only through env and is checked before any
+      # use. Later steps and jobs read this step's output, never the raw input.
       - name: Validate version
+        id: version
         shell: bash
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
 
-          version="${{ github.event.inputs.version }}"
-          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "invalid version: $version" >&2
+          if [[ ! "$VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            printf 'invalid version: %q\n' "$VERSION" >&2
             exit 1
           fi
 
-          if git rev-parse "$version" >/dev/null 2>&1; then
-            echo "tag already exists: $version" >&2
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "tag already exists: $VERSION" >&2
             exit 1
           fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Run tests
         run: make test
 
       - name: Validate AWS release config
         shell: bash
+        env:
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
         run: |
           set -euo pipefail
 
-          if [[ -z "${{ vars.AWS_ROLE_ARN }}" ]]; then
+          if [[ -z "$AWS_ROLE_ARN" ]]; then
             echo "missing GitHub Actions variable AWS_ROLE_ARN" >&2
             exit 1
           fi
@@ -110,10 +120,11 @@ jobs:
       - name: Create git tag
         id: tag
         shell: bash
+        env:
+          version: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
 
-          version="${{ github.event.inputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Annotated with this run's ID: cleanup-failed-release.sh deletes a tag
@@ -126,6 +137,8 @@ jobs:
 
       - name: Resolve previous stable tag
         shell: bash
+        env:
+          version: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
 
@@ -134,7 +147,6 @@ jobs:
           # was routinely a dev tag cut minutes earlier and the notes covered a
           # commit or two instead of the release. Pin it to the previous *stable*
           # tag so the range is the release, whoever cuts it.
-          version="${{ github.event.inputs.version }}"
           prev="$(git tag --list 'v*' --sort=-v:refname \
                     | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
                     | grep -vFx "$version" \
@@ -153,7 +165,7 @@ jobs:
         run: goreleaser release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ github.event.inputs.version }}
+          GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.version }}
           # GORELEASER_PREVIOUS_TAG is exported by the step above, and only when a
           # previous stable tag exists.
 
@@ -161,12 +173,13 @@ jobs:
         id: draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
           # Assigned first: a failed command substitution inside echo would not
           # fail the step.
-          release_id="$(.github/scripts/find-run-draft.sh "${{ github.event.inputs.version }}" "$GITHUB_RUN_ID")"
+          release_id="$(.github/scripts/find-run-draft.sh "$VERSION" "$GITHUB_RUN_ID")"
           echo "id=${release_id}" >> "$GITHUB_OUTPUT"
 
   # A job rather than a step: a cancelled job skips its remaining steps, but a
@@ -186,7 +199,9 @@ jobs:
       - name: Remove the tag and any draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: .github/scripts/cleanup-failed-release.sh "${{ needs.release.outputs.tag }}" "${{ needs.release.outputs.commit }}" "${{ github.run_id }}"
+          TAG: ${{ needs.release.outputs.tag }}
+          COMMIT: ${{ needs.release.outputs.commit }}
+        run: .github/scripts/cleanup-failed-release.sh "$TAG" "$COMMIT" "$GITHUB_RUN_ID"
 
   publish-release:
     needs: release
@@ -214,13 +229,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.version }}
+          ref: ${{ needs.release.outputs.tag }}
 
       - name: Download and verify the release assets
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.event.inputs.version }}
+          TAG: ${{ needs.release.outputs.tag }}
         run: |
           set -euo pipefail
 
@@ -236,7 +251,7 @@ jobs:
       - name: Upload stable release artifacts to S3
         shell: bash
         env:
-          TAG: ${{ github.event.inputs.version }}
+          TAG: ${{ needs.release.outputs.tag }}
         run: |
           set -euo pipefail
 
