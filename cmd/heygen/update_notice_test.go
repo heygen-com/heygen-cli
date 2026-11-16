@@ -241,6 +241,11 @@ func TestUpdateCheckWorker_RecordsOutcome(t *testing.T) {
 			want:  updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow, LastAttempt: attempt},
 		},
 		{
+			name:  "no release for this platform",
+			fetch: func(context.Context) (string, error) { return "", nil },
+			want:  updateCheckCache{CheckedAt: updateTestNow, LastAttempt: attempt},
+		},
+		{
 			name:  "failure",
 			fetch: func(context.Context) (string, error) { return "", errors.New("offline") },
 			want:  updateCheckCache{Latest: "v0.9.0", LastAttempt: attempt, Failures: 3},
