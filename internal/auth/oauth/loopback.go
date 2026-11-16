@@ -58,7 +58,7 @@ const DefaultLoopbackTimeout = 5 * time.Minute
 
 // LoopbackResult carries the OAuth callback parameters captured by the
 // loopback server. Either Code is populated (success) or Err is
-// populated (state mismatch, IdP error, timeout, etc.) — never both.
+// populated (IdP error, missing code, timeout, etc.) — never both.
 // A non-nil Err always wraps one of the sentinels above, so callers can
 // classify it with errors.Is.
 type LoopbackResult struct {
@@ -245,7 +245,7 @@ func (lb *LoopbackServer) handleCallback(w http.ResponseWriter, r *http.Request)
 	// waiting for the real callback, cancellation or the timeout.
 	state := q.Get("state")
 	if state == "" || subtle.ConstantTimeCompare([]byte(state), []byte(lb.ExpectedState)) != 1 {
-		writeErrorPage(w, http.StatusBadRequest, "invalid_state", "State parameter did not match.")
+		writeErrorPage(w, http.StatusBadRequest, "invalid_state", "State parameter did not match. The sign-in is still waiting; you can close this tab.")
 		return
 	}
 
