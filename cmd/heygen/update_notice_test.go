@@ -600,20 +600,25 @@ func TestFetchStablePointer(t *testing.T) {
 	}{
 		{"stable tag", http.StatusOK, "v0.9.1\n", "v0.9.1"},
 		{"dev tag", http.StatusOK, "v0.9.1-dev.202610070000", ""},
+		{"leading zero", http.StatusOK, "v0.09.1", ""},
 		{"not a tag", http.StatusOK, "<html>", ""},
 		{"oversized", http.StatusOK, "v0.9.1" + strings.Repeat(" ", updatePointerMaxBytes), ""},
 		{"server error", http.StatusInternalServerError, "v0.9.1", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/stable" {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 				w.WriteHeader(tc.status)
 				_, _ = io.WriteString(w, tc.body)
 			}))
 			defer srv.Close()
-			orig := updateStablePointerURL
-			t.Cleanup(func() { updateStablePointerURL = orig })
-			updateStablePointerURL = srv.URL
+			orig := updateCDNBaseURL
+			t.Cleanup(func() { updateCDNBaseURL = orig })
+			updateCDNBaseURL = srv.URL
 
 			got, err := fetchStablePointer(context.Background())
 			if tc.want == "" {
