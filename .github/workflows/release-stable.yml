@@ -30,6 +30,7 @@ jobs:
       tag_push_attempted: ${{ steps.tag.outputs.push_attempted }}
       commit: ${{ steps.tag.outputs.commit }}
       release_id: ${{ steps.draft.outputs.id }}
+      checksums_sha256: ${{ steps.checksums.outputs.sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -169,6 +170,16 @@ jobs:
           # GORELEASER_PREVIOUS_TAG is exported by the step above, and only when a
           # previous stable tag exists.
 
+      # Job outputs cannot be changed once this job ends, so publish-cdn can tell
+      # the release's assets from replacements uploaded later.
+      - name: Record the checksums digest
+        id: checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256="$(sha256sum dist/checksums.txt | cut -d' ' -f1)"
+          echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
+
       - name: Record this run's draft release
         id: draft
         env:
@@ -219,34 +230,56 @@ jobs:
 
   # A separate job so that, once the GitHub release is public, a failed CDN
   # publish is retried with "Re-run failed jobs" rather than by deleting a
-  # release users can already see. It publishes the release's own assets.
+  # release users can already see. It publishes only what the release job built:
+  # the installer from its commit and the assets of the release it recorded,
+  # never whatever the tag or a release of that name holds when this job runs.
   publish-cdn:
     needs: [release, publish-release]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+    env:
+      S3_CLI_PREFIX: s3://heygen-public/cli
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release.outputs.tag }}
+          ref: ${{ needs.release.outputs.commit }}
+
+      - name: Check the tag still points at the built commit
+        shell: bash
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+          COMMIT: ${{ needs.release.outputs.commit }}
+        run: |
+          set -euo pipefail
+
+          tagged="$(git ls-remote origin "refs/tags/${TAG}^{}" | cut -f1)"
+          if [[ "$tagged" != "$COMMIT" ]]; then
+            echo "::error::${TAG} points at ${tagged:-nothing}, not the built commit ${COMMIT}"
+            exit 1
+          fi
 
       - name: Download and verify the release assets
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release.outputs.tag }}
-        run: |
-          set -euo pipefail
-
-          gh release download "$TAG" --dir dist --pattern 'heygen_*' --pattern checksums.txt
-          (cd dist && sha256sum -c checksums.txt)
+          RELEASE_ID: ${{ needs.release.outputs.release_id }}
+          CHECKSUMS_SHA256: ${{ needs.release.outputs.checksums_sha256 }}
+        run: .github/scripts/download-release-assets.sh "$RELEASE_ID" "$TAG" "$CHECKSUMS_SHA256" dist
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: us-east-2
+
+      - name: Refuse to roll the CDN back
+        shell: bash
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: .github/scripts/check-cdn-publish.sh "$TAG" dist/checksums.txt
 
       - name: Upload stable release artifacts to S3
         shell: bash
@@ -258,7 +291,7 @@ jobs:
           tag="$TAG"
 
           # Upload immutable artifacts first.
-          aws s3 cp dist/ "s3://heygen-public/cli/releases/${tag}/" \
+          aws s3 cp dist/ "${S3_CLI_PREFIX}/releases/${tag}/" \
             --recursive \
             --exclude "*" \
             --include "heygen_*.tar.gz" \
@@ -267,12 +300,12 @@ jobs:
             --cache-control "public, max-age=31536000, immutable"
 
           # Upload the installer before flipping the stable pointer.
-          aws s3 cp scripts/install.sh "s3://heygen-public/cli/install.sh" \
+          aws s3 cp scripts/install.sh "${S3_CLI_PREFIX}/install.sh" \
             --content-type "text/plain" \
             --cache-control "public, max-age=300"
 
           # Activate the release last so clients never observe a partial rollout.
           echo -n "${tag}" > /tmp/version-pointer
-          aws s3 cp /tmp/version-pointer "s3://heygen-public/cli/stable" \
+          aws s3 cp /tmp/version-pointer "${S3_CLI_PREFIX}/stable" \
             --content-type "text/plain" \
             --cache-control "public, max-age=60"
