@@ -22,7 +22,7 @@ repo="$GITHUB_REPOSITORY"
 
 # These values go into API paths, jq filters and refspecs, so refuse anything
 # but a stable or dev release tag, a full commit SHA and a numeric run ID.
-if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-dev\.[0-9]{12})?$ ]]; then
+if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-dev\.[0-9]{12})?$ ]]; then
   printf '::error::not a release tag: %q\n' "$tag"
   exit 1
 fi
