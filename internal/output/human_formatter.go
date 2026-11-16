@@ -58,22 +58,22 @@ func (f *HumanFormatter) Data(v json.RawMessage, dataField string, columns []com
 
 // Error renders a human-readable error to stderr.
 func (f *HumanFormatter) Error(err *clierrors.CLIError) {
-	_, _ = fmt.Fprintf(f.errOut, "%s %s\n", errorStyle.Render("Error:"), err.Message)
+	_, _ = fmt.Fprintf(f.errOut, "%s %s\n", errorStyle.Render("Error:"), terminalText(err.Message))
 	if err.Hint != "" {
-		_, _ = fmt.Fprintf(f.errOut, "%s %s\n", hintStyle.Render("Hint:"), err.Hint)
+		_, _ = fmt.Fprintf(f.errOut, "%s %s\n", hintStyle.Render("Hint:"), terminalText(err.Hint))
 	}
 }
 
 // Warn renders a non-fatal warning to stderr, so it stays out of the rendered
 // table or key-value output on stdout.
 func (f *HumanFormatter) Warn(message string) {
-	_, _ = fmt.Fprintf(f.errOut, "%s %s\n", warningStyle.Render("Warning:"), message)
+	_, _ = fmt.Fprintf(f.errOut, "%s %s\n", warningStyle.Render("Warning:"), terminalText(message))
 }
 
 // Notice renders an informational message to stderr. The code is a machine
 // key with no place in human output, so it is dropped here.
 func (f *HumanFormatter) Notice(_, message string) {
-	_, _ = fmt.Fprintf(f.errOut, "%s %s\n", noticeStyle.Render("Note:"), message)
+	_, _ = fmt.Fprintf(f.errOut, "%s %s\n", noticeStyle.Render("Note:"), terminalText(message))
 }
 
 func unwrapPayload(v json.RawMessage, dataField string) json.RawMessage {
@@ -325,6 +325,7 @@ func (f *HumanFormatter) renderObjectArray(elems []any, depth int) error {
 // already written on this line by the caller. Multiline values have their
 // continuation lines aligned under the value column.
 func (f *HumanFormatter) writeInline(indent, label, value string, labelWidth, extraPad int) error {
+	value = terminalText(value)
 	pad := strings.Repeat(" ", max(0, labelWidth-lipgloss.Width(label)))
 	if strings.Contains(value, "\n") {
 		// The first field of a sequence item is written without its own indent
@@ -614,7 +615,7 @@ func sanitizeForTable(s string) string {
 	s = strings.ReplaceAll(s, "\r", " ")
 	s = strings.ReplaceAll(s, "\t", " ")
 	s = strings.ReplaceAll(s, "\u00a0", " ")
-	return strings.TrimSpace(s)
+	return terminalText(strings.TrimSpace(s))
 }
 
 // humanizeAcronyms maps a lowercased key segment to its fully-uppercase display
@@ -651,5 +652,5 @@ func humanizeKey(key string) string {
 		}
 		parts[i] = strings.ToUpper(part[:1]) + part[1:]
 	}
-	return strings.Join(parts, " ")
+	return terminalText(strings.Join(parts, " "))
 }
