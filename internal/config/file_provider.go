@@ -14,9 +14,13 @@ import (
 type FileProvider struct{}
 
 func (p *FileProvider) load() (map[string]any, error) {
-	path := filepath.Join(paths.ConfigDir(), "config.toml")
+	dir, err := paths.ConfigDir()
+	if err != nil {
+		return nil, nil
+	}
+	path := filepath.Join(dir, "config.toml")
 	var data map[string]any
-	_, err := toml.DecodeFile(path, &data)
+	_, err = toml.DecodeFile(path, &data)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -55,7 +59,10 @@ func (p *FileProvider) Set(key, value string) error {
 		data = make(map[string]any)
 	}
 
-	dir := paths.ConfigDir()
+	dir, err := paths.ConfigDir()
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}

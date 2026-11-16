@@ -306,10 +306,14 @@ var errUpdateCacheBusy = errors.New("update check cache is locked by another inv
 // it would let a second process lock a fresh inode while the first still holds
 // the old one.
 func lockUpdateCache() (func(), error) {
-	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
+	path, err := updateCachePath()
+	if err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(updateCachePath()+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err
 	}
@@ -323,14 +327,22 @@ func lockUpdateCache() (func(), error) {
 	}, nil
 }
 
-func updateCachePath() string {
-	return filepath.Join(paths.ConfigDir(), "update_check.json")
+func updateCachePath() (string, error) {
+	dir, err := paths.ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "update_check.json"), nil
 }
 
 // readUpdateCache treats a missing, oversized, unparseable or other-schema
 // file as absent, so a bad cache costs one check rather than breaking any.
 func readUpdateCache() updateCheckCache {
-	f, err := os.Open(updateCachePath())
+	path, err := updateCachePath()
+	if err != nil {
+		return updateCheckCache{}
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return updateCheckCache{}
 	}
@@ -356,7 +368,11 @@ func writeUpdateCache(c updateCheckCache) error {
 	if err != nil {
 		return err
 	}
-	dir := paths.ConfigDir()
+	path, err := updateCachePath()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -372,5 +388,5 @@ func writeUpdateCache(c updateCheckCache) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), updateCachePath())
+	return os.Rename(tmp.Name(), path)
 }

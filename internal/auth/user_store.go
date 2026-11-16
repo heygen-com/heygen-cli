@@ -61,7 +61,10 @@ func combineName(first, last string) string {
 // ui.IsZero() and skip the call in that case so the file isn't touched
 // when there's nothing to persist.
 func SaveUserInfo(ui UserInfo) error {
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return err
+	}
 	existing, format, err := loadCredentialsFile(path)
 	if err != nil {
 		if format != formatAbsent {
@@ -92,7 +95,10 @@ func SaveUserInfo(ui UserInfo) error {
 // Errors are surfaced for genuinely broken files so the caller can warn
 // rather than silently pretend the file is clean.
 func LoadUserInfo() (UserInfo, error) {
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return UserInfo{}, nil
+	}
 	parsed, format, err := loadCredentialsFile(path)
 	if format == formatAbsent && err == nil {
 		return UserInfo{}, nil
@@ -120,7 +126,10 @@ func LoadUserInfo() (UserInfo, error) {
 // holds no user block — the post-condition the caller wants is "no
 // user block on disk", which is already true.
 func ClearUserInfo() error {
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return nil
+	}
 	parsed, format, err := loadCredentialsFile(path)
 	if format == formatAbsent {
 		return nil

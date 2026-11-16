@@ -10,7 +10,10 @@ type FileCredentialStore struct{}
 // place. Any co-located OAuth block is preserved so that saving an API
 // key doesn't wipe an active OAuth session written by hyperframes-CLI.
 func (s *FileCredentialStore) Save(apiKey string) error {
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return err
+	}
 
 	// Read the existing file to preserve a co-located oauth block.
 	existing, format, err := loadCredentialsFile(path)

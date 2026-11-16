@@ -339,7 +339,11 @@ func writeSharedConfig(config map[string]any) {
 // this codebase adopted the shared install identity. Read-only: nothing
 // writes to this file anymore.
 func legacyAnalyticsID() string {
-	idPath := filepath.Join(paths.ConfigDir(), "analytics_id")
+	dir, err := paths.ConfigDir()
+	if err != nil {
+		return ""
+	}
+	idPath := filepath.Join(dir, "analytics_id")
 	data, err := os.ReadFile(idPath)
 	if err != nil {
 		return ""

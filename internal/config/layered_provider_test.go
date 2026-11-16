@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/heygen-com/heygen-cli/internal/paths"
 )
 
 func newLayeredProvider() *LayeredProvider {
@@ -17,7 +15,7 @@ func newLayeredProvider() *LayeredProvider {
 
 func writeConfigFile(t *testing.T, body string) {
 	t.Helper()
-	path := filepath.Join(paths.ConfigDir(), "config.toml")
+	path := filepath.Join(mustConfigDir(), "config.toml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
