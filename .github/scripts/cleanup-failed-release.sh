@@ -20,6 +20,17 @@ commit="$2"
 run_id="$3"
 repo="$GITHUB_REPOSITORY"
 
+# These values go into API paths, jq filters and refspecs, so refuse anything
+# but a stable or dev release tag, a full commit SHA and a numeric run ID.
+if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-dev\.[0-9]{12})?$ ]]; then
+  printf '::error::not a release tag: %q\n' "$tag"
+  exit 1
+fi
+if [[ ! "$commit" =~ ^[0-9a-f]{40}$ || ! "$run_id" =~ ^[0-9]+$ ]]; then
+  printf '::error::bad commit or run ID: %q %q\n' "$commit" "$run_id"
+  exit 1
+fi
+
 if out="$(gh api "repos/${repo}/git/ref/tags/${tag}" --jq '.object.type + " " + .object.sha' 2>&1)"; then
   read -r type sha <<<"$out"
   if [[ "$type" != "tag" ]]; then
