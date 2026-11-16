@@ -167,4 +167,3 @@ func TestFileProvider_SetStringType(t *testing.T) {
 		t.Fatalf("output type = %T, want string", data[KeyOutput])
 	}
 }
-
