@@ -225,7 +225,7 @@ If no stable tag exists, starts from `v0.0.1-dev.*`.
 
 `heygen update` auto-detects the update channel from the current version:
 
-- Running a stable version (e.g., `v0.1.0`) → updates track stable releases only. They come from the same CDN the install script uses, and each archive is verified against the `checksums.txt` published with it before it replaces the binary.
+- Running a stable version (e.g., `v0.1.0`) → updates track stable releases only. They come from the same CDN the install script uses. Before an archive replaces the binary, its sha256 must match the entry in that release's `checksums.txt`, and the CDN's `checksums.txt` must be identical to the one on the GitHub release. So stable updates need to reach both static.heygen.ai and github.com; a network that blocks github.com can still install with `install.sh`.
 - Running a dev version (e.g., `v0.1.1-dev.*`) → updates track dev prereleases, which are published as GitHub releases only
 
 `heygen update --version v0.1.0` installs the exact version specified. A stable build accepts only stable versions, since the CDN serves no prereleases.

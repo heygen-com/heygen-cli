@@ -1,10 +1,23 @@
 package main
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
+	"github.com/heygen-com/heygen-cli/internal/paths"
 )
+
+// missingCredentialsHint is authGuidance, led by the fix that works when there
+// is no home directory, where "heygen auth login" cannot save a login.
+func missingCredentialsHint() string {
+	if _, err := paths.ConfigDir(); errors.Is(err, paths.ErrNoConfigDir) {
+		return "No home directory was found to keep a login in. Set HEYGEN_API_KEY,\n" +
+			"or set HEYGEN_CONFIG_DIR to a folder before running \"heygen auth login\".\n\n" + authGuidance
+	}
+	return authGuidance
+}
 
 // authGuidance is the single source of truth for how to set up CLI auth.
 // Referenced by auth_login.go, auth_status.go, and the auth group help below.
