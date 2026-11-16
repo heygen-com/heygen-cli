@@ -30,3 +30,6 @@
     cmd: "heygen video edit <video-id> --idempotency-key <uuid> -d '{\"edit_version\":\"<edit-version>\",\"actions\":[{\"type\":\"delete_scene\",\"scene_id\":\"<scene-id>\"}]}'"
   - desc: "See all available request fields"
     cmd: "heygen video edit --request-schema"
+"GET /v3/videos/voice-capabilities":
+  - desc: "List the voice engines and models available per language and accent"
+    cmd: "heygen video voice-capabilities get"

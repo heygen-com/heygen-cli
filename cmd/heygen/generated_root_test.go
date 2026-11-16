@@ -117,12 +117,12 @@ func TestGeneratedRoot_IntermediateHelp(t *testing.T) {
 	srv := setupTestServer(t, map[string]testHandler{})
 	defer srv.Close()
 
-	res := runCommand(t, srv.URL, "test-key", "voice", "speech", "--help")
+	res := runCommand(t, srv.URL, "test-key", "asset", "direct-uploads", "--help")
 
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stdout, "Usage:") || !strings.Contains(res.Stdout, "heygen voice speech [command]") {
+	if !strings.Contains(res.Stdout, "Usage:") || !strings.Contains(res.Stdout, "heygen asset direct-uploads [command]") {
 		t.Errorf("help missing nested usage\nstdout: %s", res.Stdout)
 	}
 	if !strings.Contains(res.Stdout, "create") {
