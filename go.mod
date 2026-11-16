@@ -1,6 +1,6 @@
 module github.com/heygen-com/heygen-cli
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/getkin/kin-openapi v0.149.0
