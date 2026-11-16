@@ -4,8 +4,9 @@
 # Refuses a CDN publish that would move the stable pointer and installer back
 # to an older version, or replace an already-published version's files with
 # different ones. A re-run for the version already live passes, so a failed
-# publish can still be retried. Reads the public CDN, so the release role needs
-# no read access to the bucket. Needs CDN_BASE.
+# publish can still be retried. Reads the bucket, not the CDN, which can serve
+# a cached answer for up to a minute. Needs S3_CLI_PREFIX and AWS credentials
+# with s3:GetObject and s3:ListBucket on that prefix.
 set -euo pipefail
 
 tag="$1"
@@ -16,9 +17,9 @@ if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
   exit 1
 fi
 
-current="$(curl -fsS --retry 3 "${CDN_BASE}/stable" | tr -d '\r\n')"
+current="$(aws s3 cp "${S3_CLI_PREFIX}/stable" - | tr -d '\r\n')"
 if [[ ! "$current" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-  printf '::error::could not read the current stable version from %s: %q\n' "${CDN_BASE}/stable" "$current"
+  printf '::error::could not read the current stable version from %s: %q\n' "${S3_CLI_PREFIX}/stable" "$current"
   exit 1
 fi
 newest="$(printf '%s\n%s\n' "${current#v}" "${tag#v}" | sort -V | tail -n 1)"
@@ -27,20 +28,19 @@ if [[ "v${newest}" != "$tag" ]]; then
   exit 1
 fi
 
-# The bucket answers 403, not 404, for a missing object.
-existing="$(mktemp)"
-status="$(curl -sS --retry 3 -o "$existing" -w '%{http_code}' "${CDN_BASE}/releases/${tag}/checksums.txt")"
-case "$status" in
-  200)
-    if ! cmp -s "$existing" "$checksums"; then
-      echo "::error::${tag} is already on the CDN with different files; refusing to replace them"
-      exit 1
-    fi
-    ;;
-  403 | 404) ;;
-  *)
-    echo "::error::could not tell whether ${tag} is already on the CDN (HTTP ${status})"
+# Listed rather than fetched: the role may list only under cli/, and without
+# list access a fetch of a missing object answers 403, not 404.
+key="${S3_CLI_PREFIX#s3://}/releases/${tag}/checksums.txt"
+found="$(aws s3api list-objects-v2 --bucket "${key%%/*}" --prefix "${key#*/}" --query "length(Contents[?Key=='${key#*/}'] || \`[]\`)" --output text)"
+if [[ "$found" == "1" ]]; then
+  existing="$(mktemp)"
+  aws s3 cp --only-show-errors "${S3_CLI_PREFIX}/releases/${tag}/checksums.txt" "$existing"
+  if ! cmp -s "$existing" "$checksums"; then
+    echo "::error::${tag} is already on the CDN with different files; refusing to replace them"
     exit 1
-    ;;
-esac
+  fi
+elif [[ "$found" != "0" ]]; then
+  echo "::error::could not tell whether ${tag} is already on the CDN (listing returned ${found})"
+  exit 1
+fi
 echo "publishing ${tag} (CDN currently serves ${current})"

@@ -240,8 +240,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      # Where s3://heygen-public/cli/ is served, as scripts/install.sh reads it.
-      CDN_BASE: https://static.heygen.ai/cli
+      S3_CLI_PREFIX: s3://heygen-public/cli
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -270,17 +269,17 @@ jobs:
           CHECKSUMS_SHA256: ${{ needs.release.outputs.checksums_sha256 }}
         run: .github/scripts/download-release-assets.sh "$RELEASE_ID" "$TAG" "$CHECKSUMS_SHA256" dist
 
-      - name: Refuse to roll the CDN back
-        shell: bash
-        env:
-          TAG: ${{ needs.release.outputs.tag }}
-        run: .github/scripts/check-cdn-publish.sh "$TAG" dist/checksums.txt
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: us-east-2
+
+      - name: Refuse to roll the CDN back
+        shell: bash
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: .github/scripts/check-cdn-publish.sh "$TAG" dist/checksums.txt
 
       - name: Upload stable release artifacts to S3
         shell: bash
@@ -292,7 +291,7 @@ jobs:
           tag="$TAG"
 
           # Upload immutable artifacts first.
-          aws s3 cp dist/ "s3://heygen-public/cli/releases/${tag}/" \
+          aws s3 cp dist/ "${S3_CLI_PREFIX}/releases/${tag}/" \
             --recursive \
             --exclude "*" \
             --include "heygen_*.tar.gz" \
@@ -301,12 +300,12 @@ jobs:
             --cache-control "public, max-age=31536000, immutable"
 
           # Upload the installer before flipping the stable pointer.
-          aws s3 cp scripts/install.sh "s3://heygen-public/cli/install.sh" \
+          aws s3 cp scripts/install.sh "${S3_CLI_PREFIX}/install.sh" \
             --content-type "text/plain" \
             --cache-control "public, max-age=300"
 
           # Activate the release last so clients never observe a partial rollout.
           echo -n "${tag}" > /tmp/version-pointer
-          aws s3 cp /tmp/version-pointer "s3://heygen-public/cli/stable" \
+          aws s3 cp /tmp/version-pointer "${S3_CLI_PREFIX}/stable" \
             --content-type "text/plain" \
             --cache-control "public, max-age=60"
