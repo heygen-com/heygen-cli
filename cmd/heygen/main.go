@@ -149,6 +149,5 @@ func maybeShowTelemetryNotice(enabled bool, formatter output.Formatter) {
 	if pathErr != nil {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(path), 0o700)
-	_ = os.WriteFile(path, []byte("1"), 0o600)
+	_ = paths.ReplaceFile(path, []byte("1"))
 }
