@@ -122,7 +122,7 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 		// like "Check the credentials file at ..." (broken file case).
 		var cliErr *clierrors.CLIError
 		if errors.As(err, &cliErr) && cliErr.ExitCode == clierrors.ExitAuth && cliErr.Message == "no API key found" {
-			cliErr.Hint = authGuidance
+			cliErr.Hint = missingCredentialsHint()
 		}
 		return err
 	}
