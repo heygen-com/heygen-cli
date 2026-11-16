@@ -156,6 +156,8 @@ heygen video get --response-schema
   local and no update can be offered. Neither command needs an API key.
   If `update_available` is true, tell the user rather than updating unprompted:
   a new CLI version can change command output mid-task.
+  `heygen update --version <v>` installs an exact release. On a stable build it
+  accepts stable versions (`vX.Y.Z`) only.
 - A release build may print `{"notice": {"code": "cli_update_available", ...}}` on stderr,
   at most once a day, when a newer stable release exists. Treat it like
   `update_available`: tell the user, do not update unprompted. It is off in CI and

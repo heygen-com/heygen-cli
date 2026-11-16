@@ -42,13 +42,14 @@ func (f *fakeCDN) requested() []string {
 	return append([]string(nil), f.requests...)
 }
 
-// setupCDNUpdate serves objects under updateCDNBaseURL (any other path is 403,
-// as on the real CDN) and points the update at a stand-in binary it returns.
+// setupCDNUpdate serves objects under updateCDNBaseURL, and "github/..." keys
+// under updateGitHubReleaseURL. Any other path is 403, as on the real CDN. It
+// points the update at a stand-in binary it returns.
 func setupCDNUpdate(t *testing.T, objects map[string]cdnObject) (*fakeCDN, string) {
 	t.Helper()
 	cdn := &fakeCDN{objects: objects}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/cli/")
+		path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/"), "cli/")
 		cdn.mu.Lock()
 		cdn.requests = append(cdn.requests, path)
 		cdn.mu.Unlock()
@@ -72,11 +73,12 @@ func setupCDNUpdate(t *testing.T, objects map[string]cdnObject) (*fakeCDN, strin
 	if err := os.WriteFile(binPath, []byte(installedBinary), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	origBase, origExe, origEval := updateCDNBaseURL, updateExecutablePath, updateEvalSymlinks
+	origBase, origGitHub, origExe, origEval := updateCDNBaseURL, updateGitHubReleaseURL, updateExecutablePath, updateEvalSymlinks
 	t.Cleanup(func() {
-		updateCDNBaseURL, updateExecutablePath, updateEvalSymlinks = origBase, origExe, origEval
+		updateCDNBaseURL, updateGitHubReleaseURL, updateExecutablePath, updateEvalSymlinks = origBase, origGitHub, origExe, origEval
 	})
 	updateCDNBaseURL = srv.URL + "/cli"
+	updateGitHubReleaseURL = srv.URL + "/github"
 	updateExecutablePath = func() (string, error) { return binPath, nil }
 	updateEvalSymlinks = func(path string) (string, error) { return path, nil }
 	return cdn, binPath
@@ -139,14 +141,19 @@ func sha256Hex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// releaseObjects publishes tag with a correct checksums.txt for archive.
+// releaseObjects publishes tag with a correct checksums.txt for archive, on
+// the CDN and on the GitHub release.
 func releaseObjects(tag string, archive []byte) map[string]cdnObject {
 	asset := platformAsset(tag)
-	checksums := fmt.Sprintf("%s  heygen_%s_plan9_amd64.tar.gz\n%s  %s\n", strings.Repeat("0", 64), tag, sha256Hex(archive), asset)
-	return map[string]cdnObject{
-		"releases/" + tag + "/" + asset:      {body: archive},
-		"releases/" + tag + "/checksums.txt": {body: []byte(checksums)},
-	}
+	o := map[string]cdnObject{"releases/" + tag + "/" + asset: {body: archive}}
+	setChecksums(o, tag, fmt.Sprintf("%s  heygen_%s_plan9_amd64.tar.gz\n%s  %s\n", strings.Repeat("0", 64), tag, sha256Hex(archive), asset))
+	return o
+}
+
+// setChecksums publishes the same checksums.txt on the CDN and on GitHub.
+func setChecksums(o map[string]cdnObject, tag, checksums string) {
+	o["releases/"+tag+"/checksums.txt"] = cdnObject{body: []byte(checksums)}
+	o["github/"+tag+"/checksums.txt"] = cdnObject{body: []byte(checksums)}
 }
 
 func readBinary(t *testing.T, path string) string {
@@ -159,9 +166,14 @@ func readBinary(t *testing.T, path string) string {
 }
 
 func TestUpdate_StableInstallsVerifiedArchiveFromCDN(t *testing.T) {
-	objects := releaseObjects("v0.2.0", buildArchive(t, platformBinary(), []byte("v0.2.0 binary")))
+	archive := buildArchive(t, platformBinary(), []byte("v0.2.0 binary"))
+	objects := releaseObjects("v0.2.0", archive)
+	// A lookalike name listed first must not stand in for the archive's entry.
+	setChecksums(objects, "v0.2.0", fmt.Sprintf("%s  %s.sbom.json\n%s  %s\n",
+		strings.Repeat("0", 64), platformAsset("v0.2.0"), sha256Hex(archive), platformAsset("v0.2.0")))
 	objects["stable"] = cdnObject{body: []byte("v0.2.0\n")}
 	_, binPath := setupCDNUpdate(t, objects)
+	t.Setenv("HEYGEN_CDN_BASE_URL", "http://127.0.0.1:1/cli")
 
 	res := runUpdateRoot(t, "v0.1.0", "update")
 	if res.ExitCode != 0 {
@@ -184,7 +196,7 @@ func TestUpdate_StableInstallsVerifiedArchiveFromCDN(t *testing.T) {
 func TestUpdate_StableRefusesUnverifiedRelease(t *testing.T) {
 	good := buildArchive(t, platformBinary(), []byte("v0.2.0 binary"))
 	asset := "releases/v0.2.0/" + platformAsset("v0.2.0")
-	sums := "releases/v0.2.0/checksums.txt"
+	ghSums := "github/v0.2.0/checksums.txt"
 
 	cases := []struct {
 		name   string
@@ -200,8 +212,15 @@ func TestUpdate_StableRefusesUnverifiedRelease(t *testing.T) {
 			o["stable"] = cdnObject{status: http.StatusFound, location: "/cli/elsewhere"}
 			o["elsewhere"] = cdnObject{body: []byte("v0.2.0")}
 		}},
-		{"no checksums entry for this platform", func(o map[string]cdnObject) {
-			o[sums] = cdnObject{body: []byte(sha256Hex(good) + "  heygen_v0.2.0_plan9_amd64.tar.gz\n")}
+		{"GitHub release lists different checksums", func(o map[string]cdnObject) {
+			o[ghSums] = cdnObject{body: []byte(strings.Repeat("1", 64) + "  " + platformAsset("v0.2.0") + "\n")}
+		}},
+		{"GitHub release has no checksums.txt", func(o map[string]cdnObject) {
+			delete(o, ghSums)
+		}},
+		{"GitHub download redirects off GitHub's asset host", func(o map[string]cdnObject) {
+			o["elsewhere"] = o[ghSums]
+			o[ghSums] = cdnObject{status: http.StatusFound, location: "/elsewhere"}
 		}},
 		{"checksum mismatch", func(o map[string]cdnObject) {
 			o[asset] = cdnObject{body: buildArchive(t, platformBinary(), []byte("other binary"))}
@@ -284,22 +303,54 @@ func TestReleaseUpdater_DevChannelUsesGitHub(t *testing.T) {
 	}
 }
 
+// --check and the notice report the stable pointer's release only when it has
+// an archive for this platform.
 func TestUpdateCheck_AgreesWithNoticeOnStableSource(t *testing.T) {
-	setupCDNUpdate(t, map[string]cdnObject{"stable": {body: []byte("v0.3.0\n")}})
+	archive := buildArchive(t, platformBinary(), []byte("v0.3.0 binary"))
+	cases := []struct {
+		name   string
+		sums   string
+		latest string
+	}{
+		{"release has this platform", fmt.Sprintf("%s  %s\n", sha256Hex(archive), platformAsset("v0.3.0")), "v0.3.0"},
+		{"release lacks this platform", sha256Hex(archive) + "  heygen_v0.3.0_plan9_amd64.tar.gz\n", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			objects := map[string]cdnObject{"stable": {body: []byte("v0.3.0\n")}}
+			setChecksums(objects, "v0.3.0", tc.sums)
+			setupCDNUpdate(t, objects)
 
-	res := runUpdateRoot(t, "v0.1.0", "update", "--check")
-	if res.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+			res := runUpdateRoot(t, "v0.1.0", "update", "--check")
+			if res.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0\nstderr: %s", res.ExitCode, res.Stderr)
+			}
+			var check updateCheckResponse
+			if err := json.Unmarshal([]byte(res.Stdout), &check); err != nil {
+				t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
+			}
+			notice, err := updateFetchLatest(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if check.Latest != tc.latest || check.UpdateAvailable != (tc.latest != "") || notice != tc.latest {
+				t.Errorf("--check latest = %q (available %v), notice latest = %q; both want %q",
+					check.Latest, check.UpdateAvailable, notice, tc.latest)
+			}
+		})
 	}
-	var check updateCheckResponse
-	if err := json.Unmarshal([]byte(res.Stdout), &check); err != nil {
-		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, res.Stdout)
+}
+
+// Only a --version lookup turns a 403 into "not found". A refused stable
+// pointer is a failure to check, reported with its status.
+func TestUpdate_StablePointerRefusedIsNotNotFound(t *testing.T) {
+	setupCDNUpdate(t, map[string]cdnObject{"stable": {status: http.StatusForbidden}})
+
+	res := runUpdateRoot(t, "v0.1.0", "update")
+	if res.ExitCode != clierrors.ExitGeneral {
+		t.Fatalf("ExitCode = %d, want %d\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stderr)
 	}
-	notice, err := updateFetchLatest(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if check.Latest != "v0.3.0" || notice != check.Latest {
-		t.Errorf("--check latest = %q, notice latest = %q; both want the stable pointer's v0.3.0", check.Latest, notice)
+	if !strings.Contains(res.Stderr, "HTTP 403") || strings.Contains(res.Stderr, "not found") {
+		t.Errorf("stderr = %s; want the HTTP status without calling it not found", res.Stderr)
 	}
 }
