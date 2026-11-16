@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -289,6 +290,27 @@ func TestUpdate_VersionResolvesItsCDNFolder(t *testing.T) {
 				t.Errorf("requested %v; a version that is not a stable tag must never reach a URL", cdn.requested())
 			}
 		})
+	}
+}
+
+func TestGitHubAssetRedirect(t *testing.T) {
+	cases := []struct {
+		url  string
+		want bool
+	}{
+		{"https://release-assets.githubusercontent.com/a", true},
+		{"https://objects.githubusercontent.com/a", true},
+		{"http://release-assets.githubusercontent.com/a", false},
+		{"https://release-assets.githubusercontent.com.example.com/a", false},
+	}
+	for _, tc := range cases {
+		u, err := url.Parse(tc.url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := githubAssetRedirect(u); got != tc.want {
+			t.Errorf("githubAssetRedirect(%s) = %v, want %v", tc.url, got, tc.want)
+		}
 	}
 }
 

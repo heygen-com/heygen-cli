@@ -33,9 +33,10 @@ var (
 	// the notice can name or install a release the installer would not serve.
 	updateCDNBaseURL = "https://static.heygen.ai/cli"
 
-	// updateGitHubReleaseURL serves the checksums.txt each published GitHub
-	// release carries. Published releases are immutable, so a CDN archive is
-	// installed only if both sources list the same checksums.
+	// updateGitHubReleaseURL serves the checksums.txt each GitHub release
+	// carries. A CDN archive is installed only if both sources list the same
+	// checksums, so a bad binary needs both changed. Releases published after
+	// the repo enabled immutable releases cannot be edited at all.
 	updateGitHubReleaseURL = "https://github.com/heygen-com/heygen-cli/releases/download"
 
 	// Redirects are refused so every byte comes from updateCDNBaseURL itself.
