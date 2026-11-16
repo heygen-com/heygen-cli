@@ -1126,7 +1126,6 @@ func TestOAuthFailureReason(t *testing.T) {
 		{"canceled", oauth.ErrLoopbackCanceled, "oauth_canceled"},
 		{"denied", oauth.ErrAuthorizeDenied, "oauth_authorize_denied"},
 		{"authorize failed", oauth.ErrAuthorizeFailed, "oauth_authorize_failed"},
-		{"state mismatch", oauth.ErrStateMismatch, "oauth_state_mismatch"},
 		{"missing code", oauth.ErrMissingCode, "oauth_missing_code"},
 		{"loopback server", oauth.ErrLoopbackServer, "oauth_loopback_failed"},
 		{"unmapped falls back", errors.New("something new"), "oauth_flow_error"},
@@ -1149,13 +1148,13 @@ func TestOAuthFailureReason_BoundedVocabulary(t *testing.T) {
 	allowed := map[string]bool{
 		"oauth_timeout": true, "oauth_canceled": true,
 		"oauth_authorize_denied": true, "oauth_authorize_failed": true,
-		"oauth_state_mismatch": true, "oauth_missing_code": true,
+		"oauth_missing_code":    true,
 		"oauth_loopback_failed": true, "oauth_flow_error": true,
 	}
 	for _, err := range []error{
 		oauth.ErrLoopbackTimeout, oauth.ErrLoopbackCanceled,
 		oauth.ErrAuthorizeDenied, oauth.ErrAuthorizeFailed,
-		oauth.ErrStateMismatch, oauth.ErrMissingCode,
+		oauth.ErrMissingCode,
 		oauth.ErrLoopbackServer, errors.New("unmapped"),
 	} {
 		if got := oauthFailureReason(err); !allowed[got] {
@@ -1172,7 +1171,7 @@ var allowedLoginFailureReasons = map[string]map[string]bool{
 		// Routed through oauthFailureReason.
 		"oauth_timeout": true, "oauth_canceled": true,
 		"oauth_authorize_denied": true, "oauth_authorize_failed": true,
-		"oauth_state_mismatch": true, "oauth_missing_code": true,
+		"oauth_missing_code":    true,
 		"oauth_loopback_failed": true, "oauth_flow_error": true,
 		// Routed through tokenFailureReason.
 		"token_rejected": true, "token_canceled": true, "token_network_error": true,
@@ -1235,7 +1234,7 @@ func TestOAuthFailureReasonOutputsAreInAllowedVocabulary(t *testing.T) {
 	for _, err := range []error{
 		oauth.ErrLoopbackTimeout, oauth.ErrLoopbackCanceled,
 		oauth.ErrAuthorizeDenied, oauth.ErrAuthorizeFailed,
-		oauth.ErrStateMismatch, oauth.ErrMissingCode,
+		oauth.ErrMissingCode,
 		oauth.ErrLoopbackServer, errors.New("unmapped"),
 	} {
 		if got := oauthFailureReason(err); !allowedLoginFailureReasons["oauth"][got] {

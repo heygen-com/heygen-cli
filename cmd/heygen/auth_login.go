@@ -480,8 +480,6 @@ func oauthFailureReason(err error) string {
 		return "oauth_authorize_denied"
 	case errors.Is(err, oauth.ErrAuthorizeFailed):
 		return "oauth_authorize_failed"
-	case errors.Is(err, oauth.ErrStateMismatch):
-		return "oauth_state_mismatch"
 	case errors.Is(err, oauth.ErrMissingCode):
 		return "oauth_missing_code"
 	case errors.Is(err, oauth.ErrLoopbackServer):
