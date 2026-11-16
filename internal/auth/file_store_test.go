@@ -6,14 +6,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-
-	"github.com/heygen-com/heygen-cli/internal/paths"
 )
 
 // readStoredFile returns the raw bytes of the credentials file.
 func readStoredFile(t *testing.T) []byte {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(paths.ConfigDir(), "credentials"))
+	data, err := os.ReadFile(filepath.Join(mustConfigDir(), "credentials"))
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
@@ -55,7 +53,7 @@ func TestFileCredentialStore_CreatesDirectory(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	info, err := os.Stat(paths.ConfigDir())
+	info, err := os.Stat(mustConfigDir())
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
@@ -76,7 +74,7 @@ func TestFileCredentialStore_FilePermissions(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	info, err := os.Stat(filepath.Join(paths.ConfigDir(), "credentials"))
+	info, err := os.Stat(filepath.Join(mustConfigDir(), "credentials"))
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
@@ -106,8 +104,8 @@ func TestFileCredentialStore_PreservesExistingOAuth(t *testing.T) {
 
 	// Simulate a JSON file written by hyperframes-CLI carrying an OAuth
 	// session, then run heygen-cli's api-key save over it.
-	path := filepath.Join(paths.ConfigDir(), "credentials")
-	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
+	path := filepath.Join(mustConfigDir(), "credentials")
+	if err := os.MkdirAll(mustConfigDir(), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	seed := `{"oauth":{"access_token":"at_keep","refresh_token":"rt_keep","expires_at":"2099-01-01T00:00:00Z"}}`
@@ -136,8 +134,8 @@ func TestFileCredentialStore_PreservesUnknownFieldsThroughSave(t *testing.T) {
 	// path: the Node hyperframes CLI wrote a top-level key (and a nested
 	// oauth key) heygen-cli doesn't model. A heygen-cli `auth login`
 	// (FileCredentialStore.Save) must NOT strip them.
-	path := filepath.Join(paths.ConfigDir(), "credentials")
-	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
+	path := filepath.Join(mustConfigDir(), "credentials")
+	if err := os.MkdirAll(mustConfigDir(), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	seed := `{"oauth":{"access_token":"at_keep","id_token":"future_id"},"future_field":{"flag":true}}`
@@ -184,8 +182,8 @@ func TestFileCredentialStore_RefusesToClobberMalformedFile(t *testing.T) {
 	// A present-but-unparseable file might hold a recoverable oauth
 	// block we can't see. Save must refuse rather than silently
 	// overwrite it.
-	path := filepath.Join(paths.ConfigDir(), "credentials")
-	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
+	path := filepath.Join(mustConfigDir(), "credentials")
+	if err := os.MkdirAll(mustConfigDir(), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	garbage := `{"oauth":{"access_token":"at_maybe_recoverable"` // truncated JSON
@@ -212,8 +210,8 @@ func TestFileCredentialStore_OverwritesEmptyFile(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
 	// An empty file has nothing to preserve — Save should proceed.
-	path := filepath.Join(paths.ConfigDir(), "credentials")
-	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
+	path := filepath.Join(mustConfigDir(), "credentials")
+	if err := os.MkdirAll(mustConfigDir(), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	if err := os.WriteFile(path, []byte("  \n"), 0o600); err != nil {
@@ -233,8 +231,8 @@ func TestFileCredentialStore_UpgradesLegacyPlaintext(t *testing.T) {
 	t.Setenv("HEYGEN_CONFIG_DIR", t.TempDir())
 
 	// Seed a legacy single-line plaintext file, then save a new key.
-	path := filepath.Join(paths.ConfigDir(), "credentials")
-	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
+	path := filepath.Join(mustConfigDir(), "credentials")
+	if err := os.MkdirAll(mustConfigDir(), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	if err := os.WriteFile(path, []byte("old-plaintext-key\n"), 0o600); err != nil {

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -84,7 +85,12 @@ func (u *selfUpdater) UpdateTo(ctx context.Context, rel updateRelease, cmdPath s
 }
 
 var (
+	// Dev prereleases are published only as GitHub releases, so only the dev
+	// channel reads from GitHub.
 	newReleaseUpdater = func(prerelease bool) (releaseUpdater, error) {
+		if !prerelease {
+			return &cdnUpdater{goos: runtime.GOOS, goarch: runtime.GOARCH}, nil
+		}
 		source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{
 			APIToken: githubReleaseToken(),
 		})

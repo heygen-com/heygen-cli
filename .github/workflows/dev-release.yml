@@ -14,8 +14,7 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: dev-release
@@ -24,13 +23,15 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       tag: ${{ steps.compute.outputs.version }}
       tag_push_attempted: ${{ steps.tag.outputs.push_attempted }}
       commit: ${{ steps.tag.outputs.commit }}
       release_id: ${{ steps.draft.outputs.id }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked] pushes or deletes the release tag
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.commit || 'main' }}
@@ -73,6 +74,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A release builds from a clean module and build cache, never one that
+          # another run on main could have written.
+          cache: false
 
       - name: Run tests
         run: make test
@@ -99,10 +103,11 @@ jobs:
       - name: Create git tag
         id: tag
         shell: bash
+        env:
+          version: ${{ steps.compute.outputs.version }}
         run: |
           set -euo pipefail
 
-          version="${{ steps.compute.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Annotated with this run's ID: cleanup-failed-release.sh deletes a tag
@@ -122,12 +127,13 @@ jobs:
         id: draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.compute.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
           # Assigned first: a failed command substitution inside echo would not
           # fail the step.
-          release_id="$(.github/scripts/find-run-draft.sh "${{ steps.compute.outputs.version }}" "$GITHUB_RUN_ID")"
+          release_id="$(.github/scripts/find-run-draft.sh "$VERSION" "$GITHUB_RUN_ID")"
           echo "id=${release_id}" >> "$GITHUB_OUTPUT"
 
   # A job rather than a step: a cancelled job skips its remaining steps, but a
@@ -140,14 +146,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked] pushes or deletes the release tag
         with:
           ref: ${{ needs.release.outputs.commit }}
 
       - name: Remove the tag and any draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: .github/scripts/cleanup-failed-release.sh "${{ needs.release.outputs.tag }}" "${{ needs.release.outputs.commit }}" "${{ github.run_id }}"
+          TAG: ${{ needs.release.outputs.tag }}
+          COMMIT: ${{ needs.release.outputs.commit }}
+        run: .github/scripts/cleanup-failed-release.sh "$TAG" "$COMMIT" "$GITHUB_RUN_ID"
 
   publish-release:
     needs: release

@@ -70,7 +70,7 @@ func TestMaybeShowTelemetryNotice_FirstRun(t *testing.T) {
 	if _, isWarning := envelope["warning"]; isWarning {
 		t.Error("the disclosure is informational and must not render as a warning")
 	}
-	if _, err := os.Stat(telemetryNoticePath()); err != nil {
+	if _, err := os.Stat(mustTelemetryNoticePath()); err != nil {
 		t.Fatalf("notice-shown flag not persisted: %v", err)
 	}
 }

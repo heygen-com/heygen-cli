@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,12 +35,9 @@ const (
 )
 
 var (
-	// updateStablePointerURL is the file install.sh resolves "latest" from, so
-	// the notice can never name a release the installer would not serve.
-	updateStablePointerURL = "https://static.heygen.ai/cli/stable"
-	updateNow              = time.Now
-	updateFetchLatest      = fetchStablePointer
-	updateSpawnWorker      = spawnUpdateCheckWorker
+	updateNow         = time.Now
+	updateFetchLatest = fetchStablePointer
+	updateSpawnWorker = spawnUpdateCheckWorker
 )
 
 // Invocations matching these never check or notify. __complete runs on every
@@ -270,28 +266,14 @@ func skipsUpdateCheck(args []string) bool {
 	return first == "" || updateCheckSkippedCommands[first]
 }
 
+// fetchStablePointer reads the file install.sh resolves "latest" from.
 func fetchStablePointer(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, updateStablePointerURL, nil)
+	body, err := cdnGet(ctx, updateCDNBaseURL+"/stable", updatePointerMaxBytes)
 	if err != nil {
 		return "", err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("stable pointer returned HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, updatePointerMaxBytes+1))
-	if err != nil {
-		return "", err
-	}
-	if len(body) > updatePointerMaxBytes {
-		return "", fmt.Errorf("stable pointer exceeds %d bytes", updatePointerMaxBytes)
 	}
 	latest := strings.TrimSpace(string(body))
-	if !releaseTaggedVersion.MatchString(latest) || updateChannel(latest) != "stable" {
+	if !stableReleaseTag.MatchString(latest) {
 		return "", fmt.Errorf("stable pointer %q is not a stable release tag", latest)
 	}
 	return latest, nil
@@ -306,10 +288,14 @@ var errUpdateCacheBusy = errors.New("update check cache is locked by another inv
 // it would let a second process lock a fresh inode while the first still holds
 // the old one.
 func lockUpdateCache() (func(), error) {
-	if err := os.MkdirAll(paths.ConfigDir(), 0o700); err != nil {
+	path, err := updateCachePath()
+	if err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(updateCachePath()+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err
 	}
@@ -323,14 +309,22 @@ func lockUpdateCache() (func(), error) {
 	}, nil
 }
 
-func updateCachePath() string {
-	return filepath.Join(paths.ConfigDir(), "update_check.json")
+func updateCachePath() (string, error) {
+	dir, err := paths.ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "update_check.json"), nil
 }
 
 // readUpdateCache treats a missing, oversized, unparseable or other-schema
 // file as absent, so a bad cache costs one check rather than breaking any.
 func readUpdateCache() updateCheckCache {
-	f, err := os.Open(updateCachePath())
+	path, err := updateCachePath()
+	if err != nil {
+		return updateCheckCache{}
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return updateCheckCache{}
 	}
@@ -356,7 +350,11 @@ func writeUpdateCache(c updateCheckCache) error {
 	if err != nil {
 		return err
 	}
-	dir := paths.ConfigDir()
+	path, err := updateCachePath()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -372,5 +370,5 @@ func writeUpdateCache(c updateCheckCache) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), updateCachePath())
+	return os.Rename(tmp.Name(), path)
 }

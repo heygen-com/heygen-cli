@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/heygen-com/heygen-cli/internal/paths"
 )
 
 // TestUserInfo_DisplayName covers the priority order (email > "first
@@ -113,7 +111,7 @@ func TestSaveUserInfo_EmptyIsNoOp(t *testing.T) {
 	if err := (&FileCredentialStore{}).Save("hg_keep"); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	before, err := os.ReadFile(filepath.Join(paths.ConfigDir(), "credentials"))
+	before, err := os.ReadFile(filepath.Join(mustConfigDir(), "credentials"))
 	if err != nil {
 		t.Fatalf("read pre-state: %v", err)
 	}
@@ -121,7 +119,7 @@ func TestSaveUserInfo_EmptyIsNoOp(t *testing.T) {
 	if err := SaveUserInfo(UserInfo{}); err != nil {
 		t.Fatalf("SaveUserInfo(empty): %v", err)
 	}
-	after, err := os.ReadFile(filepath.Join(paths.ConfigDir(), "credentials"))
+	after, err := os.ReadFile(filepath.Join(mustConfigDir(), "credentials"))
 	if err != nil {
 		t.Fatalf("read post-state: %v", err)
 	}
@@ -154,7 +152,7 @@ func TestLoadUserInfo_FileWithoutUserBlock_ReturnsZero(t *testing.T) {
 
 	// Pre-this-change file shape (api_key only, no user block).
 	seed := `{"api_key":"hg_legacy"}`
-	dir := paths.ConfigDir()
+	dir := mustConfigDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -215,7 +213,7 @@ func TestClearUserInfo_RemovesEmptyFile(t *testing.T) {
 
 	// Seed a file with ONLY a user block (no credential). This is an
 	// unusual state but the post-condition we want is "file gone."
-	dir := paths.ConfigDir()
+	dir := mustConfigDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -242,7 +240,7 @@ func TestClearUserInfo_NoUserBlock_NoOp(t *testing.T) {
 	if err := (&FileCredentialStore{}).Save("hg_only"); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	before, err := os.ReadFile(filepath.Join(paths.ConfigDir(), "credentials"))
+	before, err := os.ReadFile(filepath.Join(mustConfigDir(), "credentials"))
 	if err != nil {
 		t.Fatalf("read pre-state: %v", err)
 	}
@@ -250,7 +248,7 @@ func TestClearUserInfo_NoUserBlock_NoOp(t *testing.T) {
 	if err := ClearUserInfo(); err != nil {
 		t.Fatalf("ClearUserInfo: %v", err)
 	}
-	after, err := os.ReadFile(filepath.Join(paths.ConfigDir(), "credentials"))
+	after, err := os.ReadFile(filepath.Join(mustConfigDir(), "credentials"))
 	if err != nil {
 		t.Fatalf("read post-state: %v", err)
 	}

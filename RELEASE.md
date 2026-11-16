@@ -107,14 +107,22 @@ Or from the GitHub Actions UI: go to **Actions > Stable Release > Run workflow**
 
 `commit` pins the release to the commit you checked. Without it the workflow releases `main` as it is when the job starts, which can include anything merged after you looked. The workflow refuses a commit that is not on `main`, that is older than the last stable release, or whose `.github/scripts` or `.goreleaser.yaml` differ from `main`'s, since the workflow runs those files from the pinned commit.
 
+### Protected tags and immutable releases
+
+Release tags (`v*`) are protected by a repository ruleset: only a repository admin can move or delete one, and the workflow can still create them. Published releases are immutable: their assets and tag can't change, and once a published release is deleted its version number can't be used again. Drafts stay editable, which is why GoReleaser attaches every asset to a draft and a later job publishes it.
+
 ### If the release fails
 
 The workflow runs `release` (tag, then GoReleaser, which creates the GitHub release as a draft), then `publish-release` (publishes it), then `publish-cdn`, with `cleanup-failed-release` only when `release` fails. Where it fails decides the recovery:
 
-- **`release` fails or is cancelled** after pushing the tag: the `cleanup-failed-release` job deletes the tag and any draft release GoReleaser left, so dispatch the workflow again once the cause is fixed, with the same `commit` the failed run used. Without it, a re-dispatch releases `main` as it is then, which may include commits nobody checked. If the cleanup job itself fails partway, re-run that job alone (not "Re-run failed jobs", which reruns `release` and stops at the existing tag); it reuses the original run's tag and commit and is safe to repeat.
-- **The cleanup refuses** because a release for the tag is published or is a draft from another run, the tag is not the one that run created, or the API gave an unclear answer: it deletes nothing. Each run marks its draft with its run ID, and only that run's drafts are ever deleted or published. Check the release. If it is incomplete, delete it and its tag with `gh release delete <version> --cleanup-tag` and dispatch again with the original `commit`; if it is complete, the CDN still needs publishing, so ask someone with access to the release bucket.
+- **`release` fails or is cancelled** after pushing the tag: the `cleanup-failed-release` job deletes any draft release GoReleaser left, then tries to delete the tag. The tag ruleset blocks that last step, so the job fails there. Ask a repository admin to delete the tag (`git push origin :refs/tags/<version>`), then dispatch the workflow again once the cause is fixed, with the same `commit` the failed run used. The version number can be reused, because the release was never published. Without the same `commit`, a re-dispatch releases `main` as it is then, which may include commits nobody checked. If the cleanup job fails before the tag step, re-run that job alone (not "Re-run failed jobs", which reruns `release` and stops at the existing tag); it reuses the original run's tag and commit and is safe to repeat.
+- **The cleanup refuses** because a release for the tag is published or is a draft from another run, the tag is not the one that run created, or the API gave an unclear answer: it deletes nothing. Each run marks its draft with its run ID, and only that run's drafts are ever deleted or published. Check the release:
+  - A draft from another run: a repository admin deletes it and its tag with `gh release delete <version> --cleanup-tag`, and you dispatch again with the original `commit`. The version number can be reused.
+  - A published release that is incomplete: it can't be fixed in place. A repository admin can delete it and its tag the same way, but that version number can't be used again, so release the next patch version instead.
+  - A published release that is complete: the CDN still needs publishing, so ask someone with access to the release bucket.
 - **`publish-release` fails or is cancelled**: the draft stays a draft, and nobody can see it yet. Re-run `publish-release` (and `publish-cdn` after it) rather than dispatching again; publishing an already-published release is a no-op.
 - **`publish-cdn` fails** (AWS credentials or the S3 upload): the GitHub release is already public and stays. Use **Re-run failed jobs**; the job downloads that release's assets, checks them against its `checksums.txt`, and publishes them. The stable pointer is written last, so until it succeeds the CDN keeps serving the previous version.
+- **`publish-cdn` refuses** before uploading anything: the tag no longer points at the commit the run built, the release's `checksums.txt` is not the one GoReleaser produced in that run, the CDN already serves a newer version, or this version is already on the CDN with different files. Each means the tag, the release or the CDN changed after the release job, so find out who changed it before publishing; do not move the tag back or re-upload assets to get past it.
 
 ### Post-release
 
@@ -217,7 +225,7 @@ If no stable tag exists, starts from `v0.0.1-dev.*`.
 
 `heygen update` auto-detects the update channel from the current version:
 
-- Running a stable version (e.g., `v0.1.0`) → updates track stable releases only
-- Running a dev version (e.g., `v0.1.1-dev.*`) → updates track dev prereleases
+- Running a stable version (e.g., `v0.1.0`) → updates track stable releases only. They come from the same CDN the install script uses, and each archive is verified against the `checksums.txt` published with it before it replaces the binary.
+- Running a dev version (e.g., `v0.1.1-dev.*`) → updates track dev prereleases, which are published as GitHub releases only
 
-`heygen update --version v0.1.0` overrides channel detection and installs the exact version specified.
+`heygen update --version v0.1.0` installs the exact version specified. A stable build accepts only stable versions, since the CDN serves no prereleases.

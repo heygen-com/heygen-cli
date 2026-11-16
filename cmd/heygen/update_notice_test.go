@@ -290,7 +290,7 @@ func TestReadUpdateCache_UnusableFileIsAbsent(t *testing.T) {
 	for name, data := range cases {
 		t.Run(name, func(t *testing.T) {
 			setupUpdateNotice(t)
-			if err := os.WriteFile(updateCachePath(), data, 0o600); err != nil {
+			if err := os.WriteFile(mustUpdateCachePath(), data, 0o600); err != nil {
 				t.Fatal(err)
 			}
 			if c := readUpdateCache(); c != (updateCheckCache{}) {
@@ -323,7 +323,7 @@ func TestUpdateCheck_UnwritableConfigDirStaysOff(t *testing.T) {
 // the lock succeed while the write's rename fails.
 func TestUpdateCheck_UnrecordedAttemptDoesNotSpawn(t *testing.T) {
 	spawns := setupUpdateNotice(t)
-	if err := os.Mkdir(updateCachePath(), 0o700); err != nil {
+	if err := os.Mkdir(mustUpdateCachePath(), 0o700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -445,7 +445,7 @@ func TestUpdateCheck_BusyLockSkipsCacheWork(t *testing.T) {
 func TestUpdateCheck_LockFileWithoutHolderDoesNotBlock(t *testing.T) {
 	setupUpdateNotice(t)
 	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow})
-	if err := os.WriteFile(updateCachePath()+".lock", nil, 0o600); err != nil {
+	if err := os.WriteFile(mustUpdateCachePath()+".lock", nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -573,7 +573,7 @@ func TestWriteUpdateCache_OwnerOnly(t *testing.T) {
 	}
 	setupUpdateNotice(t)
 	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1"})
-	info, err := os.Stat(updateCachePath())
+	info, err := os.Stat(mustUpdateCachePath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -600,20 +600,25 @@ func TestFetchStablePointer(t *testing.T) {
 	}{
 		{"stable tag", http.StatusOK, "v0.9.1\n", "v0.9.1"},
 		{"dev tag", http.StatusOK, "v0.9.1-dev.202610070000", ""},
+		{"leading zero", http.StatusOK, "v0.09.1", ""},
 		{"not a tag", http.StatusOK, "<html>", ""},
 		{"oversized", http.StatusOK, "v0.9.1" + strings.Repeat(" ", updatePointerMaxBytes), ""},
 		{"server error", http.StatusInternalServerError, "v0.9.1", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/stable" {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 				w.WriteHeader(tc.status)
 				_, _ = io.WriteString(w, tc.body)
 			}))
 			defer srv.Close()
-			orig := updateStablePointerURL
-			t.Cleanup(func() { updateStablePointerURL = orig })
-			updateStablePointerURL = srv.URL
+			orig := updateCDNBaseURL
+			t.Cleanup(func() { updateCDNBaseURL = orig })
+			updateCDNBaseURL = srv.URL
 
 			got, err := fetchStablePointer(context.Background())
 			if tc.want == "" {
