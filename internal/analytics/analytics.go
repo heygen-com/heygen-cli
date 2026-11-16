@@ -286,10 +286,10 @@ func (c *Client) AuthLoginFailed(method, reason string) {
 // (skills/media-use/scripts/lib/telemetry.mjs: sharedConfigPath /
 // anonymousId). Resolved independently of HEYGEN_CONFIG_DIR — it's a
 // different, cross-tool directory by design, not heygen-cli's own config
-// dir. Returns "" if the home directory can't be resolved; callers treat
+// dir. Returns "" if the home directory is unset or relative; callers treat
 // that the same as "file absent."
 func sharedConfigPath() string {
-	home, err := os.UserHomeDir()
+	home, err := paths.HomeDir()
 	if err != nil {
 		return ""
 	}
@@ -330,8 +330,7 @@ func writeSharedConfig(config map[string]any) {
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(path), 0o700)
-	_ = os.WriteFile(path, append(data, '\n'), 0o600)
+	_ = paths.ReplaceFile(path, append(data, '\n'))
 }
 
 // legacyAnalyticsID reads heygen-cli's own pre-existing analytics id

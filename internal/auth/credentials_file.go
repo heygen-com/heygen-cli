@@ -77,42 +77,16 @@ func loadCredentialsFile(path string) (jsonCredentials, credentialFormat, error)
 }
 
 // writeCredentialsFile atomically writes creds as JSON with mode 0600,
-// creating the parent directory (0700) if needed. Writes go to a temp
-// file + rename so a crash mid-write can't leave a truncated file.
+// creating the parent directory (0700) if needed.
 func writeCredentialsFile(path string, creds jsonCredentials) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
 	// G117: serializing the api_key field is the entire purpose of this
 	// credential store; the result is written to a 0600 file, never logged.
 	body, err := json.MarshalIndent(creds, "", "  ") //nolint:gosec // intentional credential persistence to a 0600 file
 	if err != nil {
 		return fmt.Errorf("failed to encode credentials: %w", err)
 	}
-	body = append(body, '\n')
-
-	tmp, err := os.CreateTemp(dir, "credentials.*.tmp")
-	if err != nil {
-		return fmt.Errorf("failed to create temp credentials file: %w", err)
-	}
-	tmpName := tmp.Name()
-	// Best-effort cleanup if we bail before the rename succeeds.
-	defer func() { _ = os.Remove(tmpName) }()
-
-	if _, err := tmp.Write(body); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("failed to write temp credentials file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("failed to close temp credentials file: %w", err)
-	}
-	if err := os.Chmod(tmpName, 0o600); err != nil {
-		return fmt.Errorf("failed to chmod temp credentials file: %w", err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return fmt.Errorf("failed to finalize credentials file: %w", err)
+	if err := paths.ReplaceFile(path, append(body, '\n')); err != nil {
+		return fmt.Errorf("failed to write credentials file: %w", err)
 	}
 	return nil
 }
