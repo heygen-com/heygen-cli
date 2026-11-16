@@ -14,8 +14,7 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: dev-release
@@ -24,13 +23,15 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       tag: ${{ steps.compute.outputs.version }}
       tag_push_attempted: ${{ steps.tag.outputs.push_attempted }}
       commit: ${{ steps.tag.outputs.commit }}
       release_id: ${{ steps.draft.outputs.id }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked] pushes or deletes the release tag
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.commit || 'main' }}
@@ -145,7 +146,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked] pushes or deletes the release tag
         with:
           ref: ${{ needs.release.outputs.commit }}
 

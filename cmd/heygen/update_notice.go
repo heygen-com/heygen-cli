@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,12 +35,9 @@ const (
 )
 
 var (
-	// updateStablePointerURL is the file install.sh resolves "latest" from, so
-	// the notice can never name a release the installer would not serve.
-	updateStablePointerURL = "https://static.heygen.ai/cli/stable"
-	updateNow              = time.Now
-	updateFetchLatest      = fetchStablePointer
-	updateSpawnWorker      = spawnUpdateCheckWorker
+	updateNow         = time.Now
+	updateFetchLatest = fetchStablePointer
+	updateSpawnWorker = spawnUpdateCheckWorker
 )
 
 // Invocations matching these never check or notify. __complete runs on every
@@ -270,28 +266,14 @@ func skipsUpdateCheck(args []string) bool {
 	return first == "" || updateCheckSkippedCommands[first]
 }
 
+// fetchStablePointer reads the file install.sh resolves "latest" from.
 func fetchStablePointer(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, updateStablePointerURL, nil)
+	body, err := cdnGet(ctx, updateCDNBaseURL+"/stable", updatePointerMaxBytes)
 	if err != nil {
 		return "", err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("stable pointer returned HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, updatePointerMaxBytes+1))
-	if err != nil {
-		return "", err
-	}
-	if len(body) > updatePointerMaxBytes {
-		return "", fmt.Errorf("stable pointer exceeds %d bytes", updatePointerMaxBytes)
 	}
 	latest := strings.TrimSpace(string(body))
-	if !releaseTaggedVersion.MatchString(latest) || updateChannel(latest) != "stable" {
+	if !stableReleaseTag.MatchString(latest) {
 		return "", fmt.Errorf("stable pointer %q is not a stable release tag", latest)
 	}
 	return latest, nil

@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build install test lint clean generate
+.PHONY: build install test test-release-scripts lint clean generate
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o bin/heygen ./cmd/heygen/
@@ -11,6 +11,9 @@ install:
 
 test:
 	go test ./...
+
+test-release-scripts:
+	.github/scripts/tests/run.sh
 
 lint:
 	golangci-lint run ./...

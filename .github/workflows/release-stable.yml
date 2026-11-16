@@ -12,8 +12,7 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: write
+permissions: {}
 
 # One stable release at a time, so a failed run's cleanup never overlaps another
 # run. A run dispatched while one is in progress waits, but GitHub keeps only
@@ -25,6 +24,8 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       tag: ${{ steps.version.outputs.version }}
       tag_push_attempted: ${{ steps.tag.outputs.push_attempted }}
@@ -32,7 +33,7 @@ jobs:
       release_id: ${{ steps.draft.outputs.id }}
       checksums_sha256: ${{ steps.checksums.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked] pushes or deletes the release tag
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.commit || 'main' }}
@@ -203,7 +204,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked] pushes or deletes the release tag
         with:
           ref: ${{ needs.release.outputs.commit }}
 
@@ -245,6 +246,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release.outputs.commit }}
+          persist-credentials: false
 
       - name: Check the tag still points at the built commit
         shell: bash
