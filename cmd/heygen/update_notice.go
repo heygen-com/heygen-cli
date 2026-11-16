@@ -36,7 +36,7 @@ const (
 
 var (
 	updateNow         = time.Now
-	updateFetchLatest = fetchStablePointer
+	updateFetchLatest = fetchLatestStable
 	updateSpawnWorker = spawnUpdateCheckWorker
 )
 

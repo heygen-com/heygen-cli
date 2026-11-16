@@ -81,7 +81,7 @@ func (u *selfUpdater) DetectVersion(ctx context.Context, version string) (update
 }
 
 func (u *selfUpdater) UpdateTo(ctx context.Context, rel updateRelease, cmdPath string) error {
-	return u.updater.UpdateTo(ctx, rel.raw, cmdPath)
+	return withRollbackHint(u.updater.UpdateTo(ctx, rel.raw, cmdPath), cmdPath)
 }
 
 var (
