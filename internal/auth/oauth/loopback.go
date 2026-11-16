@@ -41,10 +41,6 @@ var (
 	// ErrAuthorizeFailed is any non-access_denied `error=` from the IdP.
 	ErrAuthorizeFailed = errors.New("oauth: authorization server returned an error")
 
-	// ErrStateMismatch means the callback's state did not match the value
-	// generated alongside the PKCE pair. Possible CSRF.
-	ErrStateMismatch = errors.New("oauth: state mismatch")
-
 	// ErrMissingCode means the callback arrived without a `code` parameter.
 	ErrMissingCode = errors.New("oauth: redirect did not include code")
 
@@ -244,12 +240,12 @@ func (lb *LoopbackServer) handleCallback(w http.ResponseWriter, r *http.Request)
 	// unvalidated error branch would let anyone able to reach this
 	// ephemeral port abort a live login (and forge its telemetry) with a
 	// single unauthenticated GET. Order is load-bearing: do not move the
-	// `error` check above this.
+	// `error` check above this. A request that fails the check proves
+	// nothing about who sent it, so it ends nothing: the login keeps
+	// waiting for the real callback, cancellation or the timeout.
 	state := q.Get("state")
 	if state == "" || subtle.ConstantTimeCompare([]byte(state), []byte(lb.ExpectedState)) != 1 {
 		writeErrorPage(w, http.StatusBadRequest, "invalid_state", "State parameter did not match.")
-		lb.deliver(LoopbackResult{Err: fmt.Errorf("%w — possible CSRF, aborting", ErrStateMismatch), RedirectURI: lb.RedirectURI})
-		go lb.shutdown()
 		return
 	}
 

@@ -64,7 +64,9 @@ func TestStartLoopbackServer_HappyPath(t *testing.T) {
 	}
 }
 
-func TestStartLoopbackServer_StateMismatchRejects(t *testing.T) {
+// A request that fails the state check proves nothing about who sent it, so it gets its 400 page and ends nothing:
+// any local process can reach this port, and letting one bad GET end the login hands it the login's outcome.
+func TestStartLoopbackServer_WrongStateLeavesLoginWaiting(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -74,26 +76,33 @@ func TestStartLoopbackServer_StateMismatchRejects(t *testing.T) {
 	}
 	defer stop()
 
-	cbURL := lb.RedirectURI + "?" + url.Values{
-		"code":  {"the-code"},
-		"state": {"different-state"},
-	}.Encode()
-	resp, err := http.Get(cbURL) //nolint:noctx // test client
+	for _, bad := range []url.Values{
+		{"code": {"forged-code"}},
+		{"code": {"forged-code"}, "state": {"different-state"}},
+		{"error": {"access_denied"}, "state": {"attacker-state"}},
+		{"error": {"access_denied"}},
+	} {
+		resp, err := http.Get(lb.RedirectURI + "?" + bad.Encode()) //nolint:noctx // test client
+		if err != nil {
+			t.Fatalf("GET %v: %v", bad, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "invalid_state") {
+			t.Errorf("GET %v: status = %d, body=%s; want 400 invalid_state", bad, resp.StatusCode, body)
+		}
+	}
+
+	resp, err := http.Get(lb.RedirectURI + "?" + url.Values{"code": {"the-code"}, "state": {"expected-state"}}.Encode()) //nolint:noctx // test client
 	if err != nil {
-		t.Fatalf("GET callback: %v", err)
+		t.Fatalf("GET real callback: %v", err)
 	}
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", resp.StatusCode)
-	}
 
 	select {
 	case r := <-results:
-		if r.Err == nil {
-			t.Fatal("expected error result")
-		}
-		if !strings.Contains(r.Err.Error(), "state mismatch") {
-			t.Errorf("err = %v, want state-mismatch message", r.Err)
+		if r.Err != nil || r.Code != "the-code" {
+			t.Fatalf("result = %+v, want the real callback's code", r)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for result")
@@ -254,21 +263,6 @@ func TestStartLoopbackServer_ErrorsWrapSentinels(t *testing.T) {
 			name:  "other IdP error",
 			query: url.Values{"error": {"invalid_scope"}, "state": {"the-state"}},
 			want:  ErrAuthorizeFailed,
-		},
-		{
-			name:  "error response with wrong state is a state mismatch, not a denial",
-			query: url.Values{"error": {"access_denied"}, "state": {"attacker-state"}},
-			want:  ErrStateMismatch,
-		},
-		{
-			name:  "error response with no state is a state mismatch, not a denial",
-			query: url.Values{"error": {"access_denied"}},
-			want:  ErrStateMismatch,
-		},
-		{
-			name:  "state mismatch",
-			query: url.Values{"code": {"the-code"}, "state": {"wrong-state"}},
-			want:  ErrStateMismatch,
 		},
 		{
 			name:  "missing code",
