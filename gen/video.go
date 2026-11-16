@@ -314,4 +314,7 @@ var VideoVoiceCapabilitiesGet = &command.Spec{
 	Endpoint:       "/v3/videos/voice-capabilities",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# List the voice engines and models available per language and accent\n  heygen video voice-capabilities get",
+	},
 }

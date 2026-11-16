@@ -429,6 +429,9 @@ var AssetPartsCreate = &command.Spec{
 	Endpoint:       "/v3/assets/{asset_id}/parts",
 	Method:         "POST",
 	BodyEncoding:   "json",
+	Examples: []string{
+		"# Get presigned URLs for parts 1-3 of an upload created with multipart\n  heygen asset parts create <asset-id> --multipart-upload-id <multipart-upload-id> --part-numbers 1,2,3",
+	},
 	Args: []command.ArgSpec{
 		{Name: "asset-id", Param: "asset_id", Help: ""},
 	},
@@ -470,6 +473,9 @@ var AssetPartsDelete = &command.Spec{
 	Method:         "DELETE",
 	BodyEncoding:   "",
 	Destructive:    true,
+	Examples: []string{
+		"# Abandon an upload in parts and drop the parts stored so far\n  heygen asset parts delete <asset-id> --multipart-upload-id <multipart-upload-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "asset-id", Param: "asset_id", Help: ""},
 	},
@@ -498,6 +504,9 @@ var AssetPartsGet = &command.Spec{
 	Endpoint:       "/v3/assets/{asset_id}/parts",
 	Method:         "GET",
 	BodyEncoding:   "",
+	Examples: []string{
+		"# List the parts already stored, to resume an interrupted upload\n  heygen asset parts get <asset-id> --multipart-upload-id <multipart-upload-id>",
+	},
 	Args: []command.ArgSpec{
 		{Name: "asset-id", Param: "asset_id", Help: ""},
 	},
