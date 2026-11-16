@@ -246,7 +246,10 @@ func (r *FileCredentialResolver) Resolve() (string, error) {
 // passive commands can't silently convert a file that an older pinned
 // binary might still need to read.
 func (r *FileCredentialResolver) ResolveCredential() (*Credential, error) {
-	path := credentialFilePath()
+	path, err := credentialFilePath()
+	if err != nil {
+		return nil, &ErrNotConfigured{Msg: err.Error()}
+	}
 	creds, format, err := loadCredentialsFile(path)
 	if format == formatAbsent && err == nil {
 		return nil, &ErrNotConfigured{Msg: "no credentials file"}

@@ -290,7 +290,7 @@ func TestReadUpdateCache_UnusableFileIsAbsent(t *testing.T) {
 	for name, data := range cases {
 		t.Run(name, func(t *testing.T) {
 			setupUpdateNotice(t)
-			if err := os.WriteFile(updateCachePath(), data, 0o600); err != nil {
+			if err := os.WriteFile(mustUpdateCachePath(), data, 0o600); err != nil {
 				t.Fatal(err)
 			}
 			if c := readUpdateCache(); c != (updateCheckCache{}) {
@@ -323,7 +323,7 @@ func TestUpdateCheck_UnwritableConfigDirStaysOff(t *testing.T) {
 // the lock succeed while the write's rename fails.
 func TestUpdateCheck_UnrecordedAttemptDoesNotSpawn(t *testing.T) {
 	spawns := setupUpdateNotice(t)
-	if err := os.Mkdir(updateCachePath(), 0o700); err != nil {
+	if err := os.Mkdir(mustUpdateCachePath(), 0o700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -445,7 +445,7 @@ func TestUpdateCheck_BusyLockSkipsCacheWork(t *testing.T) {
 func TestUpdateCheck_LockFileWithoutHolderDoesNotBlock(t *testing.T) {
 	setupUpdateNotice(t)
 	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1", CheckedAt: updateTestNow})
-	if err := os.WriteFile(updateCachePath()+".lock", nil, 0o600); err != nil {
+	if err := os.WriteFile(mustUpdateCachePath()+".lock", nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -573,7 +573,7 @@ func TestWriteUpdateCache_OwnerOnly(t *testing.T) {
 	}
 	setupUpdateNotice(t)
 	seedUpdateCache(t, updateCheckCache{Latest: "v0.9.1"})
-	info, err := os.Stat(updateCachePath())
+	info, err := os.Stat(mustUpdateCachePath())
 	if err != nil {
 		t.Fatal(err)
 	}

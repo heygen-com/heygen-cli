@@ -23,8 +23,20 @@ const (
 // credentialFilePath is the shared store path. Matches the path
 // hyperframes-CLI uses (no `.json` extension) so the two tools share
 // one file.
-func credentialFilePath() string {
-	return filepath.Join(paths.ConfigDir(), "credentials")
+func credentialFilePath() (string, error) {
+	dir, err := paths.ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "credentials"), nil
+}
+
+// CredentialsFileShown is the credentials file's path for a message, or a plain name when there is none.
+func CredentialsFileShown() string {
+	if path, err := credentialFilePath(); err == nil {
+		return path
+	}
+	return "the credentials file"
 }
 
 // loadCredentialsFile reads and parses the credentials file. It does

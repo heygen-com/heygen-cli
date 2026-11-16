@@ -2,10 +2,8 @@ package auth
 
 import (
 	"errors"
-	"path/filepath"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
-	"github.com/heygen-com/heygen-cli/internal/paths"
 )
 
 // ChainCredentialResolver tries multiple credential sources in priority order.
@@ -35,7 +33,7 @@ func (c *ChainCredentialResolver) ResolveWithSource() (CredentialResult, error) 
 	// surface as a typed error so callers don't silently feed an
 	// access_token into the x-api-key header.
 	if cred.Type != CredentialTypeAPIKey {
-		credPath := filepath.Join(paths.ConfigDir(), "credentials")
+		credPath := CredentialsFileShown()
 		return CredentialResult{}, clierrors.NewAuth(
 			"stored credential is an OAuth session, not an API key",
 			"This call site has not yet been wired for OAuth (file: "+credPath+")",
@@ -63,7 +61,7 @@ func (c *ChainCredentialResolver) ResolveTypedCredential() (*Credential, error) 
 			continue
 		}
 
-		credPath := filepath.Join(paths.ConfigDir(), "credentials")
+		credPath := CredentialsFileShown()
 		return nil, clierrors.NewAuth(err.Error(), "Check the credentials file at "+credPath)
 	}
 

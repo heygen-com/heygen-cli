@@ -7,7 +7,6 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -17,7 +16,6 @@ import (
 	"github.com/heygen-com/heygen-cli/internal/config"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/heygen-com/heygen-cli/internal/output"
-	"github.com/heygen-com/heygen-cli/internal/paths"
 	"github.com/spf13/cobra"
 )
 
@@ -88,7 +86,7 @@ func enrichAuthHint(cliErr *clierrors.CLIError, source auth.CredentialSource) {
 	if cliErr.Hint != "" {
 		return
 	}
-	credPath := filepath.Join(paths.ConfigDir(), "credentials")
+	credPath := auth.CredentialsFileShown()
 	switch source {
 	case auth.SourceEnv:
 		cliErr.Hint = "The HEYGEN_API_KEY environment variable contains an invalid or expired key.\nGenerate a new key: " + clierrors.APIKeySettingsURL
