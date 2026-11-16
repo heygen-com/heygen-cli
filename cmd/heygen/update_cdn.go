@@ -63,7 +63,9 @@ var (
 	// Every CDN URL is built only from a value that matches it.
 	stableReleaseTag = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 
-	errReleaseNotFound = errors.New("release not found")
+	// errNoPlatformEntry is a checksums.txt that was read but lists no archive
+	// for this platform.
+	errNoPlatformEntry = errors.New("no archive for this platform")
 )
 
 // httpStatusError is a response other than 200. Whether a status means the
@@ -95,14 +97,15 @@ type cdnUpdater struct {
 }
 
 // DetectLatest reports the stable pointer's release only if that release has
-// an archive for this platform.
+// an archive for this platform. A pointer naming a release whose checksums.txt
+// cannot be read is an error, not "no update".
 func (u *cdnUpdater) DetectLatest(ctx context.Context) (updateRelease, bool, error) {
 	tag, err := fetchStablePointer(ctx)
 	if err != nil {
 		return updateRelease{}, false, err
 	}
 	if _, _, err := u.expectedChecksum(ctx, tag); err != nil {
-		if errors.Is(err, errReleaseNotFound) {
+		if errors.Is(err, errNoPlatformEntry) {
 			return updateRelease{}, false, nil
 		}
 		return updateRelease{}, false, err
@@ -126,7 +129,7 @@ func (u *cdnUpdater) DetectVersion(ctx context.Context, version string) (updateR
 		return updateRelease{}, false, nil
 	}
 	if _, _, err := u.expectedChecksum(ctx, version); err != nil {
-		if errors.Is(err, errReleaseNotFound) {
+		if objectMissing(err) || errors.Is(err, errNoPlatformEntry) {
 			return updateRelease{}, false, nil
 		}
 		return updateRelease{}, false, err
@@ -163,13 +166,19 @@ func (u *cdnUpdater) UpdateTo(ctx context.Context, rel updateRelease, cmdPath st
 	if err != nil {
 		return err
 	}
-	if err := update.Apply(bytes.NewReader(binary), update.Options{TargetPath: cmdPath}); err != nil {
-		if rbErr := update.RollbackError(err); rbErr != nil {
+	return withRollbackHint(update.Apply(bytes.NewReader(binary), update.Options{TargetPath: cmdPath}), cmdPath)
+}
+
+// withRollbackHint adds reinstall steps when update.Apply could not restore
+// the previous binary. RollbackError matches only the unwrapped error, so each
+// layer is checked.
+func withRollbackHint(err error, cmdPath string) error {
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		if rbErr := update.RollbackError(e); rbErr != nil {
 			return fmt.Errorf("%w; restoring the previous binary also failed (%v), so %s may be missing. Reinstall with: curl -fsSL https://static.heygen.ai/cli/install.sh | bash", err, rbErr, cmdPath)
 		}
-		return err
 	}
-	return nil
+	return err
 }
 
 func fetchGitHubChecksums(ctx context.Context, tag string) ([]byte, error) {
@@ -177,13 +186,10 @@ func fetchGitHubChecksums(ctx context.Context, tag string) ([]byte, error) {
 }
 
 // expectedChecksum returns the sha256 that tag's checksums.txt on the CDN
-// lists for this platform's archive, and the file itself. A missing release or
-// a missing entry wraps errReleaseNotFound.
+// lists for this platform's archive, and the file itself. A file with no entry
+// for this platform wraps errNoPlatformEntry; a failed read is returned as is.
 func (u *cdnUpdater) expectedChecksum(ctx context.Context, tag string) (string, []byte, error) {
 	data, err := cdnGet(ctx, releaseFileURL(tag, "checksums.txt"), updateChecksumsMaxBytes)
-	if objectMissing(err) {
-		return "", nil, fmt.Errorf("%w: %w", errReleaseNotFound, err)
-	}
 	if err != nil {
 		return "", nil, err
 	}
@@ -200,7 +206,7 @@ func (u *cdnUpdater) expectedChecksum(ctx context.Context, tag string) (string, 
 		sum = strings.ToLower(fields[0])
 	}
 	if sum == "" {
-		return "", nil, fmt.Errorf("%w: checksums.txt for %s has no entry for %s", errReleaseNotFound, tag, asset)
+		return "", nil, fmt.Errorf("%w: checksums.txt for %s has no entry for %s", errNoPlatformEntry, tag, asset)
 	}
 	if decoded, err := hex.DecodeString(sum); err != nil || len(decoded) != sha256.Size {
 		return "", nil, fmt.Errorf("checksums.txt for %s has a malformed entry for %s", tag, asset)

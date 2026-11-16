@@ -363,6 +363,20 @@ func TestUpdateCheck_AgreesWithNoticeOnStableSource(t *testing.T) {
 	}
 }
 
+// A stable pointer naming a release whose checksums.txt cannot be read is a
+// broken CDN, so --check and the notice fail rather than report no update.
+func TestUpdateCheck_UnreadableChecksumsForLatestIsAnError(t *testing.T) {
+	setupCDNUpdate(t, map[string]cdnObject{"stable": {body: []byte("v0.3.0\n")}})
+
+	res := runUpdateRoot(t, "v0.1.0", "update", "--check")
+	if res.ExitCode != clierrors.ExitGeneral || !strings.Contains(res.Stderr, "HTTP 403") {
+		t.Fatalf("ExitCode = %d, want %d with the HTTP status\nstdout: %s\nstderr: %s", res.ExitCode, clierrors.ExitGeneral, res.Stdout, res.Stderr)
+	}
+	if latest, err := updateFetchLatest(context.Background()); err == nil {
+		t.Fatalf("notice latest = %q with no error; want the fetch to fail", latest)
+	}
+}
+
 // Only a --version lookup turns a 403 into "not found". A refused stable
 // pointer is a failure to check, reported with its status.
 func TestUpdate_StablePointerRefusedIsNotNotFound(t *testing.T) {
