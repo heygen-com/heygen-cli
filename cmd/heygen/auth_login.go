@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/heygen-com/heygen-cli/internal/auth"
 	"github.com/heygen-com/heygen-cli/internal/auth/oauth"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
-	"github.com/heygen-com/heygen-cli/internal/paths"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

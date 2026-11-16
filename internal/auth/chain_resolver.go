@@ -2,10 +2,8 @@ package auth
 
 import (
 	"errors"
-	"path/filepath"
 
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
-	"github.com/heygen-com/heygen-cli/internal/paths"
 )
 
 // ChainCredentialResolver tries multiple credential sources in priority order.

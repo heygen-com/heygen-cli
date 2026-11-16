@@ -7,7 +7,6 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -17,7 +16,6 @@ import (
 	"github.com/heygen-com/heygen-cli/internal/config"
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 	"github.com/heygen-com/heygen-cli/internal/output"
-	"github.com/heygen-com/heygen-cli/internal/paths"
 	"github.com/spf13/cobra"
 )
 
