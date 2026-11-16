@@ -11,13 +11,13 @@ set -euo pipefail
 tag="$1"
 checksums="$2"
 
-if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
   printf '::error::not a stable release tag: %q\n' "$tag"
   exit 1
 fi
 
 current="$(curl -fsS --retry 3 "${CDN_BASE}/stable" | tr -d '\r\n')"
-if [[ ! "$current" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ ! "$current" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
   printf '::error::could not read the current stable version from %s: %q\n' "${CDN_BASE}/stable" "$current"
   exit 1
 fi

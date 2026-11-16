@@ -14,7 +14,7 @@ checksums_sha256="$3"
 dir="$4"
 repo="$GITHUB_REPOSITORY"
 
-if [[ ! "$release_id" =~ ^[0-9]+$ || ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || ! "$checksums_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+if [[ ! "$release_id" =~ ^[0-9]+$ || ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ || ! "$checksums_sha256" =~ ^[0-9a-f]{64}$ ]]; then
   printf '::error::bad release ID, tag or checksums digest: %q %q %q\n' "$release_id" "$tag" "$checksums_sha256"
   exit 1
 fi
