@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -264,6 +265,7 @@ func TestUpdate_VersionResolvesItsCDNFolder(t *testing.T) {
 		{name: "published version", version: "v0.1.5", objects: releaseObjects("v0.1.5", archive), installed: "v0.1.5 binary"},
 		{name: "missing version answers 403", version: "v0.1.5", objects: map[string]cdnObject{}},
 		{name: "missing version answers 404", version: "v0.1.5", objects: map[string]cdnObject{sums: {status: http.StatusNotFound}}},
+		{name: "version lacks this platform", version: "v0.1.5", objects: map[string]cdnObject{sums: {body: []byte(sha256Hex(archive) + "  heygen_v0.1.5_plan9_amd64.tar.gz\n")}}},
 		{name: "not a stable tag", version: "v0.1.5-rc.1", objects: releaseObjects("v0.1.5-rc.1", archive)},
 	}
 	for _, tc := range cases {
@@ -290,6 +292,34 @@ func TestUpdate_VersionResolvesItsCDNFolder(t *testing.T) {
 				t.Errorf("requested %v; a version that is not a stable tag must never reach a URL", cdn.requested())
 			}
 		})
+	}
+}
+
+// A failed rollback can sit under wrapping layers, and the hint must name the
+// reinstall path; a dev build is told install.sh gives it a stable release.
+func TestWithRollbackHint(t *testing.T) {
+	rollbackFailed := errors.New("rename failed")
+	orig := updateRollbackError
+	t.Cleanup(func() { updateRollbackError = orig })
+	applyErr := errors.New("apply failed")
+	updateRollbackError = func(err error) error {
+		if err == applyErr {
+			return rollbackFailed
+		}
+		return nil
+	}
+	wrapped := fmt.Errorf("updating: %w", applyErr)
+
+	stable := withRollbackHint(wrapped, "/bin/heygen", false)
+	if !errors.Is(stable, applyErr) || !strings.Contains(stable.Error(), "install.sh | bash") || strings.Contains(stable.Error(), "stable release") {
+		t.Errorf("stable hint = %q; want the wrapped error and the install.sh command", stable)
+	}
+	dev := withRollbackHint(wrapped, "/bin/heygen", true)
+	if !strings.Contains(dev.Error(), "latest stable release") || !strings.Contains(dev.Error(), "heygen-cli/releases") {
+		t.Errorf("dev hint = %q; want it to say install.sh installs stable and where dev builds are", dev)
+	}
+	if got := withRollbackHint(errors.New("other"), "/bin/heygen", false); got.Error() != "other" {
+		t.Errorf("hint added to an error with no failed rollback: %q", got)
 	}
 }
 

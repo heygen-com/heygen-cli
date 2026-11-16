@@ -166,16 +166,25 @@ func (u *cdnUpdater) UpdateTo(ctx context.Context, rel updateRelease, cmdPath st
 	if err != nil {
 		return err
 	}
-	return withRollbackHint(update.Apply(bytes.NewReader(binary), update.Options{TargetPath: cmdPath}), cmdPath)
+	return withRollbackHint(update.Apply(bytes.NewReader(binary), update.Options{TargetPath: cmdPath}), cmdPath, false)
 }
+
+// updateRollbackError is update.RollbackError; tests replace it because
+// update.Apply's rollback error type is unexported.
+var updateRollbackError = update.RollbackError
 
 // withRollbackHint adds reinstall steps when update.Apply could not restore
 // the previous binary. RollbackError matches only the unwrapped error, so each
-// layer is checked.
-func withRollbackHint(err error, cmdPath string) error {
+// layer is checked. install.sh installs only stable releases, so a dev build
+// is also told where dev builds are published.
+func withRollbackHint(err error, cmdPath string, dev bool) error {
 	for e := err; e != nil; e = errors.Unwrap(e) {
-		if rbErr := update.RollbackError(e); rbErr != nil {
-			return fmt.Errorf("%w; restoring the previous binary also failed (%v), so %s may be missing. Reinstall with: curl -fsSL https://static.heygen.ai/cli/install.sh | bash", err, rbErr, cmdPath)
+		if rbErr := updateRollbackError(e); rbErr != nil {
+			hint := "Reinstall with: curl -fsSL https://static.heygen.ai/cli/install.sh | bash"
+			if dev {
+				hint += ", which installs the latest stable release. Dev builds are at https://github.com/heygen-com/heygen-cli/releases"
+			}
+			return fmt.Errorf("%w; restoring the previous binary also failed (%v), so %s may be missing. %s", err, rbErr, cmdPath, hint)
 		}
 	}
 	return err
