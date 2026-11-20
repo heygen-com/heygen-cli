@@ -44,16 +44,12 @@ func TestRetry_429ThenSuccess_GET(t *testing.T) {
 
 func TestRetry_429ThenSuccess_POST(t *testing.T) {
 	var calls int32
-	bodies := make([]string, 0, 2)
+	var bodies []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		bodies = append(bodies, string(body))
-		call := atomic.AddInt32(&calls, 1)
-		if call == 1 {
-			w.WriteHeader(http.StatusTooManyRequests)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
 
@@ -65,11 +61,14 @@ func TestRetry_429ThenSuccess_POST(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if got := atomic.LoadInt32(&calls); got != 2 {
-		t.Fatalf("calls = %d, want %d", got, 2)
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("StatusCode = %d, want %d", resp.StatusCode, http.StatusTooManyRequests)
 	}
-	if len(bodies) != 2 || bodies[0] != bodies[1] {
-		t.Fatalf("bodies = %#v, want two identical request bodies", bodies)
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("calls = %d, want %d", got, 1)
+	}
+	if len(bodies) != 1 {
+		t.Fatalf("bodies = %#v, want one request body", bodies)
 	}
 }
 

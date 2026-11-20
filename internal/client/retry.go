@@ -110,15 +110,16 @@ func shouldRetry(req *http.Request, resp *http.Response, err error) bool {
 		return false
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return true
+		// retry decision method-only; POST with Idempotency-Key not retried either — upgrade retry keyed POSTs once executor exposes key presence.
+		return isIdempotent(req.Method)
 	}
 	// 5xx server errors — only retry for idempotent methods.
 	return isRetryableServerError(resp.StatusCode) && isIdempotent(req.Method)
 }
 
 // isRetryableServerError returns true for server-side errors worth retrying.
-// 429 (rate limited) is handled separately in shouldRetry — it's always retried
-// regardless of method because the server explicitly rejected without processing.
+// 429 (rate limited) is handled separately in shouldRetry — like 5xx, it is
+// retried only for idempotent methods.
 func isRetryableServerError(code int) bool {
 	switch code {
 	case http.StatusInternalServerError,
