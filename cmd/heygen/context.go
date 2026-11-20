@@ -104,6 +104,12 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 	}
 	ctx.configProvider = provider
 
+	// guard precedes skipAuth; HEYGEN_ALLOW_HTTP stays documented escape — drop it forbid plaintext entirely.
+	baseURL := provider.BaseURL()
+	if u, err := url.Parse(baseURL); err == nil && u.Scheme == "http" && os.Getenv("HEYGEN_ALLOW_HTTP") == "" {
+		return clierrors.NewUsage("HEYGEN_API_BASE uses HTTP which transmits API keys in plaintext. Set HEYGEN_ALLOW_HTTP=1 to allow.")
+	}
+
 	if skipAuth(cmd) {
 		ctx.client = nil
 		return nil
@@ -127,11 +133,6 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 		return err
 	}
 	cmd.SetContext(context.WithValue(cmd.Context(), credSourceKey{}, cred.Source))
-
-	baseURL := provider.BaseURL()
-	if u, err := url.Parse(baseURL); err == nil && u.Scheme == "http" && os.Getenv("HEYGEN_ALLOW_HTTP") == "" {
-		return clierrors.NewUsage("HEYGEN_API_BASE uses HTTP which transmits API keys in plaintext. Set HEYGEN_ALLOW_HTTP=1 to allow.")
-	}
 
 	opts := []client.Option{
 		client.WithBaseURL(baseURL),
