@@ -237,6 +237,7 @@ jobs:
   publish-cdn:
     needs: [release, publish-release]
     runs-on: ubuntu-latest
+    environment: cli-release
     permissions:
       contents: read
       id-token: write
