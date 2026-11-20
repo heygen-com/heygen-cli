@@ -353,26 +353,29 @@ func buildMultipartRequest(method, reqURL, filePath string) (*http.Request, erro
 	if err != nil {
 		return nil, clierrors.New(fmt.Sprintf("failed to open file %q: %v", filePath, err))
 	}
-	defer file.Close()
 
-	var requestBody bytes.Buffer
-	multipartWriter := multipart.NewWriter(&requestBody)
+	pr, pw := io.Pipe()
+	multipartWriter := multipart.NewWriter(pw)
+	// streaming body no GetBody, so failed upload not replayed; multipart POST non-idempotent anyway. Upgrade when uploads need retry.
+	go func() {
+		defer file.Close()
+		filePart, err := multipartWriter.CreateFormFile("file", filepath.Base(filePath))
+		if err == nil {
+			_, err = io.Copy(filePart, file)
+		}
+		if err == nil {
+			err = multipartWriter.Close()
+		}
+		if err != nil {
+			_ = pw.CloseWithError(err)
+			return
+		}
+		_ = pw.Close()
+	}()
 
-	filePart, err := multipartWriter.CreateFormFile("file", filepath.Base(filePath))
+	req, err := http.NewRequest(method, reqURL, pr)
 	if err != nil {
-		return nil, clierrors.New(fmt.Sprintf("failed to create form file: %v", err))
-	}
-
-	if _, err := io.Copy(filePart, file); err != nil {
-		return nil, clierrors.New(fmt.Sprintf("failed to write file to form: %v", err))
-	}
-
-	if err := multipartWriter.Close(); err != nil {
-		return nil, clierrors.New(fmt.Sprintf("failed to close multipart writer: %v", err))
-	}
-
-	req, err := http.NewRequest(method, reqURL, &requestBody)
-	if err != nil {
+		_ = pr.Close()
 		return nil, clierrors.New(fmt.Sprintf("failed to create request: %v", err))
 	}
 	req.Header.Set("Content-Type", multipartWriter.FormDataContentType())
