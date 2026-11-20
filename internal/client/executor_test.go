@@ -17,6 +17,27 @@ import (
 	clierrors "github.com/heygen-com/heygen-cli/internal/errors"
 )
 
+func TestExecute_ResponseSizeLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(make([]byte, maxResponseBytes+1))
+	}))
+	defer srv.Close()
+
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "GET"}
+	inv := &command.Invocation{PathParams: map[string]string{}, QueryParams: make(url.Values)}
+
+	_, err := c.Execute(spec, inv)
+	ce, ok := err.(*clierrors.CLIError)
+	if !ok || ce.Code != "cli_response_too_large" {
+		t.Fatalf("err = %#v, want cli_response_too_large", err)
+	}
+	if ce.HTTPStatus != http.StatusOK {
+		t.Errorf("HTTPStatus = %d, want %d", ce.HTTPStatus, http.StatusOK)
+	}
+}
+
 func TestExecute_GETWithQueryParams(t *testing.T) {
 	var gotPath, gotQuery string
 

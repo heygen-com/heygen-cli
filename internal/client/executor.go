@@ -26,6 +26,8 @@ const (
 	// APIDataField is the response envelope field containing the payload.
 	// Exported so the builder can pass it to the formatter for --human rendering.
 	APIDataField = "data"
+	// 1 MiB cap covers HeyGen JSON; raise only if endpoint legitimately returns more.
+	maxResponseBytes = 1 << 20
 )
 
 // PollOptions controls ExecuteAndPoll behavior.
@@ -276,7 +278,7 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		// Mid-response read failure is a dropped connection, not a parse issue.
 		// The response arrived (status known) before the body dropped, so record
@@ -286,6 +288,15 @@ func (c *Client) executeWithContext(ctx context.Context, spec *command.Spec, inv
 			Code:       "network_error",
 			Message:    fmt.Sprintf("failed to read response body: %v", err),
 			Hint:       "This is usually a temporary network issue. Check your connection and retry.",
+			HTTPStatus: resp.StatusCode,
+			ExitCode:   clierrors.ExitGeneral,
+		}
+	}
+	if len(respBody) > maxResponseBytes {
+		return nil, &clierrors.CLIError{
+			Code:       "cli_response_too_large",
+			Message:    fmt.Sprintf("response body exceeds %d bytes", maxResponseBytes),
+			Hint:       "The API returned more data than expected; narrow the request or contact support",
 			HTTPStatus: resp.StatusCode,
 			ExitCode:   clierrors.ExitGeneral,
 		}

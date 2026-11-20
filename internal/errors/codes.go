@@ -21,6 +21,7 @@ const CLICodePrefix = "cli_"
 var cliPrefixedCodes = []string{
 	"cli_response_encode_error",
 	"cli_response_parse_error",
+	"cli_response_too_large",
 	"cli_download_url_expired",
 	"cli_download_failed",
 	"cli_download_interrupted",
