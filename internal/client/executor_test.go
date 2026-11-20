@@ -290,13 +290,8 @@ func TestExecute_RetryPreservesBody(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		bodies = append(bodies, string(body))
 		calls++
-		if calls == 1 {
-			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write([]byte(`{"error":{"code":"rate_limit_exceeded","message":"too many requests"}}`))
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id":"new123"}`))
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"code":"rate_limit_exceeded","message":"too many requests"}}`))
 	}))
 	defer srv.Close()
 
@@ -309,18 +304,15 @@ func TestExecute_RetryPreservesBody(t *testing.T) {
 		Body:        map[string]any{"title": "My Video", "draft": true},
 	}
 
-	result, err := c.Execute(spec, inv)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := c.Execute(spec, inv)
+	if err == nil {
+		t.Fatal("expected rate-limit error for non-idempotent POST on 429")
 	}
-	if calls != 2 {
-		t.Fatalf("calls = %d, want %d", calls, 2)
+	if calls != 1 {
+		t.Fatalf("calls = %d, want %d", calls, 1)
 	}
-	if len(bodies) != 2 || bodies[0] != bodies[1] {
-		t.Fatalf("bodies = %#v, want two identical request bodies", bodies)
-	}
-	if string(result) != `{"id":"new123"}` {
-		t.Fatalf("result = %s, want %s", result, `{"id":"new123"}`)
+	if len(bodies) != 1 {
+		t.Fatalf("bodies = %#v, want one request body", bodies)
 	}
 }
 
