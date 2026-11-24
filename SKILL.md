@@ -146,6 +146,12 @@ heygen video get --response-schema
   error. Not everything on stderr is an envelope: interactive commands (`auth login`,
   destructive confirmations) write human prose there by design, so do not assume every
   stderr line parses.
+- `heygen video create` renders `avatar` and `image` videos on Avatar 6 Turbo at 1080p
+  when the body names no `engine`. Set `engine` to pin one, for example
+  `"engine":{"type":"avatar_iv"}`. A body that sets `expressiveness` or a `resolution`
+  other than 1080p is sent as written, and if the API does not accept the request on
+  Avatar 6 Turbo the CLI sends it once more as written, so the API's own default applies.
+  `heygen video batches create` sends every item as written.
 - Use `heygen update` to install a newer CLI release, or `heygen update --check` to
   report whether one exists without installing it. `--check` answers on stdout with
   `update_available`, `current`, `latest`, `channel`, `install_method`, and

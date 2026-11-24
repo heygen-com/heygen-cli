@@ -75,7 +75,7 @@ func (c *Client) ExecuteAndPoll(
 	pollCtx, cancel := ensurePollContext(ctx, opts.Timeout)
 	defer cancel()
 
-	createResp, err := c.executeWithContext(pollCtx, spec, inv)
+	createResp, err := c.executeWithFallback(pollCtx, spec, inv)
 	if err != nil {
 		return nil, translateCreateContextError(pollCtx, err, hasIdempotencyKey(inv))
 	}
@@ -171,7 +171,38 @@ func (c *Client) ExecuteAndPoll(
 // and behavioral flags (pagination, polling). The Invocation provides
 // the concrete path params, query params, body, and file path.
 func (c *Client) Execute(spec *command.Spec, inv *command.Invocation) (json.RawMessage, error) {
-	return c.executeWithContext(context.Background(), spec, inv)
+	return c.executeWithFallback(context.Background(), spec, inv)
+}
+
+// executeWithFallback sends the request and, when the API refuses it and the
+// invocation carries a FallbackBody, sends it once more with that body. A
+// refused request created nothing, so the second attempt cannot duplicate it.
+func (c *Client) executeWithFallback(ctx context.Context, spec *command.Spec, inv *command.Invocation) (json.RawMessage, error) {
+	resp, err := c.executeWithContext(ctx, spec, inv)
+	if inv.FallbackBody == nil || !refused(err) {
+		return resp, err
+	}
+	if inv.FallbackNotice != "" {
+		_, _ = fmt.Fprintln(c.warn, inv.FallbackNotice)
+	}
+	retry := *inv
+	retry.Body, retry.FallbackBody = inv.FallbackBody, nil
+	return c.executeWithContext(ctx, spec, &retry)
+}
+
+// refused reports whether err is the API declining the request as sent: a
+// validation, payment, permission or availability answer. Auth failures, rate
+// limits and server errors are not refusals of the body.
+func refused(err error) bool {
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		return false
+	}
+	switch cliErr.HTTPStatus {
+	case http.StatusBadRequest, http.StatusPaymentRequired, http.StatusForbidden, http.StatusNotFound:
+		return true
+	}
+	return false
 }
 
 // idempotencyKeyHeader is the spec-declared header behind --idempotency-key.

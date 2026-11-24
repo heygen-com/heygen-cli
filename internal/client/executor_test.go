@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1207,5 +1208,36 @@ func TestHasIdempotencyKey(t *testing.T) {
 				t.Errorf("hasIdempotencyKey = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestExecute_FallbackNotice(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"code":"invalid_parameter","message":"no"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer srv.Close()
+
+	var warn bytes.Buffer
+	c := New("key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithWarnOutput(&warn))
+	spec := &command.Spec{Endpoint: "/v3/videos", Method: "POST", BodyEncoding: "json"}
+	inv := &command.Invocation{
+		PathParams:     make(map[string]string),
+		Body:           map[string]any{"a": 1, "engine": "x"},
+		FallbackBody:   map[string]any{"a": 1},
+		FallbackNotice: "warning: sent as written",
+	}
+
+	if _, err := c.Execute(spec, inv); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if requests != 2 || warn.String() != "warning: sent as written\n" {
+		t.Fatalf("requests=%d warn=%q", requests, warn.String())
 	}
 }
