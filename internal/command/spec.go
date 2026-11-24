@@ -160,8 +160,11 @@ type Invocation struct {
 	PathParams  map[string]string // resolved path parameters
 	QueryParams url.Values        // resolved query parameters (stdlib type, handles repeated keys)
 	Body        map[string]any    // merged from flags + -d/--data; nil means no body sent
-	FilePath    string            // local file path for multipart upload
-	Headers     map[string]string // request headers from header-sourced flags; keyed by wire name
+	// FallbackBody, when set, is sent once in place of Body if the API refuses
+	// the request (see client.refused). nil means no second attempt.
+	FallbackBody map[string]any
+	FilePath     string            // local file path for multipart upload
+	Headers      map[string]string // request headers from header-sourced flags; keyed by wire name
 }
 
 // BuildInvocation resolves positional args and flags from a Cobra command

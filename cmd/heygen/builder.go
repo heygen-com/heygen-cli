@@ -89,6 +89,7 @@ func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			applyDefaultEngine(spec, inv)
 
 			// POST/PUT/PATCH commands with JSON bodies must have input
 			// unless the request schema is intentionally empty (e.g.
