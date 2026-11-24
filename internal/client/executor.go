@@ -182,6 +182,9 @@ func (c *Client) executeWithFallback(ctx context.Context, spec *command.Spec, in
 	if inv.FallbackBody == nil || !refused(err) {
 		return resp, err
 	}
+	if inv.FallbackNotice != "" {
+		_, _ = fmt.Fprintln(c.warn, inv.FallbackNotice)
+	}
 	retry := *inv
 	retry.Body, retry.FallbackBody = inv.FallbackBody, nil
 	return c.executeWithContext(ctx, spec, &retry)

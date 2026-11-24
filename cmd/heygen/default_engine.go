@@ -24,6 +24,7 @@ func applyDefaultEngine(spec *command.Spec, inv *command.Invocation) {
 		return
 	}
 	inv.FallbackBody = inv.Body
+	inv.FallbackNotice = "warning: " + defaultAvatarEngine + " is not available for this request; sent without a default engine"
 	inv.Body = maps.Clone(inv.Body)
 	inv.Body["engine"] = map[string]any{"type": defaultAvatarEngine}
 }

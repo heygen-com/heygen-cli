@@ -163,8 +163,10 @@ type Invocation struct {
 	// FallbackBody, when set, is sent once in place of Body if the API refuses
 	// the request (see client.refused). nil means no second attempt.
 	FallbackBody map[string]any
-	FilePath     string            // local file path for multipart upload
-	Headers      map[string]string // request headers from header-sourced flags; keyed by wire name
+	// FallbackNotice, when set, is written to stderr before that second attempt.
+	FallbackNotice string
+	FilePath       string            // local file path for multipart upload
+	Headers        map[string]string // request headers from header-sourced flags; keyed by wire name
 }
 
 // BuildInvocation resolves positional args and flags from a Cobra command
