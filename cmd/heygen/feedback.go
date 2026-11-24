@@ -27,7 +27,9 @@ func newFeedbackCmd(ctx *cmdContext, analyticsClient *analytics.Client) *cobra.C
 		Long: "Send anonymous feedback about your experience with the HeyGen CLI — a satisfaction " +
 			"rating and an optional comment. Useful for agents to report whether a flow worked or to " +
 			"flag a bug. Sent as an anonymous analytics event (no API key required) and honors the same " +
-			"opt-out as usage analytics (HEYGEN_NO_ANALYTICS, or 'heygen config set analytics false').",
+			"opt-out as usage analytics (HEYGEN_NO_ANALYTICS, or 'heygen config set analytics false').\n\n" +
+			"To send feedback on an API result instead (a video, a translation, an image), use " +
+			"'heygen feedback create', which needs an API key.",
 		Args:        cobra.NoArgs,
 		Annotations: map[string]string{"skipAuth": "true"},
 		Example: "  # Rate your experience and add a note\n" +

@@ -138,10 +138,12 @@ func TestFeedback_GeneratedCreateSitsUnderHandWrittenCommand(t *testing.T) {
 func TestFeedback_GeneratedCreateRequiresCredentials(t *testing.T) {
 	res := runCommand(t, "http://127.0.0.1:1", "", "feedback", "create",
 		"--resource-type", "video", "--resource-id", "vid_1", "--rating", "negative")
-	if res.ExitCode == 0 {
-		t.Fatalf("exit = 0, want an auth error (stdout: %s)", res.Stdout)
+	// Exit 3 with "no API key found" is the credential check itself. A command
+	// that skipped it would fail later, on the request, with a different error.
+	if res.ExitCode != 3 {
+		t.Fatalf("exit = %d, want 3 (stderr: %s)", res.ExitCode, res.Stderr)
 	}
-	if !strings.Contains(res.Stderr, "auth") {
-		t.Fatalf("stderr = %s, want an auth error", res.Stderr)
+	if !strings.Contains(res.Stderr, "no API key found") {
+		t.Fatalf("stderr = %s, want the missing-key error", res.Stderr)
 	}
 }
