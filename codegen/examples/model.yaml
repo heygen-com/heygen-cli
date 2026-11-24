@@ -18,6 +18,11 @@
 "GET /v3/models/audio/voices":
   - desc: "List the workspace's audio voices, newest first"
     cmd: "heygen model audio voices list --limit 10"
+  - desc: "Find public Mexican Spanish voices by tag"
+    cmd: "heygen model audio voices list --type public --language es --locale es-MX --tags Calm,Deep"
+"GET /v3/models/audio/voices/languages":
+  - desc: "List the languages and locales the public voice list can be filtered by"
+    cmd: "heygen model audio voices languages list"
 "GET /v3/models/audio/voices/{voice_id}":
   - desc: "Poll training status until it is ACTIVE or FAILED"
     cmd: "heygen model audio voices get <voice-id>"

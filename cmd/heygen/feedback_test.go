@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -99,5 +101,47 @@ func TestFeedback_RatingOutOfRange(t *testing.T) {
 		if !strings.Contains(res.Stderr, "rating must be between 1 and 5") {
 			t.Errorf("rating %s: stderr missing range message: %s", r, res.Stderr)
 		}
+	}
+}
+
+// The API's feedback endpoint generates a "feedback" group. It must sit under
+// the hand-written command, not replace it: both invocations have to resolve.
+func TestFeedback_GeneratedCreateSitsUnderHandWrittenCommand(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v3/feedback" {
+			t.Errorf("request = %s %s, want POST /v3/feedback", r.Method, r.URL.Path)
+		}
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"id":"fb_1"}}`))
+	}))
+	defer srv.Close()
+
+	res := runCommand(t, srv.URL, "test-key", "feedback", "create",
+		"--resource-type", "video", "--resource-id", "vid_1", "--rating", "negative")
+	if res.ExitCode != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", res.ExitCode, res.Stderr)
+	}
+	if gotBody["rating"] != "negative" || gotBody["resource_id"] != "vid_1" {
+		t.Fatalf("body = %v, want rating=negative resource_id=vid_1", gotBody)
+	}
+
+	// The anonymous CLI rating still works with no key and no server.
+	res = runCommand(t, "", "", "feedback", "--rating", "4")
+	if res.ExitCode != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", res.ExitCode, res.Stderr)
+	}
+}
+
+// The API command needs a key even though its hand-written parent does not.
+func TestFeedback_GeneratedCreateRequiresCredentials(t *testing.T) {
+	res := runCommand(t, "http://127.0.0.1:1", "", "feedback", "create",
+		"--resource-type", "video", "--resource-id", "vid_1", "--rating", "negative")
+	if res.ExitCode == 0 {
+		t.Fatalf("exit = 0, want an auth error (stdout: %s)", res.Stdout)
+	}
+	if !strings.Contains(res.Stderr, "auth") {
+		t.Fatalf("stderr = %s, want an auth error", res.Stderr)
 	}
 }

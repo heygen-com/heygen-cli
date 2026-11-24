@@ -1,0 +1,5 @@
+"POST /v3/feedback":
+  - desc: "Rate a finished video and say what went wrong"
+    cmd: "heygen feedback create --resource-type video --resource-id <video-id> --rating negative --comment \"Lip sync drifts after the first sentence\""
+  - desc: "Pass on a comment from one of your own users with reason tags"
+    cmd: "heygen feedback create --resource-type video_translation --resource-id <translation-id> --submitted-by end_user --rating positive --tags natural_voice,accurate_timing"

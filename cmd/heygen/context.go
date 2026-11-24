@@ -35,8 +35,16 @@ func skipAuth(cmd *cobra.Command) bool {
 		return true
 	}
 	for c := cmd; c != nil; c = c.Parent() {
-		if c.Annotations != nil && c.Annotations["skipAuth"] == "true" {
+		if c.Annotations == nil {
+			continue
+		}
+		// The nearest explicit value wins, so an API command nested under a
+		// skipAuth parent can still require credentials.
+		switch c.Annotations["skipAuth"] {
+		case "true":
 			return true
+		case "false":
+			return false
 		}
 	}
 	return false

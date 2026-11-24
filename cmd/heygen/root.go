@@ -149,11 +149,34 @@ func registerGroups(root *cobra.Command, ctx *cmdContext, groups map[string][]*c
 		if short == "" {
 			short = humanizeCommandToken(groupName) + " commands"
 		}
-		groupCmd := newCommandGroup(groupName, short)
+		// A hand-written root command can share a group's name (feedback). Keep
+		// it and attach the generated commands beneath it, so the existing
+		// invocation keeps working instead of being shadowed by a second
+		// command of the same name.
+		groupCmd := findGroup(root, groupName)
+		existing := groupCmd != nil
+		if !existing {
+			groupCmd = newCommandGroup(groupName, short)
+		}
+		handWritten := groupCmd.Commands()
 		for _, spec := range groups[groupName] {
 			registerSpecCommand(groupCmd, spec, ctx)
 		}
-		root.AddCommand(groupCmd)
+		if !existing {
+			root.AddCommand(groupCmd)
+			continue
+		}
+		// Generated commands call the API, so they need credentials even when
+		// the hand-written parent does not.
+		for _, child := range groupCmd.Commands() {
+			if slices.Contains(handWritten, child) {
+				continue
+			}
+			if child.Annotations == nil {
+				child.Annotations = map[string]string{}
+			}
+			child.Annotations["skipAuth"] = "false"
+		}
 	}
 }
 
