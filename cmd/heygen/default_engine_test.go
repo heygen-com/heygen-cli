@@ -81,8 +81,9 @@ func TestVideoCreateDefaultEngineRefusedSendsBodyAsWritten(t *testing.T) {
 		server, bodies := videoCreateServer(t, status, http.StatusOK)
 		result := runCommand(t, server.URL, "test-key", "video", "create", "--idempotency-key", "k1",
 			"-d", `{"type":"avatar","avatar_id":"a","script":"Hi","voice_id":"v"}`)
-		if result.ExitCode != 0 || result.Stderr != "" {
-			t.Fatalf("status %d: exit=%d stderr=%s", status, result.ExitCode, result.Stderr)
+		wantWarning := "warning: " + defaultAvatarEngine + " is not available for this request; sent without a default engine\n"
+		if result.ExitCode != 0 || result.Stderr != wantWarning {
+			t.Fatalf("status %d: exit=%d stderr=%q", status, result.ExitCode, result.Stderr)
 		}
 		if len(*bodies) != 2 || engineType((*bodies)[0]) != defaultAvatarEngine {
 			t.Fatalf("status %d: requests=%v", status, *bodies)
@@ -158,4 +159,25 @@ func mustJSON(t *testing.T, v any) []byte {
 		t.Fatal(err)
 	}
 	return raw
+}
+
+func TestVideoCreateHelpStatesDefaultEngine(t *testing.T) {
+	help := runCommand(t, "http://127.0.0.1:0", "test-key", "video", "create", "--help")
+	if help.ExitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %s", help.ExitCode, help.Stderr)
+	}
+	for _, want := range []string{
+		"CLI default (replaces the API default above): when the request names no `engine`, the CLI sends `heygen-avatar-6-turbo`",
+		"`expressiveness`, or a `resolution` other than 1080p",
+		"resends the request as written",
+	} {
+		if !strings.Contains(help.Stdout, want) {
+			t.Errorf("help is missing %q:\n%s", want, help.Stdout)
+		}
+	}
+
+	other := runCommand(t, "http://127.0.0.1:0", "test-key", "video", "list", "--help")
+	if strings.Contains(other.Stdout, "CLI default") {
+		t.Errorf("video list help carries the video create note:\n%s", other.Stdout)
+	}
 }

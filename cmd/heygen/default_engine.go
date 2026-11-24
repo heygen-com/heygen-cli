@@ -42,3 +42,14 @@ func takesDefaultEngine(body map[string]any) bool {
 	resolution, set := body["resolution"]
 	return !set || resolution == "1080p"
 }
+
+// defaultEngineHelp is the `video create` help paragraph for the CLI default.
+// The generated description above it describes the API's own default.
+func defaultEngineHelp(spec *command.Spec) string {
+	if spec.Group != "video" || spec.Name != "create" {
+		return ""
+	}
+	return "\n\nCLI default (replaces the API default above): when the request names no `engine`, the CLI sends `" + defaultAvatarEngine +
+		"`. The default is not applied when the request sets `engine`, `expressiveness`, or a `resolution` other than 1080p." +
+		" If the API refuses the default, the CLI resends the request as written and prints a warning."
+}

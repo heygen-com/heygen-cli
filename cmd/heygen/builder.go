@@ -27,7 +27,7 @@ import (
 func buildCobraCommand(spec *command.Spec, ctx *cmdContext) *cobra.Command {
 	var rawData string
 
-	description := spec.Description
+	description := spec.Description + defaultEngineHelp(spec)
 	if spec.BodyEncoding == "json" && !hasBodyFlags(spec) {
 		description += "\n\nUse --request-schema to see all available request fields."
 	}

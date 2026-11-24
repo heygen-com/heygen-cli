@@ -136,6 +136,7 @@ func initContext(cmd *cobra.Command, version string, ctx *cmdContext) error {
 	opts := []client.Option{
 		client.WithBaseURL(baseURL),
 		client.WithUserAgent("heygen-cli/" + version),
+		client.WithWarnOutput(cmd.ErrOrStderr()),
 	}
 	if cred.IsOAuth() {
 		opts = append(opts, client.WithOAuthClient(oauth.NewClient()))
