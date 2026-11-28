@@ -66,6 +66,9 @@ var Groups = map[string][]*command.Spec{
 		BrandKitsList,
 		BrandKitsUpdate,
 	},
+	"feedback": {
+		FeedbackCreate,
+	},
 	"filler-word-removal": {
 		FillerWordRemovalCreate,
 		FillerWordRemovalGet,
@@ -90,6 +93,7 @@ var Groups = map[string][]*command.Spec{
 		ModelAudioVoicesCreate,
 		ModelAudioVoicesDelete,
 		ModelAudioVoicesGet,
+		ModelAudioVoicesLanguagesList,
 		ModelAudioVoicesList,
 		ModelImagesCreate,
 		ModelImagesGet,
@@ -173,6 +177,7 @@ var GroupDescriptions = map[string]string{
 	"audio":           "Search the background-music and sound-effects catalog",
 	"avatar":          "List and manage avatars and looks",
 	"brand":           "Brand-related resources — brand kits (colors, fonts, logos) and brand glossaries (custom term translations)",
+	"feedback":        "Tell HeyGen how a generated result turned out, from an agent or on behalf of your own users",
 	"folder":          "Create folders to organize videos and translations in the workspace, and look up any folder, Assets library folders included, by id",
 	"lipsync":         "Dub or replace audio on existing videos",
 	"template":        "Generate videos from reusable templates by replacing their variables",
@@ -180,5 +185,6 @@ var GroupDescriptions = map[string]string{
 	"video":           "Create, list, retrieve, and delete videos",
 	"video-agent":     "Create videos from text prompts using AI",
 	"video-translate": "Translate videos into other languages",
+	"voice":           "Create speech audio and manage voices",
 	"webhook":         "Create, list, and manage webhook endpoints and events",
 }
